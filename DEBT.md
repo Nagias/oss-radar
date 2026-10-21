@@ -16,7 +16,7 @@ nhận, khi nào trả, quên trả thì sao.
 | Mã | Nợ | Trạng thái | Trả khi |
 |---|---|---|---|
 | D-001 | Chạy bằng máy chủ phát triển (`runserver`), `DEBUG` bật mặc định, không đăng nhập | Mở | Trước khi chạy thường trực hoặc mở ra mạng |
-| D-002 | CI và bảo vệ nhánh `main` chưa bật trên GitHub | Mở | Ngay khi có repo GitHub |
+| D-002 | CI và bảo vệ nhánh `main` chưa bật trên GitHub | Đã trả (2026-10-21) | Đã bật trên `Nagias/oss-radar` |
 | D-003 | Quét chạy đồng bộ ngay trong request web, chưa có việc nền | Mở | Làm F-002 Quét sâu |
 | D-004 | Mỗi lần quét chỉ lấy trang đầu (tối đa 100 repo nhiều star nhất) | Mở | Làm F-002 Quét sâu |
 | D-005 | Gọi GitHub một lần, lỗi là dừng — chưa thử lại, chưa giãn nhịp, chưa có ngân sách gọi API | Mở | Làm F-002 Quét sâu |
@@ -45,6 +45,9 @@ nhận, khi nào trả, quên trả thì sao.
   `scripts/github_setup.ps1`.
 - **Quên trả thì sao:** không có lưới chặn cuối — một commit hỏng vẫn vào được `main`.
 - **Vị trí:** `.github/workflows/ci.yml`, `scripts/github_setup.ps1`, `scripts/github/branch-protection.json`.
+- **Đã trả (2026-10-21):** chủ dự án tạo repo public `Nagias/oss-radar` bằng `scripts/github_setup.ps1`.
+  CI chạy xanh trên `main` (Windows, run 39637535039). `main` bắt buộc PR + job `check` xanh, áp dụng cả
+  admin, cấm force-push và xoá nhánh, lịch sử thẳng, chỉ squash-merge.
 
 ### D-003 — Quét chạy đồng bộ ngay trong request web
 - **Nợ gì:** bấm "Quét" thì trình duyệt phải chờ đến khi gọi GitHub và ghi CSDL xong; chưa có hàng đợi
