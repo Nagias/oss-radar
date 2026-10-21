@@ -1,0 +1,100 @@
+/* Giao diện chung của OSS Radar — một file CSS, không cần bước build. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1c2430;
+  --muted: #5d6b7e;
+  --border: #dde2e9;
+  --accent: #1f6feb;
+  --accent-text: #ffffff;
+  --ok: #1a7f37;
+  --ok-bg: #dafbe1;
+  --warn-bg: #fff8c5;
+  --warn-border: #d4a72c;
+  --err: #b42318;
+  --err-bg: #ffebe9;
+  --chip-bg: #eef2f7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141a;
+    --surface: #161c24;
+    --text: #e6edf3;
+    --muted: #9aa7b6;
+    --border: #2b3440;
+    --accent: #4493f8;
+    --ok: #3fb950;
+    --ok-bg: #12301c;
+    --warn-bg: #2e2a12;
+    --warn-border: #9e7d1a;
+    --err: #ff7b72;
+    --err-bg: #3a1714;
+    --chip-bg: #222b36;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { background: var(--chip-bg); padding: 1px 6px; border-radius: 4px; font-size: 0.92em; }
+
+.container { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+
+.site-header { background: var(--surface); border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+.header-row { display: flex; align-items: baseline; gap: 16px; padding-top: 14px; padding-bottom: 14px; flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 1.25rem; color: var(--text); }
+.tagline { color: var(--muted); font-size: 0.9rem; }
+.site-footer { color: var(--muted); font-size: 0.85rem; padding-top: 32px; padding-bottom: 32px; }
+
+h1 { font-size: 1.4rem; margin: 0 0 8px; }
+h2 { font-size: 1.1rem; margin: 28px 0 12px; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+.muted { color: var(--muted); }
+.small { font-size: 0.82rem; }
+
+.scan-form label { display: block; font-weight: 600; margin: 12px 0 6px; }
+.input-row { display: flex; gap: 8px; }
+.input-row input {
+  flex: 1; min-width: 0; padding: 10px 12px; font-size: 1rem;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text);
+}
+.input-row button {
+  padding: 10px 22px; font-size: 1rem; font-weight: 600; border: 0; border-radius: 8px;
+  background: var(--accent); color: var(--accent-text); cursor: pointer;
+}
+.hint { color: var(--muted); font-size: 0.85rem; margin: 6px 0 0; }
+
+.error { color: var(--err); background: var(--err-bg); padding: 10px 12px; border-radius: 8px; }
+.notice { background: var(--warn-bg); border-left: 4px solid var(--warn-border); padding: 10px 12px; border-radius: 6px; }
+
+.stats { display: flex; gap: 24px; list-style: none; padding: 0; margin: 12px 0; flex-wrap: wrap; }
+
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 0.82rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.desc { color: var(--muted); font-size: 0.88rem; margin-top: 2px; }
+.topics { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.topic { background: var(--chip-bg); border-radius: 999px; padding: 0 8px; font-size: 0.75rem; }
+
+.badge, .status { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+.badge-new { background: var(--ok-bg); color: var(--ok); }
+.badge-known { background: var(--chip-bg); color: var(--muted); }
+.status-succeeded { background: var(--ok-bg); color: var(--ok); }
+.status-failed { background: var(--err-bg); color: var(--err); }
+.status-running, .status-queued { background: var(--warn-bg); color: var(--text); }
+h1 .status { vertical-align: middle; margin-left: 8px; }

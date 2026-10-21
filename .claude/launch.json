@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "oss-radar",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "poe", "dev"],
+      "port": 8765,
+      "url": "http://127.0.0.1:8765",
+      "autoPort": false
+    }
+  ]
+}

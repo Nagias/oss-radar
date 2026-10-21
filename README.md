@@ -10,7 +10,7 @@ Mục đích đầy đủ (nguyên văn chủ dự án) nằm ở `CLAUDE.md`.
 uv sync                                  # cài thư viện đúng phiên bản trong uv.lock
 copy .env.example .env                   # mở .env, điền GITHUB_TOKEN
 uv run python manage.py migrate          # tạo CSDL trong thư mục data/
-uv run poe dev                           # mở http://127.0.0.1:8000
+uv run poe dev                           # mở http://127.0.0.1:8765
 ```
 
 ## Lệnh hay dùng

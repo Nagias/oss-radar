@@ -57,6 +57,8 @@ ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    "features.catalog",
+    "features.discovery",
 ]
 
 MIDDLEWARE = [
@@ -107,10 +109,22 @@ LANGUAGE_CODE = "vi"
 TIME_ZONE = "Asia/Ho_Chi_Minh"
 USE_I18N = True
 USE_TZ = True
+# Định dạng tiếng Việt của Django có dấu ngăn nghìn "." nhưng thiếu cỡ nhóm → tự khai (255.793).
+NUMBER_GROUPING = 3
 
 
 # File tĩnh (CSS)
 STATIC_URL = "static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]
+
+
+# GitHub (integrations/github). Token để trống vẫn chạy nhưng GitHub chỉ cho 10 lần tìm kiếm/phút.
+GITHUB_TOKEN = _env_str("GITHUB_TOKEN")
+GITHUB_API_URL = "https://api.github.com"
+GITHUB_TIMEOUT_SECONDS = 20.0
+
+# Quét (features/discovery). 100 là số kết quả tối đa GitHub trả trong một trang.
+SCAN_PAGE_SIZE = 100
 
 
 # Log ra màn hình console; code dùng logging.getLogger(__name__), không dùng print().

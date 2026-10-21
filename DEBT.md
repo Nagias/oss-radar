@@ -16,7 +16,10 @@ nhận, khi nào trả, quên trả thì sao.
 | Mã | Nợ | Trạng thái | Trả khi |
 |---|---|---|---|
 | D-001 | Chạy bằng máy chủ phát triển (`runserver`), `DEBUG` bật mặc định, không đăng nhập | Mở | Trước khi chạy thường trực hoặc mở ra mạng |
-| D-002 | CI và bảo vệ nhánh `main` chưa bật trên GitHub | Mở | Ngay khi có repo GitHub |
+| D-002 | CI và bảo vệ nhánh `main` chưa bật trên GitHub | Đã trả (2026-10-21) | Đã bật trên `Nagias/oss-radar` |
+| D-003 | Quét chạy đồng bộ ngay trong request web, chưa có việc nền | Mở | Làm F-002 Quét sâu |
+| D-004 | Mỗi lần quét chỉ lấy trang đầu (tối đa 100 repo nhiều star nhất) | Mở | Làm F-002 Quét sâu |
+| D-005 | Gọi GitHub một lần, lỗi là dừng — chưa thử lại, chưa giãn nhịp, chưa có ngân sách gọi API | Mở | Làm F-002 Quét sâu |
 
 ## Chi tiết
 
@@ -42,3 +45,40 @@ nhận, khi nào trả, quên trả thì sao.
   `scripts/github_setup.ps1`.
 - **Quên trả thì sao:** không có lưới chặn cuối — một commit hỏng vẫn vào được `main`.
 - **Vị trí:** `.github/workflows/ci.yml`, `scripts/github_setup.ps1`, `scripts/github/branch-protection.json`.
+- **Đã trả (2026-10-21):** chủ dự án tạo repo public `Nagias/oss-radar` bằng `scripts/github_setup.ps1`.
+  CI chạy xanh trên `main` (Windows, run 39637535039). `main` bắt buộc PR + job `check` xanh, áp dụng cả
+  admin, cấm force-push và xoá nhánh, lịch sử thẳng, chỉ squash-merge.
+
+### D-003 — Quét chạy đồng bộ ngay trong request web
+- **Nợ gì:** bấm "Quét" thì trình duyệt phải chờ đến khi gọi GitHub và ghi CSDL xong; chưa có hàng đợi
+  việc nền (Huey theo QĐ-11 chưa cài).
+- **Vì sao chấp nhận:** bộ khung chỉ gọi GitHub một lần (1–2 giây). Thêm hàng đợi lúc này = thêm thư viện
+  và một tiến trình worker phải giữ chạy, trong khi chưa có việc nào dài. Cấu trúc đã sẵn cho việc nền:
+  lần quét có trạng thái riêng (`ScanRun.status`: chờ → đang quét → xong/lỗi), view chỉ gọi `run_scan`.
+- **Khi nào trả:** khi làm F-002 Quét sâu (nhiều trang, nhiều lát truy vấn → vài phút), hoặc khi có bất kỳ
+  việc nào chạy quá ~5 giây.
+- **Quên trả thì sao:** quét lâu thì trình duyệt treo rồi hết thời gian chờ; người dùng tưởng app hỏng.
+- **Vị trí:** `features/discovery/services.py` (`run_scan`).
+
+### D-004 — Mỗi lần quét chỉ lấy trang đầu
+- **Nợ gì:** chỉ lấy tối đa 100 repo nhiều star nhất của một truy vấn, trong khi GitHub có thể báo hàng
+  chục nghìn kết quả (và chính GitHub chỉ trả tối đa 1.000 kết quả cho một truy vấn).
+- **Vì sao chấp nhận:** bộ khung cần một luồng mỏng chạy thật từ đầu đến cuối; chia lát truy vấn để vượt
+  trần 1.000 là cả một tính năng (F-002). Trang kết quả **nói thật** với người dùng: hiện cảnh báo "GitHub
+  báo có X kết quả; mới lấy Y".
+- **Khi nào trả:** F-002 Quét sâu.
+- **Quên trả thì sao:** trái mục tiêu "không bỏ sót" — repo ít star nhưng tiềm năng (đúng loại bạn cần)
+  nằm ngoài trang đầu sẽ không bao giờ được thấy.
+- **Vị trí:** `features/discovery/services.py` (`_fetch_and_store`),
+  `features/discovery/templates/discovery/scan_detail.html` (cảnh báo).
+
+### D-005 — Gọi GitHub một lần, lỗi là dừng
+- **Nợ gì:** client không thử lại khi GitHub lỗi tạm thời (5xx, mất mạng chốc lát), không tự chờ khi hết
+  lượt gọi, không có ngân sách số lần gọi cho mỗi lần quét.
+- **Vì sao chấp nhận:** mỗi lần quét chỉ gọi 1 lần; lỗi thì lần quét ghi "Lỗi" kèm lý do rõ ràng, người
+  dùng bấm quét lại là xong.
+- **Khi nào trả:** F-002 Quét sâu (hàng trăm lần gọi mỗi lượt — một lỗi tạm thời không được làm hỏng cả
+  lượt; phải giãn nhịp theo nguyên tắc 3 và 4 trong CLAUDE.md).
+- **Quên trả thì sao:** lượt quét dài hỏng giữa chừng vì một lỗi vặt; dội request khi hết lượt có thể làm
+  GitHub khoá token.
+- **Vị trí:** `integrations/github/client.py` (`_get_json`).

@@ -85,7 +85,7 @@ Chạy trong PowerShell tại thư mục gốc dự án (đường dẫn có d�
 uv sync                                         # cài đúng phiên bản trong uv.lock
 copy .env.example .env                          # rồi điền GITHUB_TOKEN (chủ dự án tự điền)
 uv run python manage.py migrate                 # tạo/cập nhật CSDL trong data/
-uv run poe dev                                  # chạy web tại http://127.0.0.1:8000
+uv run poe dev                                  # chạy web tại http://127.0.0.1:8765
 uv run poe check                                # TOÀN BỘ cổng kiểm tra — đúng như CI
 uv run poe fmt                                  # tự sửa định dạng + lỗi lint sửa được
 uv run poe test                                 # chỉ chạy test (có đo độ phủ)
@@ -126,5 +126,8 @@ uv run python manage.py scan "topic:ai-agent"   # chạy thật luồng F-001 t�
 ## 9. Bảo mật
 
 - Bí mật chỉ nằm trong `.env` (đã gitignore). Không đọc, không in nội dung `.env` ra chat hay log.
+- Luật chặn đọc `.env` trong `.claude/settings.json` chỉ chống lộ **vô tình**, không phải hàng rào thật:
+  agent được sửa code và tự chạy test thì về lý thuyết đọc được mọi file. Vì vậy mọi token đặt vào `.env`
+  phải ở mức quyền thấp nhất có thể (lộ ra cũng ít hại), và không đặt bí mật quan trọng nào trong dự án.
 - App chỉ nghe `127.0.0.1`. Muốn mở ra mạng LAN/Internet phải trả nợ D-001 trước.
 - Token GitHub dùng loại fine-grained, chỉ quyền đọc public.

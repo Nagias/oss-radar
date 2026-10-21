@@ -32,7 +32,7 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 
 ## 1. Bối cảnh và ràng buộc
 
-- **Một người dùng**, chạy trên máy Windows 11 cá nhân, mở bằng trình duyệt tại `http://127.0.0.1:8000`.
+- **Một người dùng**, chạy trên máy Windows 11 cá nhân, mở bằng trình duyệt tại `http://127.0.0.1:8765`.
 - **Ổ C gần đầy**: dữ liệu, môi trường Python, cache đều nằm trong thư mục dự án trên ổ D.
 - **Tài nguyên khan hiếm thật sự là hạn mức API**, không phải CPU:
   GitHub Search 30 lần gọi/phút (khi có token) và trả tối đa 1.000 kết quả cho một truy vấn;
