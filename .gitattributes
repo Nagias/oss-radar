@@ -1,0 +1,7 @@
+# Lưu kho bằng LF cho mọi file văn bản; script PowerShell giữ CRLF để chạy ổn trên Windows PowerShell 5.1.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary
+*.sqlite3 binary

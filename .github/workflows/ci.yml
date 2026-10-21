@@ -1,0 +1,41 @@
+# CI chạy ĐÚNG lệnh mà máy local chạy: `uv run poe check`.
+# Tên job "check" là tên mà luật bảo vệ nhánh main yêu cầu phải xanh — đổi tên ở đây thì phải sửa
+# scripts/github/branch-protection.json trong cùng PR.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check
+    # Chạy trên Windows giống máy thật của chủ dự án (đường dẫn, mã hoá tiếng Việt).
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cài uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Cài phụ thuộc đúng theo uv.lock
+        run: uv sync --locked
+
+      - name: Chạy toàn bộ cổng kiểm tra
+        run: uv run poe check

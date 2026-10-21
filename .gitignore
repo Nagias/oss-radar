@@ -1,0 +1,35 @@
+# Môi trường Python và cache công cụ
+.venv/
+__pycache__/
+*.py[cod]
+.cache/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Bí mật — chỉ .env.example được commit
+.env
+.env.*
+!.env.example
+
+# Dữ liệu chạy thật (CSDL SQLite, file tạm)
+data/*
+!data/.gitkeep
+*.sqlite3
+*.sqlite3-*
+
+# Django
+staticfiles/
+
+# Cài đặt cá nhân của Claude Code (không chia sẻ)
+.claude/settings.local.json
+
+# Hệ điều hành / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/

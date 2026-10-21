@@ -1,0 +1,176 @@
+[project]
+name = "oss-radar"
+version = "0.1.0"
+description = "OSS Radar - quét, lọc và đề xuất repo GitHub chất lượng, chạy local trên web."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "django>=5.2.18,<5.3",
+    "httpx>=0.28.1,<0.29",
+    "python-dotenv>=1.2.4,<2",
+]
+
+[tool.uv]
+# Ứng dụng, không phải thư viện để đóng gói.
+package = false
+# Cache nằm trong dự án (ổ D, cùng ổ với .venv → uv dùng hardlink, đỡ tốn dung lượng; ổ C gần đầy).
+cache-dir = ".cache/uv"
+
+[dependency-groups]
+dev = [
+    "django-stubs[compatible-mypy]>=5.2.9,<5.3",
+    "poethepoet>=0.49,<0.50",
+    "pytest>=9.1.1,<10",
+    "pytest-cov>=7.1,<8",
+    "pytest-django>=4.14,<5",
+    "respx>=0.23.1,<0.24",
+    "ruff>=0.17.1,<0.18",
+]
+
+# ---------------------------------------------------------------------------
+# Một lệnh duy nhất cho mọi cổng kiểm tra: `uv run poe check` (CI chạy đúng lệnh này).
+# ---------------------------------------------------------------------------
+[tool.poe.env]
+PYTHONUTF8 = "1"
+
+[tool.poe.tasks.dev]
+help = "Chạy web tại http://127.0.0.1:8000"
+cmd = "python manage.py runserver 127.0.0.1:8000"
+
+[tool.poe.tasks.fmt]
+help = "Định dạng lại code rồi tự sửa các lỗi lint sửa được"
+sequence = [{ cmd = "ruff format ." }, { cmd = "ruff check --fix ." }]
+
+[tool.poe.tasks.lint]
+help = "Kiểm định dạng và soát lỗi (không sửa)"
+sequence = [{ cmd = "ruff format --check ." }, { cmd = "ruff check ." }]
+
+[tool.poe.tasks.typecheck]
+help = "Kiểm kiểu dữ liệu (mypy strict)"
+cmd = "mypy"
+
+[tool.poe.tasks.django-check]
+help = "Django tự kiểm cấu hình"
+cmd = "python manage.py check --fail-level WARNING"
+
+[tool.poe.tasks.migrations-check]
+help = "Báo lỗi nếu model đã đổi mà chưa sinh migration"
+cmd = "python manage.py makemigrations --check --dry-run"
+
+[tool.poe.tasks.test]
+help = "Chạy test và đo độ phủ (không gọi mạng thật)"
+cmd = "pytest"
+
+[tool.poe.tasks.test-live]
+help = "Chỉ chạy test gọi dịch vụ thật qua Internet (cần token trong .env)"
+cmd = "pytest -m live --no-cov"
+
+[tool.poe.tasks.check]
+help = "TOÀN BỘ cổng kiểm tra — phải xanh trước khi báo xong; CI chạy đúng lệnh này"
+sequence = ["lint", "typecheck", "django-check", "migrations-check", "test"]
+
+# ---------------------------------------------------------------------------
+# ruff: định dạng + soát lỗi + luật "đường cấm" (CLAUDE.md mục 4)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["**/migrations/**", ".cache"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F",  # lỗi cơ bản
+    "I",            # thứ tự import
+    "N",            # đặt tên
+    "UP",           # cú pháp Python hiện đại
+    "B",            # lỗi tiềm ẩn hay gặp
+    "A",            # đè tên hàm có sẵn
+    "C4", "SIM", "RET", "PTH",
+    "DTZ",          # cấm thời gian không có múi giờ
+    "T20",          # cấm print()
+    "S",            # bảo mật
+    "BLE",          # cấm bắt Exception chung chung mà không raise lại
+    "ERA",          # cấm để code chết trong comment
+    "FIX",          # cấm TODO/FIXME/HACK/XXX — đường tắt phải vào DEBT.md
+    "TID",          # import tuyệt đối + danh sách API bị cấm bên dưới
+    "DJ",           # quy ước Django
+    "PT",           # quy ước pytest
+    "RUF",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "features", "integrations", "tests"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"httpx".msg = "Chỉ integrations/<dịch vụ>/ được gọi HTTP (CLAUDE.md mục 4)."
+"requests".msg = "Dự án dùng httpx, và chỉ trong integrations/ (CLAUDE.md mục 4)."
+"urllib.request".msg = "Dùng httpx trong integrations/ (CLAUDE.md mục 4)."
+"os.environ".msg = "Chỉ config/settings.py được đọc biến môi trường; nơi khác dùng django.conf.settings."
+"os.getenv".msg = "Chỉ config/settings.py được đọc biến môi trường; nơi khác dùng django.conf.settings."
+
+[tool.ruff.lint.per-file-ignores]
+# Những file được phép đọc biến môi trường.
+"config/settings.py" = ["TID251"]
+"config/asgi.py" = ["TID251"]
+"config/wsgi.py" = ["TID251"]
+"manage.py" = ["TID251"]
+# Cửa ra ngoài duy nhất được dùng httpx.
+"integrations/**/*.py" = ["TID251"]
+# Test được dùng assert, dữ liệu giả có chữ "token", và httpx để dựng phản hồi giả.
+"**/tests/**/*.py" = ["S101", "S105", "S106", "TID251"]
+"conftest.py" = ["TID251"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------------------
+# mypy strict: chặn agent gọi hàm/thuộc tính không tồn tại
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+plugins = ["mypy_django_plugin.main"]
+files = ["config", "features", "integrations", "tests", "conftest.py", "manage.py"]
+exclude = ['/migrations/']
+
+[tool.django-stubs]
+django_settings_module = "config.settings"
+
+# Để trình soạn thảo (Pyright/Pylance) dùng đúng môi trường của dự án.
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+
+# ---------------------------------------------------------------------------
+# pytest + độ phủ
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+testpaths = ["tests", "features", "integrations"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "-m", "not live",
+    "--cov",
+    "--cov-report=term-missing:skip-covered",
+]
+markers = [
+    "live: gọi dịch vụ thật qua Internet (cần token trong .env); chạy bằng `uv run poe test-live`",
+]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["config", "features", "integrations"]
+omit = ["*/migrations/*", "*/tests/*", "config/asgi.py", "config/wsgi.py"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
