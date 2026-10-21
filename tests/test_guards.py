@@ -70,6 +70,17 @@ def test_templates_have_no_todo_comments() -> None:
 
 
 @pytest.mark.parametrize("parent", ["features", "integrations"])
+def test_every_module_folder_is_a_python_package(parent: str) -> None:
+    # Thiếu __init__.py thì pytest coi thư mục tests/ bên trong là gói "tests" riêng → import sai.
+    missing = [
+        path.name
+        for path in sorted((ROOT / parent).iterdir())
+        if path.is_dir() and path.name != "__pycache__" and not (path / "__init__.py").is_file()
+    ]
+    assert not missing, f"Thiếu __init__.py trong {parent}/: {missing}"
+
+
+@pytest.mark.parametrize("parent", ["features", "integrations"])
 def test_feature_map_lists_every_module(parent: str) -> None:
     feature_map = (ROOT / "FEATURE_MAP.md").read_text(encoding="utf-8")
     missing = [name for name in _package_dirs(parent) if f"`{parent}/{name}/`" not in feature_map]

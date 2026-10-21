@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Quét GitHub{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Quét GitHub theo truy vấn</h1>
+  <p class="muted">
+    Kết quả được lưu vào kho, không trùng lặp (một repo luôn chỉ là một dòng), và sắp theo số star.
+  </p>
+  <form method="post" action="{% url 'discovery:home' %}" class="scan-form" novalidate>
+    {% csrf_token %}
+    <label for="{{ form.query.id_for_label }}">{{ form.query.label }}</label>
+    <div class="input-row">
+      {{ form.query }}
+      <button type="submit">Quét</button>
+    </div>
+    {% if form.query.errors %}
+      <p class="error" role="alert">{{ form.query.errors|join:" " }}</p>
+    {% endif %}
+    <p class="hint">{{ form.query.help_text }}</p>
+  </form>
+</section>
+
+<section>
+  <h2>Các lần quét gần đây</h2>
+  {% if recent_scans %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Truy vấn</th><th>Trạng thái</th>
+            <th class="num">Lấy về / GitHub báo</th><th class="num">Mới</th><th>Lúc</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for scan in recent_scans %}
+            <tr>
+              <td><a href="{% url 'discovery:scan_detail' scan.pk %}">#{{ scan.pk }}</a></td>
+              <td><code>{{ scan.query }}</code></td>
+              <td><span class="status status-{{ scan.status }}">{{ scan.get_status_display }}</span></td>
+              <td class="num">{{ scan.fetched_count|intcomma }} / {{ scan.total_count|default_if_none:"—"|intcomma }}</td>
+              <td class="num">{{ scan.created_count|intcomma }}</td>
+              <td>{{ scan.created_at|date:"H:i d/m/Y" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">Chưa có lần quét nào.</p>
+  {% endif %}
+</section>
+{% endblock %}

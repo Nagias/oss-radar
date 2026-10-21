@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Lần quét #{{ scan.pk }}{% endblock %}
+
+{% block content %}
+<p><a href="{% url 'discovery:home' %}">← Quét truy vấn khác</a></p>
+
+<section class="card">
+  <h1>Lần quét #{{ scan.pk }} <span class="status status-{{ scan.status }}">{{ scan.get_status_display }}</span></h1>
+  <p>Truy vấn: <code>{{ scan.query }}</code></p>
+
+  {% if scan.status == "failed" %}
+    <p class="error" role="alert">{{ scan.error_message }}</p>
+  {% else %}
+    <ul class="stats">
+      <li><strong>{{ scan.fetched_count|intcomma }}</strong> repo lấy về</li>
+      <li><strong>{{ scan.created_count|intcomma }}</strong> mới vào kho</li>
+      <li><strong>{{ scan.updated_count|intcomma }}</strong> đã có, được cập nhật số liệu</li>
+    </ul>
+    {% if scan.has_more_on_github %}
+      {# DEBT(D-004): cảnh báo vì bộ khung chỉ lấy trang đầu của kết quả GitHub. #}
+      <p class="notice">
+        GitHub báo có <strong>{{ scan.total_count|intcomma }}</strong> kết quả cho truy vấn này;
+        hiện mới lấy {{ scan.fetched_count|intcomma }} repo nhiều star nhất (trang đầu).
+        Quét sâu để lấy đủ sẽ có ở tính năng sau.
+      </p>
+    {% endif %}
+  {% endif %}
+</section>
+
+{% if results %}
+<section>
+  <h2>Kết quả, sắp theo star</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="num">#</th><th>Repo</th><th class="num">Star</th><th>Ngôn ngữ</th>
+          <th>Chủ sở hữu</th><th>Đẩy code gần nhất</th><th>Trong kho</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for result in results %}
+          {% with repo=result.repository %}
+          <tr>
+            <td class="num">{{ forloop.counter }}</td>
+            <td>
+              <a href="{{ repo.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ repo.full_name }}</strong></a>
+              {% if repo.description %}<div class="desc">{{ repo.description|truncatechars:180 }}</div>{% endif %}
+              {% if repo.topics %}
+                <div class="topics">{% for topic in repo.topics|slice:":6" %}<span class="topic">{{ topic }}</span>{% endfor %}</div>
+              {% endif %}
+            </td>
+            <td class="num">{{ repo.stars|intcomma }}</td>
+            <td>{{ repo.language|default:"—" }}</td>
+            <td>{{ repo.owner_login }}<div class="muted small">{% if repo.is_organization %}Tổ chức{% else %}Cá nhân{% endif %}</div></td>
+            <td>{{ repo.gh_pushed_at|date:"d/m/Y"|default:"—" }}</td>
+            <td>
+              {% if result.is_new %}<span class="badge badge-new">Mới</span>{% else %}<span class="badge badge-known">Đã có</span>{% endif %}
+            </td>
+          </tr>
+          {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

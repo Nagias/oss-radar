@@ -10,8 +10,8 @@
 - [x] CI `.github/workflows/ci.yml` + cấu hình bảo vệ nhánh + script tạo repo
 - [x] Khung Django + bộ kiểm tra chung (`uv run poe check` xanh)
 - [x] Commit nền móng đầu tiên trên `main`
-- [ ] Walking skeleton F-001 trên nhánh `feat/f001-quet-github` (TDD)
-- [ ] Chạy thật F-001 (dòng lệnh + trình duyệt)
-- [ ] Ghi nợ của F-001 vào `DEBT.md`, cập nhật `FEATURE_MAP.md`
+- [x] Walking skeleton F-001 trên nhánh `feat/f001-quet-github` (TDD)
+- [x] Chạy thật F-001 (dòng lệnh + trình duyệt + `poe test-live`)
+- [x] Ghi nợ của F-001 vào `DEBT.md` (D-003, D-004, D-005), cập nhật `FEATURE_MAP.md`
 - [ ] Chủ dự án duyệt nền + chọn public/private → chạy `scripts/github_setup.ps1` (trả nợ D-002)
 - [ ] Mở PR F-001, CI xanh, merge

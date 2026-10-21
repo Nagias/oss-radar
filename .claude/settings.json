@@ -181,7 +181,20 @@
       "PowerShell(git push * HEAD:main*)",
 
       "Bash(* --no-verify*)",
-      "PowerShell(* --no-verify*)"
+      "PowerShell(* --no-verify*)",
+
+      "Bash(git *--upload-pack*)",
+      "Bash(git *--receive-pack*)",
+      "Bash(git *--exec*)",
+      "Bash(git *--output*)",
+      "Bash(git *--ext-diff*)",
+      "Bash(git *-c *)",
+      "PowerShell(git *--upload-pack*)",
+      "PowerShell(git *--receive-pack*)",
+      "PowerShell(git *--exec*)",
+      "PowerShell(git *--output*)",
+      "PowerShell(git *--ext-diff*)",
+      "PowerShell(git *-c *)"
     ]
   }
 }

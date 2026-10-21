@@ -1,0 +1,23 @@
+{% load static %}<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Trang chủ{% endblock %} · OSS Radar</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-row">
+      <a class="brand" href="{% url 'discovery:home' %}">OSS Radar</a>
+      <span class="tagline">Tìm đúng · tìm đủ · không trùng · không rác</span>
+    </div>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer container">
+    Chạy tại máy bạn · số liệu lấy trực tiếp từ GitHub API
+  </footer>
+</body>
+</html>

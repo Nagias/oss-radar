@@ -34,8 +34,9 @@ dev = [
 PYTHONUTF8 = "1"
 
 [tool.poe.tasks.dev]
-help = "Chạy web tại http://127.0.0.1:8000"
-cmd = "python manage.py runserver 127.0.0.1:8000"
+help = "Chạy web tại http://127.0.0.1:8765"
+# Cổng riêng 8765: cổng 8000 hay bị app khác trên máy chiếm (vd story-studio).
+cmd = "python manage.py runserver 127.0.0.1:8765"
 
 [tool.poe.tasks.fmt]
 help = "Định dạng lại code rồi tự sửa các lỗi lint sửa được"
@@ -119,6 +120,8 @@ ban-relative-imports = "all"
 "manage.py" = ["TID251"]
 # Cửa ra ngoài duy nhất được dùng httpx.
 "integrations/**/*.py" = ["TID251"]
+# class Meta của Django dùng list (ordering, constraints) đúng như tài liệu Django → không ép đổi.
+"**/models.py" = ["RUF012"]
 # Test được dùng assert, dữ liệu giả có chữ "token", và httpx để dựng phản hồi giả.
 "**/tests/**/*.py" = ["S101", "S105", "S106", "TID251"]
 "conftest.py" = ["TID251"]
