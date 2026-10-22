@@ -28,6 +28,6 @@
 - [x] Kế hoạch `docs/plans/2026-10-22-f002-quet-sau.md`
 - [x] Task 1–6: giả lập GitHub, giãn nhịp/thử lại/ngân sách, chia lát, chạy nền, vòng quét, trang web + lệnh
 - [x] Sổ sách: CLAUDE.md, ARCHITECTURE (QĐ-14), FEATURE_MAP (F-002), DEBT (trả D-003/4/5, thêm D-006/7)
-- [ ] Chạy thật (lệnh + trình duyệt + `poe test-live`)
-- [ ] Agent độc lập rà soát cả nhánh, sửa điều đúng
+- [x] Chạy thật: lệnh (ai-video 404/404; ai-agent 4.616/4.618, 68 lượt), trình duyệt (Dừng/Tiếp tục, tắt app giữa chừng), `poe test-live` 2/2
+- [x] Agent độc lập rà soát cả nhánh (0 nghiêm trọng, 3 quan trọng) — đã sửa và kiểm lại
 - [ ] Mở PR, CI xanh, chủ dự án duyệt → squash-merge
