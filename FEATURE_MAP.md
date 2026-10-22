@@ -21,6 +21,7 @@ test ở đâu, đang nợ gì.
 |---|---|---|---|
 | `features/catalog/` | Lõi "kho repo": bảng `Repository` (khoá chống trùng `github_id`), hàm `upsert_repositories`. Nơi DUY NHẤT ghi bảng này | Mọi tính năng, qua `features.catalog.services` | `features/catalog/tests/` |
 | `integrations/github/` | Cửa ra GitHub REST API: `GitHubClient.search_repositories`, dataclass `GitHubRepo`/`RepoSearchPage`, lỗi có tên (`GitHubRateLimitError`, `GitHubAuthError`…) | Service của các tính năng, qua `get_github_client()` | `integrations/github/tests/` |
+| `core/` | Hạ tầng dùng chung, không phải tính năng: `core.background.submit(job, id)` chạy việc nền trên MỘT luồng trong tiến trình web (QĐ-14). Nơi duy nhất được tạo luồng | View và lệnh của các tính năng | `core/tests/` |
 
 ## Chi tiết từng tính năng
 

@@ -87,6 +87,15 @@ def test_feature_map_lists_every_module(parent: str) -> None:
     assert not missing, f"FEATURE_MAP.md chưa có mục cho {parent}/: {missing}"
 
 
+def test_feature_map_lists_shared_core() -> None:
+    feature_map = (ROOT / "FEATURE_MAP.md").read_text(encoding="utf-8")
+    assert "`core/`" in feature_map, "FEATURE_MAP.md chưa có mục cho hạ tầng dùng chung `core/`"
+
+
+def test_core_has_its_own_tests() -> None:
+    assert (ROOT / "core" / "tests" / "__init__.py").is_file(), "Thiếu core/tests/__init__.py"
+
+
 @pytest.mark.parametrize("parent", ["features", "integrations"])
 def test_every_module_has_its_own_tests(parent: str) -> None:
     missing = [
