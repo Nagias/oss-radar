@@ -2,6 +2,7 @@
 
 import functools
 import ssl
+import time
 from datetime import UTC, datetime
 from types import TracebackType
 from typing import Any, Self
@@ -17,16 +18,32 @@ from integrations.github.errors import (
     GitHubResponseError,
     GitHubUnavailableError,
 )
+from integrations.github.pacing import CallBudget, RequestPacer, Sleep, select_min_interval
 from integrations.github.schemas import GitHubRepo, RepoSearchPage
 
 API_VERSION = "2022-11-28"
 MAX_PER_PAGE = 100  # Giới hạn của GitHub Search API cho một trang.
+MAX_TRANSIENT_RETRIES = 3  # lỗi tạm thời (mất mạng, quá giờ, 5xx): gọi lại tối đa 3 lần
+MAX_RATE_LIMIT_WAITS = 3  # bị từ chối vì hết lượt: chờ rồi gọi lại tối đa 3 lần
 
 
 class GitHubClient:
-    """Dùng kèm `with` để đóng kết nối khi xong."""
+    """Dùng kèm `with` để đóng kết nối khi xong.
 
-    def __init__(self, *, token: str, api_url: str, timeout_seconds: float) -> None:
+    Mọi lượt gọi đi qua `pacer` (giãn nhịp, chờ hồi lượt) và trừ vào `budget` nếu có.
+    """
+
+    def __init__(
+        self,
+        *,
+        token: str,
+        api_url: str,
+        timeout_seconds: float,
+        pacer: RequestPacer,
+        budget: CallBudget | None = None,
+    ) -> None:
+        self._pacer = pacer
+        self._budget = budget
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": API_VERSION,
@@ -72,12 +89,37 @@ class GitHubClient:
         return _parse_search_page(self._get_json("/search/repositories", params=params))
 
     def _get_json(self, path: str, *, params: dict[str, str | int]) -> object:
-        # DEBT(D-005): gọi một lần, lỗi là dừng — chưa thử lại/giãn nhịp khi lỗi tạm thời, hết lượt.
-        try:
-            response = self._http.get(path, params=params)
-        except httpx.RequestError as exc:
-            raise GitHubUnavailableError(f"Không gọi được GitHub: {exc!r}") from exc
+        transient_failures = 0
+        rate_limit_waits = 0
+        while True:
+            if self._budget is not None:
+                self._budget.take()
+            self._pacer.before_request()
+            try:
+                response = self._http.get(path, params=params)
+            except httpx.RequestError as exc:
+                transient_failures += 1
+                if transient_failures > MAX_TRANSIENT_RETRIES:
+                    raise GitHubUnavailableError(f"Không gọi được GitHub: {exc!r}") from exc
+                self._pacer.backoff(transient_failures)
+                continue
+            if response.status_code >= 500 and transient_failures < MAX_TRANSIENT_RETRIES:
+                transient_failures += 1
+                self._pacer.backoff(transient_failures)
+                continue
+            if _is_rate_limited(response) and rate_limit_waits < MAX_RATE_LIMIT_WAITS:
+                rate_limit_waits += 1
+                self._pacer.wait_for_rate_limit(
+                    reset_epoch=_header_int(response, "x-ratelimit-reset"),
+                    retry_after=_header_float(response, "retry-after"),
+                )
+                continue
+            break
         _raise_for_status(response)
+        self._pacer.record_response(
+            remaining=_header_int(response, "x-ratelimit-remaining"),
+            reset_epoch=_header_int(response, "x-ratelimit-reset"),
+        )
         try:
             payload: object = response.json()
         except ValueError as exc:
@@ -91,12 +133,18 @@ def _ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context(cafile=certifi.where())
 
 
-def get_github_client() -> GitHubClient:
-    """Client dùng cấu hình của dự án (token trong .env)."""
+def get_github_client(
+    *, sleep: Sleep = time.sleep, budget: CallBudget | None = None
+) -> GitHubClient:
+    """Client dùng cấu hình của dự án (token trong .env), giãn nhịp theo việc có token hay không."""
+    token = settings.GITHUB_TOKEN
+    pacer = RequestPacer(min_interval=select_min_interval(token), sleep=sleep)
     return GitHubClient(
-        token=settings.GITHUB_TOKEN,
+        token=token,
         api_url=settings.GITHUB_API_URL,
         timeout_seconds=settings.GITHUB_TIMEOUT_SECONDS,
+        pacer=pacer,
+        budget=budget,
     )
 
 
@@ -108,7 +156,7 @@ def _raise_for_status(response: httpx.Response) -> None:
     if status < 400:
         return
     message = _error_message(response)
-    if status in (403, 429) and _is_rate_limited(response):
+    if _is_rate_limited(response):
         raise GitHubRateLimitError(message, reset_at=_rate_limit_reset(response))
     if status in (401, 403):
         raise GitHubAuthError(message)
@@ -120,6 +168,8 @@ def _raise_for_status(response: httpx.Response) -> None:
 
 
 def _is_rate_limited(response: httpx.Response) -> bool:
+    if response.status_code not in (403, 429):
+        return False
     return (
         response.status_code == 429
         or response.headers.get("x-ratelimit-remaining") == "0"
@@ -128,8 +178,20 @@ def _is_rate_limited(response: httpx.Response) -> bool:
 
 
 def _rate_limit_reset(response: httpx.Response) -> datetime | None:
-    raw = response.headers.get("x-ratelimit-reset", "")
-    return datetime.fromtimestamp(int(raw), tz=UTC) if raw.isdigit() else None
+    epoch = _header_int(response, "x-ratelimit-reset")
+    return datetime.fromtimestamp(epoch, tz=UTC) if epoch is not None else None
+
+
+def _header_int(response: httpx.Response, name: str) -> int | None:
+    raw = response.headers.get(name, "")
+    return int(raw) if raw.isdigit() else None
+
+
+def _header_float(response: httpx.Response, name: str) -> float | None:
+    try:
+        return float(response.headers[name])
+    except (KeyError, ValueError):
+        return None
 
 
 def _error_message(response: httpx.Response) -> str:

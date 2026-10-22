@@ -20,7 +20,9 @@ from integrations.github.errors import (
     GitHubResponseError,
     GitHubUnavailableError,
 )
+from integrations.github.pacing import CallBudget, CallBudgetExhaustedError, RequestPacer
 from tests.factories import load_fixture as _load
+from tests.fakes import FakeTime
 
 API_URL = "https://api.github.com"
 SEARCH_URL = f"{API_URL}/search/repositories"
@@ -30,9 +32,24 @@ def load_fixture(name: str) -> dict[str, Any]:
     return _load(f"github/{name}")
 
 
+def make_client(
+    clock: FakeTime, *, token: str = "test-token", budget: CallBudget | None = None
+) -> GitHubClient:
+    pacer = RequestPacer(
+        min_interval=0.0,
+        sleep=clock.sleep,
+        clock=clock.monotonic,
+        wall_clock=clock.time,
+        jitter=lambda: 0.0,
+    )
+    return GitHubClient(
+        token=token, api_url=API_URL, timeout_seconds=5.0, pacer=pacer, budget=budget
+    )
+
+
 @pytest.fixture
-def client() -> Iterator[GitHubClient]:
-    with GitHubClient(token="test-token", api_url=API_URL, timeout_seconds=5.0) as github:
+def client(fake_time: FakeTime) -> Iterator[GitHubClient]:
+    with make_client(fake_time) as github:
         yield github
 
 
@@ -82,10 +99,12 @@ def test_search_sends_query_sorted_by_stars_with_token(
     assert request.headers["X-GitHub-Api-Version"] == "2022-11-28"
 
 
-def test_search_without_token_sends_no_authorization_header(http_mock: respx.MockRouter) -> None:
+def test_search_without_token_sends_no_authorization_header(
+    http_mock: respx.MockRouter, fake_time: FakeTime
+) -> None:
     route = http_mock.get(SEARCH_URL).respond(json=load_fixture("search_repositories.json"))
 
-    with GitHubClient(token="", api_url=API_URL, timeout_seconds=5.0) as anonymous:
+    with make_client(fake_time, token="") as anonymous:
         anonymous.search_repositories("topic:ai-agent")
 
     assert "Authorization" not in route.calls.last.request.headers
@@ -133,25 +152,45 @@ def test_validation_failed_raises_query_error(
         client.search_repositories("topic:ai-agent")
 
 
-def test_exhausted_rate_limit_raises_rate_limit_error_with_reset_time(
-    client: GitHubClient, http_mock: respx.MockRouter
+def test_rate_limit_wait_too_long_raises(
+    client: GitHubClient, http_mock: respx.MockRouter, fake_time: FakeTime
 ) -> None:
+    reset_epoch = int(fake_time.time()) + 600  # quá 5 phút chờ cho phép
     http_mock.get(SEARCH_URL).respond(
         403,
-        headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1792000000"},
+        headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": str(reset_epoch)},
         json={"message": "API rate limit exceeded"},
     )
 
     with pytest.raises(GitHubRateLimitError) as caught:
         client.search_repositories("topic:ai-agent")
 
-    assert caught.value.reset_at == datetime.fromtimestamp(1792000000, tz=UTC)
+    assert caught.value.reset_at == datetime.fromtimestamp(reset_epoch, tz=UTC)
+
+
+def test_rate_limited_then_succeeds_after_waiting(
+    client: GitHubClient, http_mock: respx.MockRouter, fake_time: FakeTime
+) -> None:
+    reset_epoch = int(fake_time.time()) + 30
+    limited = httpx.Response(
+        403,
+        headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": str(reset_epoch)},
+        json={"message": "API rate limit exceeded"},
+    )
+    ok = httpx.Response(200, json=load_fixture("search_repositories.json"))
+    route = http_mock.get(SEARCH_URL).mock(side_effect=[limited, ok])
+
+    page = client.search_repositories("topic:ai-agent")
+
+    assert page.total_count == 40194
+    assert route.call_count == 2
+    assert fake_time.sleeps == [pytest.approx(31, abs=1)]
 
 
 def test_too_many_requests_raises_rate_limit_error(
     client: GitHubClient, http_mock: respx.MockRouter
 ) -> None:
-    http_mock.get(SEARCH_URL).respond(
+    route = http_mock.get(SEARCH_URL).respond(
         429, headers={"retry-after": "60"}, json={"message": "secondary rate limit"}
     )
 
@@ -159,6 +198,7 @@ def test_too_many_requests_raises_rate_limit_error(
         client.search_repositories("topic:ai-agent")
 
     assert caught.value.reset_at is None
+    assert route.call_count == 4  # 1 lượt đầu + chờ và gọi lại tối đa 3 lần
 
 
 @pytest.mark.parametrize("status", [401, 403])
@@ -171,13 +211,41 @@ def test_rejected_credentials_raise_auth_error(
         client.search_repositories("topic:ai-agent")
 
 
-def test_server_error_raises_unavailable_error(
-    client: GitHubClient, http_mock: respx.MockRouter
+def test_server_error_retried_three_times_then_raises(
+    client: GitHubClient, http_mock: respx.MockRouter, fake_time: FakeTime
 ) -> None:
-    http_mock.get(SEARCH_URL).respond(502, text="Bad Gateway")
+    route = http_mock.get(SEARCH_URL).respond(502, text="Bad Gateway")
 
     with pytest.raises(GitHubUnavailableError):
         client.search_repositories("topic:ai-agent")
+
+    assert route.call_count == 4
+    assert fake_time.sleeps == [2.0, 4.0, 8.0]
+
+
+def test_transient_error_then_success_returns_page(
+    client: GitHubClient, http_mock: respx.MockRouter
+) -> None:
+    route = http_mock.get(SEARCH_URL).mock(
+        side_effect=[
+            httpx.ConnectError("mất mạng chốc lát"),
+            httpx.Response(200, json=load_fixture("search_repositories.json")),
+        ]
+    )
+
+    assert client.search_repositories("topic:ai-agent").total_count == 40194
+    assert route.call_count == 2
+
+
+def test_every_attempt_spends_budget(http_mock: respx.MockRouter, fake_time: FakeTime) -> None:
+    route = http_mock.get(SEARCH_URL).respond(502, text="Bad Gateway")
+    budget = CallBudget(2)
+
+    with make_client(fake_time, budget=budget) as github, pytest.raises(CallBudgetExhaustedError):
+        github.search_repositories("topic:ai-agent")
+
+    assert route.call_count == 2
+    assert budget.used == 2
 
 
 @pytest.mark.parametrize(
@@ -186,10 +254,12 @@ def test_server_error_raises_unavailable_error(
 def test_network_failure_raises_unavailable_error(
     client: GitHubClient, http_mock: respx.MockRouter, failure: httpx.HTTPError
 ) -> None:
-    http_mock.get(SEARCH_URL).mock(side_effect=failure)
+    route = http_mock.get(SEARCH_URL).mock(side_effect=failure)
 
     with pytest.raises(GitHubUnavailableError):
         client.search_repositories("topic:ai-agent")
+
+    assert route.call_count == 4
 
 
 @pytest.mark.parametrize(

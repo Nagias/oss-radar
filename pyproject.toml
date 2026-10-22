@@ -123,7 +123,7 @@ ban-relative-imports = "all"
 # class Meta của Django dùng list (ordering, constraints) đúng như tài liệu Django → không ép đổi.
 "**/models.py" = ["RUF012"]
 # Test được dùng assert, dữ liệu giả có chữ "token", và httpx để dựng phản hồi giả.
-"**/tests/**/*.py" = ["S101", "S105", "S106", "TID251"]
+"**/tests/**/*.py" = ["S101", "S105", "S106", "S107", "TID251"]
 "conftest.py" = ["TID251"]
 
 [tool.ruff.format]

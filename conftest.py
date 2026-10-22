@@ -5,6 +5,14 @@ from collections.abc import Iterator
 import pytest
 import respx
 
+from tests.fakes import FakeTime
+
+
+@pytest.fixture
+def fake_time() -> FakeTime:
+    """Đồng hồ giả: truyền `fake_time.sleep`/`.monotonic`/`.time` vào code thay cho đồng hồ thật."""
+    return FakeTime()
+
 
 @pytest.fixture
 def http_mock() -> Iterator[respx.MockRouter]:
