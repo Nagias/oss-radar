@@ -471,6 +471,106 @@ def test_run_stays_live_right_after_its_child_scan_finishes(watch_list: list[Wat
     assert services.pause_stale_daily_runs() == 0
 
 
+@pytest.mark.parametrize("step", [DailyRun.Step.SCREEN, DailyRun.Step.VERIFY, DailyRun.Step.REPORT])
+def test_child_scan_heartbeat_counts_only_during_rescan(
+    watch_list: list[WatchQuery], step: int
+) -> None:
+    run = services.prepare_daily_run()
+    # Lần quét con bị bỏ lại, được người dùng bấm Tiếp tục bằng tay ở trang lần quét: nó đang sống,
+    # nhưng lượt (đã qua bước quét lại) thì đã chết.
+    child = discovery.start_scan(
+        discovery.ScanRequest(A, 10, None, None, None, budget=300, origin=ScanRun.Origin.DAILY)
+    )
+    DailyRunScan.objects.create(
+        daily_run=run, watch_query=watch_list[0], scan_run=child, position=1
+    )
+    DailyRun.objects.filter(pk=run.pk).update(
+        step=step, heartbeat_at=timezone.now() - timedelta(minutes=10)
+    )
+
+    assert services.live_daily_run() is None
+    assert services.pause_stale_daily_runs() == 1
+
+    run.refresh_from_db()
+    assert (run.status, run.pause_kind) == (Status.PAUSED, PauseKind.INTERRUPTED)
+
+
+@pytest.mark.parametrize("stopped_how", ["flag_pending", "already_paused"])
+def test_old_user_stopped_child_does_not_make_later_interruption_a_stop(
+    watch_list: list[WatchQuery], stopped_how: str
+) -> None:
+    run = services.prepare_daily_run()
+    child = discovery.start_scan(
+        discovery.ScanRequest(A, 10, None, None, None, budget=300, origin=ScanRun.Origin.DAILY)
+    )
+    DailyRunScan.objects.create(
+        daily_run=run, watch_query=watch_list[0], scan_run=child, position=1
+    )
+    long_ago = timezone.now() - timedelta(minutes=10)
+    if stopped_how == "flag_pending":
+        ScanRun.objects.filter(pk=child.pk).update(stop_requested=True, heartbeat_at=long_ago)
+    else:
+        ScanRun.objects.filter(pk=child.pk).update(
+            status=ScanRun.Status.PAUSED,
+            stop_reason=discovery.REASON_STOPPED,
+            heartbeat_at=long_ago,
+        )
+    # Lượt đã qua bước quét lại (lần quét con kia là của truy vấn đã tắt), rồi app tắt ở bước 3.
+    DailyRun.objects.filter(pk=run.pk).update(step=DailyRun.Step.VERIFY, heartbeat_at=long_ago)
+
+    assert services.pause_stale_daily_runs() == 1
+
+    run.refresh_from_db()
+    assert (run.status, run.pause_kind) == (Status.PAUSED, PauseKind.INTERRUPTED)
+
+
+def test_new_scan_position_follows_highest_position(
+    watch_list: list[WatchQuery], use_fake: UseFake
+) -> None:
+    use_fake(some_repos())
+    run = services.prepare_daily_run()
+    # Lần quét lỗi token của A ở thứ tự 2 (thứ tự 1 đã mất cùng lần quét bị xoá của nó).
+    failed = ScanRun.objects.create(
+        query=A,
+        origin=ScanRun.Origin.DAILY,
+        status=ScanRun.Status.FAILED,
+        error_kind=ScanRun.ErrorKind.AUTH,
+    )
+    DailyRunScan.objects.create(
+        daily_run=run, watch_query=watch_list[0], scan_run=failed, position=2
+    )
+
+    services.execute_daily_run(run.pk)
+
+    positions = run.scans.order_by("position", "pk").values_list("position", "scan_run__query")
+    assert list(positions) == [(2, A), (3, A), (4, B), (5, C)]
+
+
+def test_newest_link_wins_when_positions_tie(
+    watch_list: list[WatchQuery], use_fake: UseFake
+) -> None:
+    fake = use_fake(some_repos())
+    run = services.prepare_daily_run()
+    older_failed = ScanRun.objects.create(
+        query=A,
+        origin=ScanRun.Origin.DAILY,
+        status=ScanRun.Status.FAILED,
+        error_kind=ScanRun.ErrorKind.AUTH,
+    )
+    newer_done = ScanRun.objects.create(
+        query=A, origin=ScanRun.Origin.DAILY, status=ScanRun.Status.SUCCEEDED
+    )
+    for scan in (older_failed, newer_done):
+        DailyRunScan.objects.create(
+            daily_run=run, watch_query=watch_list[0], scan_run=scan, position=1
+        )
+
+    services.execute_daily_run(run.pk)
+
+    assert calls_for(fake, A) == 0  # lần quét mới nhất của A đã xong → không quét lại
+    assert run.scans.count() == 4
+
+
 @pytest.mark.parametrize("edit", ["disable", "delete"])
 def test_unfinished_scan_of_removed_watch_query_is_noted_on_continue(
     watch_list: list[WatchQuery], use_fake: UseFake, edit: str

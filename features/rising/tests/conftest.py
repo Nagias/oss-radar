@@ -15,7 +15,8 @@ from features.rising.models import DailyRun, WatchQuery
 from tests.fakes import FakeGitHubSearch, FakeStarHistory, FakeTime, make_search_items
 
 SEARCH_URL = "https://api.github.com/search/repositories"
-HISTORY_URL_PATTERN = r"^https://api\.github\.com/repositories/\d+/stargazers/history$"
+# Client gửi kèm `?per_page=…` → khớp cả phần truy vấn phía sau đường dẫn.
+HISTORY_URL_PATTERN = r"^https://api\.github\.com/repositories/\d+/stargazers/history(\?.*)?$"
 
 # Ba truy vấn theo dõi của test; không cái nào là phần đầu của cái khác → đếm được lượt gọi
 # theo từng truy vấn.
