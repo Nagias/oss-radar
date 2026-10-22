@@ -12,6 +12,7 @@ from features.catalog.models import Repository
 from features.discovery import services
 from features.discovery.models import ScanRun, ScanSlice
 from features.discovery.tests.conftest import SEARCH_URL, run_scan_now
+from tests.factories import load_fixture
 from tests.fakes import FakeGitHubSearch, FakeTime, make_search_items
 
 pytestmark = pytest.mark.django_db
@@ -195,6 +196,46 @@ def test_auth_error_fails_whole_scan(http_mock: respx.MockRouter) -> None:
     assert scan.status == ScanRun.Status.FAILED
     assert "GITHUB_TOKEN" in scan.error_message
     assert scan.api_calls_used == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "kind"),
+    [
+        (401, {"message": "Bad credentials"}, ScanRun.ErrorKind.AUTH),
+        (422, load_fixture("github/search_validation_failed.json"), ScanRun.ErrorKind.QUERY),
+    ],
+)
+def test_failed_scan_records_error_kind(
+    http_mock: respx.MockRouter, status: int, body: dict[str, Any], kind: str
+) -> None:
+    http_mock.get(SEARCH_URL).respond(status, json=body)
+
+    scan = deep()
+
+    assert scan.status == ScanRun.Status.FAILED
+    assert scan.error_kind == kind
+
+
+def test_unexpected_failure_records_error_kind_and_still_raises(
+    use_fake: UseFake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_fake(many_repos(50))
+
+    def broken_upsert(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("lỗi lập trình giả lập")
+
+    monkeypatch.setattr(services, "upsert_repositories", broken_upsert)
+
+    with pytest.raises(RuntimeError):
+        deep()
+
+    assert ScanRun.objects.get().error_kind == ScanRun.ErrorKind.UNEXPECTED
+
+
+def test_successful_scan_has_no_error_kind(use_fake: UseFake) -> None:
+    use_fake(many_repos(50))
+
+    assert deep().error_kind == ""
 
 
 def test_long_rate_limit_wait_pauses_scan(http_mock: respx.MockRouter, fake_time: FakeTime) -> None:

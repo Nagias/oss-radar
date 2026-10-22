@@ -128,7 +128,9 @@ GITHUB_TIMEOUT_SECONDS = 20.0
 
 # Việc định kỳ (QĐ-15): bộ nhịp `core/scheduler.py` gọi lần lượt các hàm này trên luồng nền, đúng
 # thứ tự khai. Nhìn danh sách này là biết app tự làm những gì.
-SCHEDULED_JOBS: list[str] = []
+SCHEDULED_JOBS: list[str] = [
+    "features.discovery.services.resume_interrupted_scan",
+]
 
 
 # Log ra màn hình console; code dùng logging.getLogger(__name__), không dùng print().

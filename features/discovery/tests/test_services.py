@@ -8,15 +8,16 @@ import respx
 from django.utils import timezone
 
 from features.catalog.models import Repository
+from features.catalog.services import upsert_repositories
 from features.discovery import services
-from features.discovery.models import ScanRun, ScanSlice
+from features.discovery.models import ScanResult, ScanRun, ScanSlice
 from features.discovery.tests.conftest import (
     DEFAULT_REQUEST,
     REAL_TOP_REPOS,
     SEARCH_URL,
     run_scan_now,
 )
-from tests.factories import load_fixture
+from tests.factories import load_fixture, make_github_repo
 from tests.fakes import FakeTime
 
 pytestmark = pytest.mark.django_db
@@ -215,6 +216,55 @@ def test_recent_scans_lists_newest_first(github_search: respx.Route) -> None:
     assert list(services.recent_scans()) == [newer, older]
 
 
+def test_recent_scans_lists_manual_only(github_search: respx.Route) -> None:
+    manual = run_scan_now()
+    run_scan_now(origin=ScanRun.Origin.DAILY)
+
+    assert list(services.recent_scans()) == [manual]
+
+
+def test_start_scan_records_origin(github_search: respx.Route) -> None:
+    assert run_scan_now().origin == ScanRun.Origin.MANUAL
+    assert run_scan_now(origin=ScanRun.Origin.DAILY).origin == ScanRun.Origin.DAILY
+
+
+# --- Dọn kết quả cũ, đọc repo theo lần quét ---------------------------------------------------
+
+
+def test_prune_daily_results_keeps_manual_and_recent(github_search: respx.Route) -> None:
+    old_daily = run_scan_now(origin=ScanRun.Origin.DAILY)
+    old_manual = run_scan_now()
+    recent_daily = run_scan_now(origin=ScanRun.Origin.DAILY)
+    long_ago = timezone.now() - timedelta(days=40)
+    ScanRun.objects.filter(pk__in=[old_daily.pk, old_manual.pk]).update(created_at=long_ago)
+
+    deleted = services.prune_daily_results(before=timezone.now() - timedelta(days=35))
+
+    assert deleted == 3
+    for scan in (old_daily, old_manual, recent_daily):
+        scan.refresh_from_db()
+    assert (old_daily.results.count(), old_daily.results_pruned) == (0, True)
+    assert (old_manual.results.count(), old_manual.results_pruned) == (3, False)
+    assert (recent_daily.results.count(), recent_daily.results_pruned) == (3, False)
+    assert old_daily.fetched_count == 3  # phần tóm tắt của lần quét vẫn giữ
+    assert Repository.objects.count() == 3
+
+
+def test_repositories_seen_in_returns_distinct_repos(github_search: respx.Route) -> None:
+    first = run_scan_now()
+    second = run_scan_now()
+    other = run_scan_now()
+    outsider = upsert_repositories(
+        [make_github_repo(github_id=42, full_name="x/y")], seen_at=timezone.now()
+    )
+    ScanResult.objects.create(scan_run=other, repository=outsider[0].repository, is_new=True)
+
+    seen = services.repositories_seen_in([first.pk, second.pk])
+
+    assert sorted(repo.full_name for repo in seen) == sorted(REAL_TOP_REPOS)
+    assert services.repositories_seen_in([]).count() == 0
+
+
 def test_coverage_percent() -> None:
     scan = ScanRun(query="x")
     assert scan.coverage_percent is None
@@ -258,3 +308,57 @@ def test_unreadable_github_data_fails_only_that_slice(http_mock: respx.MockRoute
     assert root.status == ScanSlice.Status.FAILED
     assert "không đọc được" in root.error_message
     assert scan.status == ScanRun.Status.SUCCEEDED_PARTIAL
+
+
+def test_unexpected_not_found_from_search_fails_only_that_slice(
+    http_mock: respx.MockRouter,
+) -> None:
+    http_mock.get(SEARCH_URL).respond(404, json={"message": "Not Found"})
+
+    scan = run_scan_now()
+
+    assert scan.slices.get(stack_order=1).status == ScanSlice.Status.FAILED
+    assert scan.status == ScanRun.Status.SUCCEEDED_PARTIAL
+
+
+# --- Luồng nền vừa bị việc khác chiếm --------------------------------------------------------
+
+
+def test_release_unstarted_scan_pauses_it_for_manual_resume() -> None:
+    scan = services.start_scan(DEFAULT_REQUEST)
+
+    services.release_unstarted_scan(scan)
+
+    scan.refresh_from_db()
+    assert scan.status == ScanRun.Status.PAUSED
+    assert scan.stop_reason == services.REASON_BUSY
+    assert (scan.heartbeat_at, scan.runner_token) == (None, "")
+    assert services.live_scan() is None
+    assert scan.can_resume
+
+
+# --- Dùng chung với tính năng khác ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("query", "hint"),
+    [
+        ("topic:ai-agent", None),
+        ("topic:ai-agent STARS:>5", "Star tối thiểu"),
+        ("created:>2025-01-01 topic:x", "ngày"),
+        ("topic:x sort:updated", "sắp theo star"),
+    ],
+)
+def test_forbidden_qualifier_hint(query: str, hint: str | None) -> None:
+    found = services.forbidden_qualifier_hint(query)
+
+    if hint is None:
+        assert found is None
+    else:
+        assert found is not None
+        assert hint in found
+
+
+def test_shared_constants_are_read_from_services() -> None:
+    assert [value for value, _ in services.BUDGET_CHOICES] == [1, 50, 300, 1000]
+    assert timedelta(seconds=120) == services.LIVE_HEARTBEAT_WINDOW

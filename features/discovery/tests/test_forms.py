@@ -4,8 +4,10 @@ from datetime import date, timedelta
 from typing import Any
 
 import pytest
+from django import forms
 from django.utils import timezone
 
+from features.discovery import services
 from features.discovery.forms import ResumeForm, ScanForm
 from features.discovery.services import ScanRequest
 
@@ -122,6 +124,13 @@ def test_to_request_maps_fields() -> None:
         created_to=date(2025, 6, 30),
         budget=50,
     )
+
+
+def test_budget_levels_come_from_services() -> None:
+    budget = make_form().fields["budget"]
+
+    assert isinstance(budget, forms.TypedChoiceField)
+    assert budget.choices == list(services.BUDGET_CHOICES)
 
 
 def test_resume_form_offers_same_levels() -> None:

@@ -27,8 +27,11 @@
     <label for="{{ form.query.id_for_label }}">{{ form.query.label }}</label>
     <div class="input-row">
       {{ form.query }}
-      <button type="submit" {% if live_scan %}disabled{% endif %}>Quét</button>
+      <button type="submit" {% if live_scan or busy_label %}disabled{% endif %}>Quét</button>
     </div>
+    {% if busy_label %}
+      <p class="hint">Nút Quét tạm khoá: app đang chạy việc nền <strong>{{ busy_label }}</strong> — chờ xong, hoặc dừng việc đó.</p>
+    {% endif %}
     {% if form.query.errors %}<p class="error" role="alert">{{ form.query.errors|join:" " }}</p>{% endif %}
     <p class="hint">{{ form.query.help_text }}</p>
 
