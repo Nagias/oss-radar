@@ -30,4 +30,18 @@
 - [x] Sổ sách: CLAUDE.md, ARCHITECTURE (QĐ-14), FEATURE_MAP (F-002), DEBT (trả D-003/4/5, thêm D-006/7)
 - [x] Chạy thật: lệnh (ai-video 404/404; ai-agent 4.616/4.618, 68 lượt), trình duyệt (Dừng/Tiếp tục, tắt app giữa chừng), `poe test-live` 2/2
 - [x] Agent độc lập rà soát cả nhánh (0 nghiêm trọng, 3 quan trọng) — đã sửa và kiểm lại
-- [ ] Mở PR, CI xanh, chủ dự án duyệt → squash-merge
+- [x] PR Nagias/oss-radar#2, CI xanh, chủ dự án duyệt → squash-merge vào `main` (commit `76730c9`, 2026-10-22)
+
+## Tiếp theo (sau F-002)
+
+- [x] Chủ dự án chọn tính năng kế tiếp: F-005 rising star + quét hằng ngày (2026-10-22)
+
+## F-005 Rising star + quét hằng ngày (2026-10-22, nhánh `feat/f005-rising-star`)
+
+- [x] Đo thật: độ tươi số star của Search, endpoint lịch sử star mới, phân bố tăng star, 16 chủ đề gợi ý
+- [x] Chủ dự án chọn lịch chạy trong app, chạy bù khi mở app
+- [x] Thiết kế `docs/designs/2026-10-22-f005-rising-star.md` — agent độc lập rà soát, đã chốt 7 điểm
+- [ ] Chủ dự án duyệt thiết kế
+- [ ] Kế hoạch `docs/plans/2026-10-22-f005-rising-star.md`
+- [ ] Code theo TDD, sổ sách (CLAUDE.md, ARCHITECTURE QĐ-15/16, FEATURE_MAP, DEBT trả D-006 + thêm D-008)
+- [ ] Chạy thật (`manage.py daily`, trình duyệt, tắt app giữa chừng), `poe test-live`, PR
