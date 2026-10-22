@@ -14,5 +14,20 @@
 - [x] Chạy thật F-001 (dòng lệnh + trình duyệt + `poe test-live`)
 - [x] Ghi nợ của F-001 vào `DEBT.md` (D-003, D-004, D-005), cập nhật `FEATURE_MAP.md`
 - [x] Chủ dự án chọn public → chạy `scripts/github_setup.ps1`, CI xanh trên `main` (trả nợ D-002)
-- [ ] Mở PR F-001, CI xanh
-- [ ] Chủ dự án duyệt nền qua PR → squash-merge
+- [x] Mở PR F-001 (Nagias/oss-radar#1), CI xanh
+- [x] Chủ dự án duyệt nền → squash-merge vào `main` (commit `726fe2d`, 2026-10-21)
+
+## Tiếp theo
+
+- [ ] Chủ dự án tạo token GitHub fine-grained (chỉ đọc repo public), điền `GITHUB_TOKEN` vào `.env`
+- [x] F-002 Quét sâu: thiết kế đã duyệt, kế hoạch, code theo TDD (xem mục dưới)
+
+## F-002 Quét sâu (2026-10-22)
+
+- [x] Thiết kế `docs/designs/2026-10-22-f002-quet-sau.md` — agent độc lập rà soát, chủ dự án duyệt
+- [x] Kế hoạch `docs/plans/2026-10-22-f002-quet-sau.md`
+- [x] Task 1–6: giả lập GitHub, giãn nhịp/thử lại/ngân sách, chia lát, chạy nền, vòng quét, trang web + lệnh
+- [x] Sổ sách: CLAUDE.md, ARCHITECTURE (QĐ-14), FEATURE_MAP (F-002), DEBT (trả D-003/4/5, thêm D-006/7)
+- [x] Chạy thật: lệnh (ai-video 404/404; ai-agent 4.616/4.618, 68 lượt), trình duyệt (Dừng/Tiếp tục, tắt app giữa chừng), `poe test-live` 2/2
+- [x] Agent độc lập rà soát cả nhánh (0 nghiêm trọng, 3 quan trọng) — đã sửa và kiểm lại
+- [ ] Mở PR, CI xanh, chủ dự án duyệt → squash-merge

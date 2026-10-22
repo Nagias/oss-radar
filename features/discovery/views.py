@@ -1,26 +1,85 @@
 """Trang web của tính năng Quét — lớp mỏng: nhận yêu cầu → gọi services → hiển thị."""
 
+from typing import Any
+
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_GET, require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from core import background
 from features.discovery import services
-from features.discovery.forms import ScanForm
+from features.discovery.forms import ResumeForm, ScanForm
 from features.discovery.models import ScanRun
+
+# DEBT(D-007): trang kết quả chỉ hiện 500 repo nhiều star nhất; xem đủ cần trang duyệt kho.
+RESULTS_SHOWN_LIMIT = 500
 
 
 @require_http_methods(["GET", "POST"])
 def home(request: HttpRequest) -> HttpResponse:
+    services.pause_stale_scans()
     form = ScanForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        scan = services.run_scan(form.cleaned_data["query"])
-        return redirect("discovery:scan_detail", scan_id=scan.pk)
-    context = {"form": form, "recent_scans": services.recent_scans()}
+        try:
+            scan = services.start_scan(form.to_request())
+        except services.ScanAlreadyRunningError as exc:
+            form.add_error(None, _already_running_message(exc))
+        else:
+            background.submit(services.execute_scan, scan.pk)
+            return redirect("discovery:scan_detail", scan_id=scan.pk)
+    context = {
+        "form": form,
+        "recent_scans": services.recent_scans(),
+        "live_scan": services.live_scan(),
+    }
     return render(request, "discovery/home.html", context)
 
 
 @require_GET
 def scan_detail(request: HttpRequest, scan_id: int) -> HttpResponse:
+    services.pause_stale_scans()
     scan = get_object_or_404(ScanRun, pk=scan_id)
-    context = {"scan": scan, "results": services.scan_results(scan)}
-    return render(request, "discovery/scan_detail.html", context)
+    return render(request, "discovery/scan_detail.html", _detail_context(scan))
+
+
+@require_POST
+def scan_stop(request: HttpRequest, scan_id: int) -> HttpResponse:
+    scan = get_object_or_404(ScanRun, pk=scan_id)
+    services.request_stop(scan)
+    return redirect("discovery:scan_detail", scan_id=scan.pk)
+
+
+@require_POST
+def scan_resume(request: HttpRequest, scan_id: int) -> HttpResponse:
+    scan = get_object_or_404(ScanRun, pk=scan_id)
+    form = ResumeForm(request.POST)
+    if form.is_valid():
+        try:
+            services.resume_scan(scan, extra_budget=form.cleaned_data["extra_budget"])
+        except services.ScanAlreadyRunningError as exc:
+            form.add_error(None, _already_running_message(exc))
+        except ValueError as exc:
+            form.add_error(None, str(exc))
+        else:
+            background.submit(services.execute_scan, scan.pk)
+            return redirect("discovery:scan_detail", scan_id=scan.pk)
+    context = _detail_context(scan, resume_form=form)
+    return render(request, "discovery/scan_detail.html", context, status=409)
+
+
+def _detail_context(scan: ScanRun, *, resume_form: ResumeForm | None = None) -> dict[str, Any]:
+    if resume_form is None and scan.can_resume:
+        resume_form = ResumeForm()
+    return {
+        "scan": scan,
+        "results": services.scan_results(scan)[:RESULTS_SHOWN_LIMIT],
+        "results_limit": RESULTS_SHOWN_LIMIT,
+        "problems": services.problem_slices(scan),
+        "progress": services.slice_progress(scan),
+        "resume_form": resume_form,
+        "auto_refresh": scan.is_live,
+    }
+
+
+def _already_running_message(exc: services.ScanAlreadyRunningError) -> str:
+    return f"Đang chạy lần quét #{exc.scan.pk} — chờ nó xong hoặc bấm Dừng ở lần đó."

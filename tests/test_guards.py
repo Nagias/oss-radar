@@ -8,7 +8,7 @@ import pytest
 from respx.models import AllMockedAssertionError
 
 ROOT = Path(__file__).resolve().parents[1]
-CODE_DIRS = ("config", "features", "integrations", "templates", "static", "tests")
+CODE_DIRS = ("config", "core", "features", "integrations", "templates", "static", "tests")
 CODE_SUFFIXES = {".py", ".html", ".css", ".js", ".txt"}
 DEBT_MARKER = re.compile(r"DEBT\((D-\d{3})\)")
 DEBT_ROW = re.compile(r"^\|\s*(D-\d{3})\s*\|[^|]*\|\s*([^|]+?)\s*\|", re.MULTILINE)
@@ -85,6 +85,15 @@ def test_feature_map_lists_every_module(parent: str) -> None:
     feature_map = (ROOT / "FEATURE_MAP.md").read_text(encoding="utf-8")
     missing = [name for name in _package_dirs(parent) if f"`{parent}/{name}/`" not in feature_map]
     assert not missing, f"FEATURE_MAP.md chưa có mục cho {parent}/: {missing}"
+
+
+def test_feature_map_lists_shared_core() -> None:
+    feature_map = (ROOT / "FEATURE_MAP.md").read_text(encoding="utf-8")
+    assert "`core/`" in feature_map, "FEATURE_MAP.md chưa có mục cho hạ tầng dùng chung `core/`"
+
+
+def test_core_has_its_own_tests() -> None:
+    assert (ROOT / "core" / "tests" / "__init__.py").is_file(), "Thiếu core/tests/__init__.py"
 
 
 @pytest.mark.parametrize("parent", ["features", "integrations"])

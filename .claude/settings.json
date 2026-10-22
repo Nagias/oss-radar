@@ -188,13 +188,19 @@
       "Bash(git *--exec*)",
       "Bash(git *--output*)",
       "Bash(git *--ext-diff*)",
-      "Bash(git *-c *)",
+      "Bash(git -c *)",
+      "Bash(git -C * -c *)",
+      "Bash(git --* -c *)",
+      "Bash(git *--config-env*)",
       "PowerShell(git *--upload-pack*)",
       "PowerShell(git *--receive-pack*)",
       "PowerShell(git *--exec*)",
       "PowerShell(git *--output*)",
       "PowerShell(git *--ext-diff*)",
-      "PowerShell(git *-c *)"
+      "PowerShell(git -c *)",
+      "PowerShell(git -C * -c *)",
+      "PowerShell(git --* -c *)",
+      "PowerShell(git *--config-env*)"
     ]
   }
 }

@@ -1,10 +1,13 @@
 """Test gọi GitHub THẬT qua Internet — chỉ chạy bằng `uv run poe test-live`, không chạy trong CI.
 
-Mục đích: phát hiện sớm khi GitHub đổi định dạng phản hồi mà dữ liệu giả lập đã lưu không còn đúng.
-Mỗi lần chạy tốn 2 lượt tìm kiếm của GitHub.
+Mục đích: phát hiện sớm khi GitHub đổi định dạng phản hồi hoặc cú pháp truy vấn, làm dữ liệu
+giả lập đã lưu không còn đúng. Mỗi lần chạy tốn tối đa 4 lượt tìm kiếm (giãn nhịp thật).
 """
 
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 
 from features.catalog.models import Repository
 from features.discovery import services
@@ -26,9 +29,26 @@ def test_live_search_returns_repositories_sorted_by_stars() -> None:
 
 
 @pytest.mark.django_db
-def test_live_scan_stores_first_page_without_duplicates() -> None:
-    scan = services.run_scan("topic:ai-agent")
+def test_live_deep_scan_within_small_budget_without_duplicates() -> None:
+    today = timezone.localdate()
+    scan = services.start_scan(
+        services.ScanRequest(
+            query="topic:ai-video",
+            min_stars=10,
+            max_stars=None,
+            created_from=today - timedelta(days=60),
+            created_to=today,
+            budget=3,
+        )
+    )
 
-    assert scan.status == ScanRun.Status.SUCCEEDED, scan.error_message
-    assert scan.fetched_count > 0
+    services.execute_scan(scan.pk)
+    scan.refresh_from_db()
+
+    assert scan.status in (ScanRun.Status.SUCCEEDED, ScanRun.Status.SUCCEEDED_PARTIAL), (
+        scan.error_message or scan.stop_reason
+    )
+    assert scan.api_calls_used <= 3
+    assert scan.total_count is not None
     assert Repository.objects.count() == scan.fetched_count
+    assert all(stars >= 10 for stars in Repository.objects.values_list("stars", flat=True))

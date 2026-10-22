@@ -21,7 +21,8 @@ uv run poe dev                           # mở http://127.0.0.1:8765
 | `uv run poe fmt` | Tự sửa định dạng code |
 | `uv run poe test` | Chạy test |
 | `uv run poe test-live` | Test gọi GitHub thật (cần `GITHUB_TOKEN`) |
-| `uv run python manage.py scan "<truy vấn>"` | Quét GitHub từ dòng lệnh |
+| `uv run python manage.py scan "<truy vấn>" --budget 300` | Quét sâu từ dòng lệnh (xem `--help`) |
+| `uv run python manage.py scan --resume <số> --extra-budget 300` | Tiếp tục một lần quét đang dở |
 
 ## Tài liệu
 

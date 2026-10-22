@@ -3,35 +3,83 @@
 
 {% block title %}Lần quét #{{ scan.pk }}{% endblock %}
 
+{% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+
 {% block content %}
 <p><a href="{% url 'discovery:home' %}">← Quét truy vấn khác</a></p>
 
 <section class="card">
   <h1>Lần quét #{{ scan.pk }} <span class="status status-{{ scan.status }}">{{ scan.get_status_display }}</span></h1>
-  <p>Truy vấn: <code>{{ scan.query }}</code></p>
+  <p>
+    Truy vấn: <code>{{ scan.query }}</code> · star ≥ {{ scan.min_stars }}{% if scan.max_stars is not None %}, ≤ {{ scan.max_stars }}{% endif %}
+    · tạo {% if scan.created_from %}từ {{ scan.created_from|date:"d/m/Y" }}{% else %}từ 2008{% endif %}
+    {% if scan.created_to %}đến {{ scan.created_to|date:"d/m/Y" }}{% else %}đến nay{% endif %}
+  </p>
 
+  <ul class="stats">
+    <li><strong>{{ scan.fetched_count|intcomma }}</strong> / {{ scan.total_count|default_if_none:"?"|intcomma }} repo (đã lấy / GitHub báo)</li>
+    <li>Độ phủ <strong>{% if scan.coverage_percent is not None %}{{ scan.coverage_percent|floatformat:"-1" }}%{% else %}—{% endif %}</strong></li>
+    <li><strong>{{ scan.created_count|intcomma }}</strong> mới vào kho, {{ scan.updated_count|intcomma }} đã có</li>
+    <li>Lượt gọi <strong>{{ scan.api_calls_used }}/{{ scan.budget }}</strong></li>
+    <li>Lát đã xử lý <strong>{{ progress.finished }}/{{ progress.total }}</strong></li>
+  </ul>
+
+  {% if scan.is_live and scan.waiting_until %}
+    <p class="notice">Đang chờ GitHub tới {{ scan.waiting_until|date:"H:i:s" }} (hồi lượt gọi hoặc thử lại sau lỗi tạm thời).</p>
+  {% endif %}
   {% if scan.status == "failed" %}
     <p class="error" role="alert">{{ scan.error_message }}</p>
-  {% else %}
-    <ul class="stats">
-      <li><strong>{{ scan.fetched_count|intcomma }}</strong> repo lấy về</li>
-      <li><strong>{{ scan.created_count|intcomma }}</strong> mới vào kho</li>
-      <li><strong>{{ scan.updated_count|intcomma }}</strong> đã có, được cập nhật số liệu</li>
-    </ul>
-    {% if scan.has_more_on_github %}
-      {# DEBT(D-004): cảnh báo vì bộ khung chỉ lấy trang đầu của kết quả GitHub. #}
-      <p class="notice">
-        GitHub báo có <strong>{{ scan.total_count|intcomma }}</strong> kết quả cho truy vấn này;
-        hiện mới lấy {{ scan.fetched_count|intcomma }} repo nhiều star nhất (trang đầu).
-        Quét sâu để lấy đủ sẽ có ở tính năng sau.
-      </p>
-    {% endif %}
+  {% elif scan.stop_reason %}
+    <p class="notice">{{ scan.stop_reason }}</p>
+  {% endif %}
+
+  {% if scan.is_live %}
+    <form method="post" action="{% url 'discovery:scan_stop' scan.pk %}" class="inline-form">
+      {% csrf_token %}
+      <button type="submit" class="secondary">Dừng</button>
+      <span class="muted small">Trang tự cập nhật mỗi 3 giây.</span>
+    </form>
+  {% endif %}
+
+  {% if resume_form %}
+    <form method="post" action="{% url 'discovery:scan_resume' scan.pk %}" class="inline-form">
+      {% csrf_token %}
+      {% if resume_form.non_field_errors %}<p class="error" role="alert">{{ resume_form.non_field_errors|join:" " }}</p>{% endif %}
+      <label for="{{ resume_form.extra_budget.id_for_label }}">{{ resume_form.extra_budget.label }}</label>
+      {{ resume_form.extra_budget }}
+      <button type="submit">Tiếp tục</button>
+    </form>
   {% endif %}
 </section>
+
+{% if problems %}
+<section>
+  <h2>Chỗ còn sót</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Ngày tạo</th><th>Star</th><th>Tình trạng</th><th>Ghi chú</th></tr></thead>
+      <tbody>
+        {% for slice in problems %}
+          <tr>
+            <td>{{ slice.created_from|date:"d/m/Y" }} – {{ slice.created_to|date:"d/m/Y" }}</td>
+            <td>{{ slice.stars_min }} – {% if slice.stars_max is not None %}{{ slice.stars_max }}{% else %}∞{% endif %}</td>
+            <td>{{ slice.get_status_display }}</td>
+            <td class="small">{{ slice.error_message }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
 
 {% if results %}
 <section>
   <h2>Kết quả, sắp theo star</h2>
+  {% if scan.fetched_count > results_limit %}
+    {# DEBT(D-007): chỉ hiện 500 repo nhiều star nhất; xem đủ cần trang duyệt kho. #}
+    <p class="muted">Đang hiện {{ results_limit }} repo nhiều star nhất trên {{ scan.fetched_count|intcomma }} repo đã lấy.</p>
+  {% endif %}
   <div class="table-wrap">
     <table>
       <thead>

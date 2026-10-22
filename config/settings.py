@@ -123,9 +123,6 @@ GITHUB_TOKEN = _env_str("GITHUB_TOKEN")
 GITHUB_API_URL = "https://api.github.com"
 GITHUB_TIMEOUT_SECONDS = 20.0
 
-# Quét (features/discovery). 100 là số kết quả tối đa GitHub trả trong một trang.
-SCAN_PAGE_SIZE = 100
-
 
 # Log ra màn hình console; code dùng logging.getLogger(__name__), không dùng print().
 LOGGING = {

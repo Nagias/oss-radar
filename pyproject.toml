@@ -100,7 +100,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["config", "features", "integrations", "tests"]
+known-first-party = ["config", "core", "features", "integrations", "tests"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -111,6 +111,8 @@ ban-relative-imports = "all"
 "urllib.request".msg = "Dùng httpx trong integrations/ (CLAUDE.md mục 4)."
 "os.environ".msg = "Chỉ config/settings.py được đọc biến môi trường; nơi khác dùng django.conf.settings."
 "os.getenv".msg = "Chỉ config/settings.py được đọc biến môi trường; nơi khác dùng django.conf.settings."
+"threading".msg = "Việc nền chỉ chạy qua core.background.submit (QĐ-14)."
+"concurrent.futures".msg = "Việc nền chỉ chạy qua core.background.submit (QĐ-14)."
 
 [tool.ruff.lint.per-file-ignores]
 # Những file được phép đọc biến môi trường.
@@ -120,10 +122,12 @@ ban-relative-imports = "all"
 "manage.py" = ["TID251"]
 # Cửa ra ngoài duy nhất được dùng httpx.
 "integrations/**/*.py" = ["TID251"]
+# Nơi duy nhất được tạo luồng chạy nền.
+"core/background.py" = ["TID251"]
 # class Meta của Django dùng list (ordering, constraints) đúng như tài liệu Django → không ép đổi.
 "**/models.py" = ["RUF012"]
 # Test được dùng assert, dữ liệu giả có chữ "token", và httpx để dựng phản hồi giả.
-"**/tests/**/*.py" = ["S101", "S105", "S106", "TID251"]
+"**/tests/**/*.py" = ["S101", "S105", "S106", "S107", "TID251"]
 "conftest.py" = ["TID251"]
 
 [tool.ruff.format]
@@ -137,7 +141,7 @@ python_version = "3.13"
 strict = true
 warn_unreachable = true
 plugins = ["mypy_django_plugin.main"]
-files = ["config", "features", "integrations", "tests", "conftest.py", "manage.py"]
+files = ["config", "core", "features", "integrations", "tests", "conftest.py", "manage.py"]
 exclude = ['/migrations/']
 
 [tool.django-stubs]
@@ -153,7 +157,7 @@ venv = ".venv"
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
-testpaths = ["tests", "features", "integrations"]
+testpaths = ["tests", "core", "features", "integrations"]
 addopts = [
     "-ra",
     "--strict-markers",
@@ -168,7 +172,7 @@ markers = [
 filterwarnings = ["error"]
 
 [tool.coverage.run]
-source = ["config", "features", "integrations"]
+source = ["config", "core", "features", "integrations"]
 omit = ["*/migrations/*", "*/tests/*", "config/asgi.py", "config/wsgi.py"]
 branch = true
 
