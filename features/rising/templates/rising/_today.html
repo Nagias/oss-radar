@@ -1,0 +1,37 @@
+{# Trạng thái lượt hôm nay + nút Chạy ngay / Dừng — dùng chung cho trang Rising star và trang Theo dõi. #}
+<div class="today">
+  <p class="today-line{% if status.run.status == 'failed' %} today-failed{% endif %}">{{ status.headline }}</p>
+
+  {% if run_error %}
+    <p class="error" role="alert">{{ run_error }}</p>
+  {% endif %}
+
+  {% if status.run.problems %}
+    <details class="problems">
+      <summary>Chỗ còn sót ({{ status.run.problems|length }})</summary>
+      <ul>
+        {% for problem in status.run.problems %}<li>{{ problem }}</li>{% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+
+  {% if status.can_run_now %}
+    <form method="post" action="{% url 'rising:run_now' %}" class="inline-form">
+      {% csrf_token %}
+      <button type="submit"{% if busy_label %} disabled{% endif %}>Chạy ngay</button>
+      {% if busy_label %}
+        <span class="muted small">Tạm khoá: app đang chạy việc nền <strong>{{ busy_label }}</strong> — chờ xong rồi bấm Chạy ngay.</span>
+      {% elif status.run %}
+        <span class="muted small">Làm tiếp từ bước «{{ status.run.get_step_display }}».</span>
+      {% endif %}
+    </form>
+  {% endif %}
+
+  {% if status.can_stop %}
+    <form method="post" action="{% url 'rising:stop' status.run.pk %}" class="inline-form">
+      {% csrf_token %}
+      <button type="submit" class="secondary">Dừng</button>
+      <span class="muted small">Trang tự cập nhật mỗi 10 giây.</span>
+    </form>
+  {% endif %}
+</div>

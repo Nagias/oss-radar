@@ -11,6 +11,13 @@
   <header class="site-header">
     <div class="container header-row">
       <a class="brand" href="{% url 'discovery:home' %}">OSS Radar</a>
+      {% with ns=request.resolver_match.namespace page=request.resolver_match.url_name %}
+      <nav class="site-nav" aria-label="Các trang chính">
+        <a href="{% url 'discovery:home' %}"{% if ns == 'discovery' %} aria-current="page"{% endif %}>Quét</a>
+        <a href="{% url 'rising:report' %}"{% if ns == 'rising' and page != 'watch' and page != 'watch_edit' %} aria-current="page"{% endif %}>Rising star</a>
+        <a href="{% url 'rising:watch' %}"{% if page == 'watch' or page == 'watch_edit' %} aria-current="page"{% endif %}>Theo dõi</a>
+      </nav>
+      {% endwith %}
       <span class="tagline">Tìm đúng · tìm đủ · không trùng · không rác</span>
     </div>
   </header>

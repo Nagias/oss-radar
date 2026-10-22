@@ -1,0 +1,27 @@
+{# Form thêm / sửa một truy vấn theo dõi. Cần: form, action, submit_label. #}
+<form method="post" action="{{ action }}" class="watch-form" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <p class="error" role="alert">{{ form.non_field_errors|join:" " }}</p>
+  {% endif %}
+  <div class="field-grid compact">
+    {% for field in form %}
+      {% if field.name == "enabled" %}
+        <div class="field field-check">
+          {{ field }}
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        </div>
+      {% else %}
+        <div class="field{% if field.name == 'query' %} field-wide{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<p class="hint">{{ field.help_text }}</p>{% endif %}
+          {% if field.errors %}<p class="error" role="alert">{{ field.errors|join:" " }}</p>{% endif %}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <div class="inline-form">
+    <button type="submit">{{ submit_label }}</button>
+  </div>
+</form>

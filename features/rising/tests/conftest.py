@@ -3,16 +3,26 @@
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 import pytest
 import respx
 from django.utils import timezone
 
+from features.catalog.models import Repository
+from features.catalog.services import upsert_repositories
 from features.discovery.models import ScanRun
-from features.rising.models import DailyRun, WatchQuery
-from tests.fakes import FakeGitHubSearch, FakeStarHistory, FakeTime, make_search_items
+from features.rising.growth import last_complete_utc_day
+from features.rising.models import DailyRun, RisingCheck, WatchQuery
+from tests.factories import make_github_repo
+from tests.fakes import (
+    FakeGitHubSearch,
+    FakeStarHistory,
+    FakeTime,
+    make_search_items,
+    make_star_history,
+)
 
 SEARCH_URL = "https://api.github.com/search/repositories"
 # Client gửi kèm `?per_page=…` → khớp cả phần truy vấn phía sau đường dẫn.
@@ -22,6 +32,11 @@ HISTORY_URL_PATTERN = r"^https://api\.github\.com/repositories/\d+/stargazers/hi
 # theo từng truy vấn.
 WATCHED = ("topic:ai-agent", "topic:comfyui", "topic:seo")
 FROM, TO = date(2025, 1, 1), date(2026, 6, 30)
+OLD = date(2025, 1, 1)  # ngày tạo của repo "cũ": quá 30 ngày tuổi, không bị coi là repo mới
+
+# Báo cáo mẫu: lượt ngày DAY, cửa sổ tăng star kết thúc ở ngày UTC hôm trước.
+DAY = date(2026, 10, 22)
+WINDOW_END = date(2026, 10, 21)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,3 +124,100 @@ def make_heartbeats_stale() -> None:
     long_ago = timezone.now() - timedelta(minutes=10)
     DailyRun.objects.filter(heartbeat_at__gt=long_ago).update(heartbeat_at=long_ago)
     ScanRun.objects.filter(heartbeat_at__gt=long_ago).update(heartbeat_at=long_ago)
+
+
+def make_run(
+    day: date = DAY,
+    *,
+    status: str = DailyRun.Status.SUCCEEDED,
+    step: int = DailyRun.Step.REPORT,
+) -> DailyRun:
+    """Một lượt hằng ngày dựng sẵn ở trạng thái/bước cho trước (không chạy gì thật)."""
+    return DailyRun.objects.create(day=day, status=status, step=step, window_end=WINDOW_END)
+
+
+def make_repo(
+    github_id: int, *, created: date = date(2025, 1, 1), description: str = "Một repo giả lập"
+) -> Repository:
+    [outcome] = upsert_repositories(
+        [
+            make_github_repo(
+                github_id=github_id,
+                full_name=f"gia-lap/repo-{github_id}",
+                html_url=f"https://github.com/gia-lap/repo-{github_id}",
+                description=description,
+                created_at=datetime.combine(created, time(12), tzinfo=UTC),
+            )
+        ],
+        seen_at=timezone.now(),
+    )
+    return outcome.repository
+
+
+def make_check(
+    run: DailyRun,
+    github_id: int,
+    *,
+    stars: int,
+    gain_7d: int,
+    source: str = RisingCheck.Source.HISTORY,
+    is_rising: bool = False,
+    flags: list[str] | None = None,
+) -> RisingCheck:
+    """Một dòng xét của lượt; dòng đã xác minh có đủ +1/+7/+30 ngày và chuỗi 30 ngày."""
+    verified = source == RisingCheck.Source.HISTORY
+    repository = Repository.objects.filter(github_id=github_id).first() or make_repo(github_id)
+    return RisingCheck.objects.create(
+        daily_run=run,
+        repository=repository,
+        stars=stars,
+        source=source,
+        gain_1d=gain_7d // 7 if verified else None,
+        gain_7d=gain_7d,
+        gain_30d=gain_7d * 3 if verified else None,
+        series=[gain_7d // 7] * 30 if verified else [],
+        window_end=WINDOW_END if verified else None,
+        baseline_day=DAY - timedelta(days=3) if source == RisingCheck.Source.SNAPSHOT else None,
+        is_rising=is_rising,
+        flags=flags or [],
+    )
+
+
+def days_ago(days: int) -> date:
+    return timezone.localdate() - timedelta(days=days)
+
+
+def item(
+    repo_id: int,
+    *,
+    stars: int,
+    created: date = OLD,
+    fork: bool = False,
+    archived: bool = False,
+    description: str | None = "Một repo giả lập",
+) -> dict[str, Any]:
+    """Một repo trong kết quả Search giả; `created` là ngày tạo (giờ Việt Nam trùng ngày UTC)."""
+    [entry] = make_search_items(
+        1, start=created, end=created, stars=lambda _: stars, id_start=repo_id
+    )
+    entry.update(fork=fork, archived=archived, description=description)
+    return entry
+
+
+def snapshot(repo_id: int, *, stars: int, days_back: int = 3) -> None:
+    """Ảnh chụp star `days_back` ngày trước (mốc để lọc thô so với hôm nay)."""
+    upsert_repositories(
+        [make_github_repo(github_id=repo_id, full_name=f"gia-lap/repo-{repo_id}", stars=stars)],
+        seen_at=timezone.now() - timedelta(days=days_back),
+    )
+
+
+def window_end() -> date:
+    return last_complete_utc_day(timezone.now())
+
+
+def history(per_day: dict[int, int]) -> list[dict[str, Any]]:
+    """Lịch sử star giả: `per_day` là {số ngày trước ngày UTC cuối của cửa sổ: star mới}."""
+    end = window_end()
+    daily = {end - timedelta(days=back): stars for back, stars in per_day.items()}
+    return make_star_history(daily, today=end + timedelta(days=1))

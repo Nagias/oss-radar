@@ -1,75 +1,19 @@
 """Đọc báo cáo rising star từ dữ liệu đã lưu: lọc theo ngưỡng, "mới vào", lý do, chưa xác minh."""
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import timedelta
 
 import pytest
-from django.utils import timezone
 
-from features.catalog.models import Repository
-from features.catalog.services import upsert_repositories
 from features.rising import services
 from features.rising.growth import FLAG_LABELS, Flag, sparkline_points
 from features.rising.models import DailyRun, RisingCheck
-from tests.factories import make_github_repo
+from features.rising.tests.conftest import DAY, make_check, make_repo, make_run
 
 pytestmark = pytest.mark.django_db
 
 Status = DailyRun.Status
 Step = DailyRun.Step
 Source = RisingCheck.Source
-
-DAY = date(2026, 10, 22)
-WINDOW_END = date(2026, 10, 21)
-
-
-def make_run(
-    day: date = DAY, *, status: str = Status.SUCCEEDED, step: int = Step.REPORT
-) -> DailyRun:
-    return DailyRun.objects.create(day=day, status=status, step=step, window_end=WINDOW_END)
-
-
-def make_repo(
-    github_id: int, *, created: date = date(2025, 1, 1), description: str = "Một repo giả lập"
-) -> Repository:
-    [outcome] = upsert_repositories(
-        [
-            make_github_repo(
-                github_id=github_id,
-                full_name=f"gia-lap/repo-{github_id}",
-                description=description,
-                created_at=datetime.combine(created, time(12), tzinfo=UTC),
-            )
-        ],
-        seen_at=timezone.now(),
-    )
-    return outcome.repository
-
-
-def make_check(
-    run: DailyRun,
-    github_id: int,
-    *,
-    stars: int,
-    gain_7d: int,
-    source: str = Source.HISTORY,
-    is_rising: bool = False,
-    flags: list[str] | None = None,
-) -> RisingCheck:
-    repository = Repository.objects.filter(github_id=github_id).first() or make_repo(github_id)
-    return RisingCheck.objects.create(
-        daily_run=run,
-        repository=repository,
-        stars=stars,
-        source=source,
-        gain_1d=gain_7d // 7 if source == Source.HISTORY else None,
-        gain_7d=gain_7d,
-        gain_30d=gain_7d * 3 if source == Source.HISTORY else None,
-        series=[gain_7d // 7] * 30 if source == Source.HISTORY else [],
-        window_end=WINDOW_END if source == Source.HISTORY else None,
-        baseline_day=DAY - timedelta(days=3) if source == Source.SNAPSHOT else None,
-        is_rising=is_rising,
-        flags=flags or [],
-    )
 
 
 def test_daily_report_filters_by_thresholds_and_sorts_by_gain() -> None:
@@ -179,3 +123,15 @@ def test_latest_report_run_skips_runs_not_reported() -> None:
 def test_no_report_before_first_run() -> None:
     assert services.latest_report_run() is None
     assert services.report_days() == []
+
+
+def test_report_counts_every_verified_row_whatever_the_thresholds() -> None:
+    run = make_run()
+    make_check(run, 1, stars=340, gain_7d=120, is_rising=True)
+    make_check(run, 2, stars=200, gain_7d=10)  # đã xác minh nhưng chưa đạt ngưỡng
+    make_check(run, 3, stars=100, gain_7d=80, source=Source.SNAPSHOT)  # chưa xác minh
+
+    report = services.daily_report(run)
+
+    assert report.verified_count == 2
+    assert len(report.rising) == 1

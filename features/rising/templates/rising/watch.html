@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Theo dõi{% endblock %}
+
+{% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Danh sách theo dõi</h1>
+  <p class="muted">
+    Mỗi ngày app quét lại từng truy vấn đang bật bằng một lần quét sâu, rồi tìm repo dưới ngưỡng star mà đang tăng
+    nhanh. Truy vấn viết theo cú pháp tìm kiếm của GitHub, cùng luật với ô Quét.
+  </p>
+  {% include "rising/_today.html" %}
+</section>
+
+<section>
+  <h2>Ước lượng mỗi ngày</h2>
+  <div class="card">
+    {% if estimate.calls is None %}
+      <p>Ước lượng: chưa có lần chạy nào để dựa vào. Sau lượt đầu tiên, con số này sẽ theo lần chạy gần nhất.</p>
+    {% else %}
+      <p>
+        Theo lần chạy gần nhất (ngày {{ estimate.based_on_day|date:"d/m" }}):
+        <strong>{{ estimate.calls|intcomma }} lượt gọi</strong> GitHub, khoảng <strong>{{ estimate.minutes }} phút</strong>
+        mỗi ngày ({{ estimate.seconds_per_call }} giây mỗi lượt, {% if estimate.has_token %}có token{% else %}không token{% endif %}).
+      </p>
+    {% endif %}
+    {% if not estimate.has_token %}
+      <p class="notice">
+        Chưa có GITHUB_TOKEN trong .env: giãn nhịp chậm gấp khoảng 3 lần và mỗi ngày chỉ xác minh được
+        khoảng {{ verify_budget_anonymous }} repo. Nên điền token (loại chỉ đọc repo public).
+      </p>
+    {% endif %}
+  </div>
+</section>
+
+<section>
+  <h2>Truy vấn theo dõi ({{ rows|length }})</h2>
+  {% if rows %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="num">#</th><th>Mảng</th><th>Truy vấn</th><th>Star</th><th class="num">Mức quét</th>
+            <th>Trạng thái</th><th>Lần quét gần nhất</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="num">{{ row.watch.position }}</td>
+              <td>{{ row.watch.label }}</td>
+              <td><code>{{ row.watch.query }}</code></td>
+              <td class="nowrap">≥ {{ row.watch.min_stars|intcomma }}{% if row.watch.max_stars is not None %}, ≤ {{ row.watch.max_stars|intcomma }}{% endif %}</td>
+              <td class="num">{{ row.watch.budget|intcomma }} lượt</td>
+              <td>{% if row.watch.enabled %}<span class="badge badge-new">Bật</span>{% else %}<span class="badge badge-known">Tắt</span>{% endif %}</td>
+              <td class="small">
+                {% if row.last_scan %}
+                  <a href="{% url 'discovery:scan_detail' row.last_scan.pk %}">#{{ row.last_scan.pk }}</a>
+                  ngày {{ row.last_day|date:"d/m" }}:
+                  {{ row.last_scan.api_calls_used }} lượt gọi · {{ row.last_scan.fetched_count|intcomma }} repo
+                  <span class="status status-{{ row.last_scan.status }}">{{ row.last_scan.get_status_display }}</span>
+                {% else %}
+                  <span class="muted">Chưa quét lần nào</span>
+                {% endif %}
+              </td>
+              <td><a href="{% url 'rising:watch_edit' row.watch.pk %}">Sửa</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">Danh sách trống — thêm truy vấn ở form bên dưới.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Thêm truy vấn</h2>
+  {% url 'rising:watch' as add_url %}
+  {% include "rising/_watch_form.html" with action=add_url submit_label="Thêm vào danh sách" %}
+</section>
+
+<section>
+  <h2>Các lượt hằng ngày gần đây</h2>
+  {% if runs %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ngày</th><th>Trạng thái</th><th class="num">Lượt gọi Search</th>
+            <th class="num">Lượt gọi xác minh</th><th class="num">Rising star</th><th>Ghi chú</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for run in runs %}
+            <tr>
+              <td>{{ run.day|date:"d/m/Y" }}</td>
+              <td><span class="status status-{{ run.status }}">{{ run.get_status_display }}</span></td>
+              <td class="num">{{ run.search_calls_used|intcomma }}</td>
+              <td class="num">{{ run.verify_calls_used|intcomma }}</td>
+              <td class="num">{{ run.rising_count }}</td>
+              <td class="small">{{ run.error_message|default:run.stop_reason|linebreaksbr }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">Chưa có lượt nào.</p>
+  {% endif %}
+</section>
+{% endblock %}

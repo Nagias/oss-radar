@@ -13,19 +13,21 @@ from pytest_django.fixtures import Settings
 
 from features.catalog import services as catalog
 from features.catalog.models import Repository, StarSnapshot
-from features.catalog.services import upsert_repositories
 from features.discovery.models import ScanResult, ScanRun
 from features.rising import services
-from features.rising.growth import last_complete_utc_day
 from features.rising.models import DailyRun, RisingCheck, WatchQuery
 from features.rising.tests.conftest import (
     AppKilledError,
     FakeGitHub,
     UseFake,
+    days_ago,
+    history,
+    item,
     make_heartbeats_stale,
+    snapshot,
+    window_end,
 )
-from tests.factories import make_github_repo
-from tests.fakes import FakeTime, make_search_items, make_star_history
+from tests.fakes import FakeTime, make_search_items
 
 pytestmark = pytest.mark.django_db
 
@@ -33,7 +35,6 @@ Status = DailyRun.Status
 PauseKind = DailyRun.PauseKind
 Source = RisingCheck.Source
 
-OLD = date(2025, 1, 1)
 RISER, SLOW, OLD_NO_BASELINE, YOUNG, BIG, FORK, ARCHIVED = 101, 102, 103, 104, 105, 106, 107
 # Ba ứng viên dùng cho phần xác minh, ước lượng giảm dần: 140 (ảnh chụp), 70 và 60 (theo tuổi).
 FAST, MID, NEWBORN = 201, 202, 203
@@ -44,46 +45,6 @@ def run_daily_now() -> DailyRun:
     services.execute_daily_run(run.pk)
     run.refresh_from_db()
     return run
-
-
-def days_ago(days: int) -> date:
-    return timezone.localdate() - timedelta(days=days)
-
-
-def item(
-    repo_id: int,
-    *,
-    stars: int,
-    created: date = OLD,
-    fork: bool = False,
-    archived: bool = False,
-    description: str | None = "Một repo giả lập",
-) -> dict[str, Any]:
-    """Một repo trong kết quả Search giả; `created` là ngày tạo (giờ Việt Nam trùng ngày UTC)."""
-    [entry] = make_search_items(
-        1, start=created, end=created, stars=lambda _: stars, id_start=repo_id
-    )
-    entry.update(fork=fork, archived=archived, description=description)
-    return entry
-
-
-def snapshot(repo_id: int, *, stars: int, days_back: int = 3) -> None:
-    """Ảnh chụp star `days_back` ngày trước (mốc để lọc thô so với hôm nay)."""
-    upsert_repositories(
-        [make_github_repo(github_id=repo_id, full_name=f"gia-lap/repo-{repo_id}", stars=stars)],
-        seen_at=timezone.now() - timedelta(days=days_back),
-    )
-
-
-def window_end() -> date:
-    return last_complete_utc_day(timezone.now())
-
-
-def history(per_day: dict[int, int]) -> list[dict[str, Any]]:
-    """Lịch sử star giả: `per_day` là {số ngày trước ngày UTC cuối của cửa sổ: star mới}."""
-    end = window_end()
-    daily = {end - timedelta(days=back): stars for back, stars in per_day.items()}
-    return make_star_history(daily, today=end + timedelta(days=1))
 
 
 def check_of(github_id: int) -> RisingCheck:

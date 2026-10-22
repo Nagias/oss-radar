@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Rising star{% endblock %}
+
+{% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Rising star</h1>
+  <p class="muted">
+    Repo còn nhỏ (dưới {{ max_stars|intcomma }} star) mà đang tăng star nhanh (từ {{ min_gain|intcomma }} star trở lên
+    trong 7 ngày). Số tăng lấy từ lịch sử star chính thức của GitHub (ngày tính theo UTC); repo nào chưa
+    xác minh được thì nằm ở mục riêng bên dưới, ghi rõ là ước lượng.
+  </p>
+  {% include "rising/_today.html" %}
+</section>
+
+{% if missing_day %}
+  <p class="notice">Chưa có báo cáo cho ngày {{ missing_day|date:"d/m/Y" }}.</p>
+{% endif %}
+
+{% if report %}
+<section>
+  <h2>
+    Báo cáo ngày {{ report.run.day|date:"d/m/Y" }}
+    <span class="status status-{{ report.run.status }}">{{ report.run.get_status_display }}</span>
+  </h2>
+
+  <ul class="stats">
+    <li><strong>{{ report.scans|length }}</strong> lần quét lại danh sách theo dõi</li>
+    <li><strong>{{ report.run.new_repo_count|intcomma }}</strong> repo mới phát hiện</li>
+    <li>Ứng viên: <strong>{{ report.run.candidate_count|intcomma }}</strong> — đã xác minh <strong>{{ report.verified_count|intcomma }}</strong>, chưa xác minh <strong>{{ report.unverified|length|intcomma }}</strong></li>
+    <li><strong>{{ report.run.insufficient_count|intcomma }}</strong> chưa đủ dữ liệu</li>
+    <li><strong>{{ report.run.rising_count|intcomma }}</strong> rising star</li>
+  </ul>
+
+  {% if report.run.problems and report.run.pk != status.run.pk %}
+    <details class="problems">
+      <summary>Chỗ còn sót của lượt này ({{ report.run.problems|length }})</summary>
+      <ul>
+        {% for problem in report.run.problems %}<li>{{ problem }}</li>{% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+
+  {% if report.scans %}
+    <details class="problems">
+      <summary>Xem {{ report.scans|length }} lần quét của lượt này</summary>
+      <ul>
+        {% for link in report.scans %}
+          <li>
+            <a href="{% url 'discovery:scan_detail' link.scan_run_id %}">#{{ link.scan_run_id }}</a>
+            <code>{{ link.scan_run.query }}</code>
+            <span class="status status-{{ link.scan_run.status }}">{{ link.scan_run.get_status_display }}</span>
+            <span class="muted small">{{ link.scan_run.fetched_count|intcomma }} repo · {{ link.scan_run.api_calls_used }} lượt gọi</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if report or days or missing_day %}
+<section class="card">
+  <form method="get" action="{% url 'rising:report' %}" class="filter-form">
+    {% for field in form %}
+      {% if field.errors %}<p class="error" role="alert">{{ field.label }}: {{ field.errors|join:" " }}</p>{% endif %}
+    {% endfor %}
+    <div class="field-grid compact">
+      <div class="field">
+        <label for="{{ form.day.id_for_label }}">{{ form.day.label }}</label>
+        <select name="day" id="{{ form.day.id_for_label }}">
+          <option value=""{% if not selected_day %} selected{% endif %}>Mới nhất</option>
+          {% for day in days %}
+            <option value="{{ day|date:'Y-m-d' }}"{% if day == selected_day %} selected{% endif %}>{{ day|date:"d/m/Y" }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="{{ form.max_stars.id_for_label }}">{{ form.max_stars.label }}</label>
+        {{ form.max_stars }}
+      </div>
+      <div class="field">
+        <label for="{{ form.min_gain.id_for_label }}">{{ form.min_gain.label }}</label>
+        {{ form.min_gain }}
+      </div>
+    </div>
+    <div class="inline-form">
+      <button type="submit">Lọc</button>
+      <span class="muted small">
+        Lọc trên dữ liệu đã lưu, không gọi API. Hạ ngưỡng thấp hơn mặc định có thể thiếu những repo chưa từng được
+        xác minh: lọc thô chỉ xác minh repo ước lượng tăng từ {{ candidate_min }} star trong 7 ngày.
+      </span>
+    </div>
+  </form>
+</section>
+{% endif %}
+
+{% if report %}
+<section>
+  <h2>Bảng rising star ({{ report.rising|length }})</h2>
+  {% if report.rising %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="num">#</th><th>Repo</th><th>Ngôn ngữ</th><th class="num">Star</th>
+            <th class="num">+1 ngày</th><th class="num">+7 ngày</th><th class="num">+30 ngày</th>
+            <th class="num">Tăng 7 ngày</th><th class="num">Tuổi repo</th><th>30 ngày qua</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rising %}
+            <tr>
+              <td class="num">{{ forloop.counter }}</td>
+              <td>
+                <a href="{{ row.repository.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ row.repository.full_name }}</strong></a>
+                {% if row.is_new_entry %}<span class="badge badge-new">Mới vào danh sách</span>{% endif %}
+                {% for label in row.flag_labels %}<span class="badge badge-flag">{{ label }}</span>{% endfor %}
+                {% if row.repository.description %}<div class="desc">{{ row.repository.description|truncatechars:180 }}</div>{% endif %}
+                <div class="reason muted small">{{ row.reason }}</div>
+              </td>
+              <td>{{ row.repository.language|default:"—" }}</td>
+              <td class="num">{{ row.check.stars|intcomma }}</td>
+              <td class="num">{% if row.check.gain_1d is not None %}+{{ row.check.gain_1d|intcomma }}{% else %}—{% endif %}</td>
+              <td class="num"><strong>+{{ row.check.gain_7d|intcomma }}</strong></td>
+              <td class="num">{% if row.check.gain_30d is not None %}+{{ row.check.gain_30d|intcomma }}{% else %}—{% endif %}</td>
+              <td class="num">{% if row.growth_percent is not None %}+{{ row.growth_percent|floatformat:"0" }}%{% else %}—{% endif %}</td>
+              <td class="num">{{ row.age_days|intcomma }} ngày</td>
+              <td>
+                <svg class="spark" viewBox="0 0 120 24" width="120" height="24" role="img" aria-label="Star mới mỗi ngày trong 30 ngày qua">
+                  <polyline points="{{ row.sparkline }}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+                </svg>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">Không có repo nào đạt ngưỡng (dưới {{ max_stars|intcomma }} star, tăng từ {{ min_gain|intcomma }} star trong 7 ngày) ở báo cáo này.</p>
+  {% endif %}
+</section>
+
+{% if report.unverified %}
+<section>
+  <h2>Ứng viên chưa xác minh ({{ report.unverified|length }})</h2>
+  <p class="muted">
+    Hết ngân sách xác minh (hay gặp khi chưa có token) hoặc GitHub không trả được lịch sử star. Số tăng dưới đây chỉ là
+    ước lượng từ ảnh chụp star của app, chưa phải số chính thức — đừng coi là đã chắc chắn.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Repo</th><th class="num">Star</th><th class="num">Ước lượng +7 ngày</th><th>Nguồn</th></tr></thead>
+      <tbody>
+        {% for check in report.unverified %}
+          <tr>
+            <td>
+              <a href="{{ check.repository.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ check.repository.full_name }}</strong></a>
+              {% if check.repository.description %}<div class="desc">{{ check.repository.description|truncatechars:180 }}</div>{% endif %}
+            </td>
+            <td class="num">{{ check.stars|intcomma }}</td>
+            <td class="num">~+{{ check.gain_7d|intcomma }}</td>
+            <td class="small">
+              {% if check.source == "snapshot" %}
+                ước lượng từ ảnh chụp ngày {{ check.baseline_day|date:"d/m" }} và ngày {{ report.run.day|date:"d/m" }}, chưa xác minh
+              {% else %}
+                ước lượng theo tuổi repo (chưa có ảnh chụp cũ để so), chưa xác minh
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if report.run.insufficient_count %}
+<section>
+  <h2>Chưa đủ dữ liệu</h2>
+  <p class="muted">
+    {{ report.run.insufficient_count|intcomma }} repo mới vào tầm theo dõi ngày {{ report.run.day|date:"d/m" }}, chưa có ảnh chụp cũ
+    để so — sẽ được xét từ các lần quét sau.
+  </p>
+</section>
+{% endif %}
+
+{% elif not missing_day %}
+<section class="card">
+  <h2>Chưa có báo cáo nào</h2>
+  <p>
+    Lượt quét hằng ngày tự chạy sau 7:00 sáng khi app đang mở. Muốn có báo cáo đầu tiên ngay, bấm Chạy ngay ở trên
+    (khoảng 30 phút nếu có token, khoảng 1 giờ nếu không có).
+  </p>
+</section>
+{% endif %}
+{% endblock %}
