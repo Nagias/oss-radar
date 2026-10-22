@@ -76,6 +76,22 @@ def test_future_end_date_rejected() -> None:
     assert "tương lai" in form.errors["created_to"][0]
 
 
+def test_future_start_date_rejected_even_without_end_date() -> None:
+    tomorrow = timezone.localdate() + timedelta(days=1)
+
+    form = make_form(created_from=tomorrow.isoformat())
+
+    assert not form.is_valid()
+    assert "tương lai" in form.errors["created_from"][0]
+
+
+def test_end_date_before_2008_rejected_even_without_start_date() -> None:
+    form = make_form(created_to="2007-12-31")
+
+    assert not form.is_valid()
+    assert "2008" in form.errors["created_to"][0]
+
+
 def test_date_before_2008_rejected() -> None:
     form = make_form(created_from="2007-12-31")
 

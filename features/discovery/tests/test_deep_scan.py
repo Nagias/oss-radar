@@ -259,3 +259,78 @@ def test_retries_count_against_budget(use_fake: UseFake) -> None:
 @pytest.fixture
 def use_fake(use_fake_github: UseFake) -> UseFake:
     return use_fake_github
+
+
+def test_runner_stops_when_scan_is_paused_from_elsewhere(use_fake: UseFake) -> None:
+    fake = use_fake(many_repos())
+    scan = services.start_scan(
+        services.ScanRequest("topic:ai-agent", 0, None, FROM, TO, budget=1000)
+    )
+
+    def pause_from_elsewhere(query: str) -> None:
+        if len(fake.queries) == 2:
+            ScanRun.objects.filter(pk=scan.pk).update(
+                status=ScanRun.Status.PAUSED, stop_reason="bị gián đoạn (giả lập)"
+            )
+
+    fake.on_query = pause_from_elsewhere
+
+    services.execute_scan(scan.pk)
+
+    scan.refresh_from_db()
+    assert scan.status == ScanRun.Status.PAUSED
+    assert scan.stop_reason == "bị gián đoạn (giả lập)"
+    assert len(fake.queries) <= 3
+
+
+def test_stale_runner_cannot_overwrite_a_resumed_scan(use_fake: UseFake) -> None:
+    fake = use_fake(many_repos())
+    scan = services.start_scan(
+        services.ScanRequest("topic:ai-agent", 0, None, FROM, TO, budget=1000)
+    )
+
+    def paused_then_resumed_elsewhere(query: str) -> None:
+        if len(fake.queries) == 2:
+            ScanRun.objects.filter(pk=scan.pk).update(status=ScanRun.Status.PAUSED)
+            services.resume_scan(ScanRun.objects.get(pk=scan.pk), extra_budget=50)
+
+    fake.on_query = paused_then_resumed_elsewhere
+
+    services.execute_scan(scan.pk)  # luồng cũ chạy tiếp như "xác sống"
+
+    scan.refresh_from_db()
+    assert scan.status == ScanRun.Status.RUNNING  # lần Tiếp tục vẫn nguyên, chưa bị ghi đè
+    assert scan.budget == 1050
+
+
+def test_ctrl_c_pauses_scan_instead_of_leaving_it_running(use_fake: UseFake) -> None:
+    fake = use_fake(many_repos())
+    scan = services.start_scan(
+        services.ScanRequest("topic:ai-agent", 0, None, FROM, TO, budget=1000)
+    )
+
+    def user_presses_ctrl_c(query: str) -> None:
+        if len(fake.queries) == 2:
+            raise KeyboardInterrupt
+
+    fake.on_query = user_presses_ctrl_c
+
+    with pytest.raises(KeyboardInterrupt):
+        services.execute_scan(scan.pk)
+
+    scan.refresh_from_db()
+    assert scan.status == ScanRun.Status.PAUSED
+    assert "Tiếp tục" in scan.stop_reason
+
+
+def test_progress_is_logged_for_every_slice(
+    use_fake: UseFake, caplog: pytest.LogCaptureFixture
+) -> None:
+    use_fake(many_repos())
+
+    with caplog.at_level("INFO", logger="features.discovery.services"):
+        scan = deep()
+
+    progress = [r.getMessage() for r in caplog.records if "lát" in r.getMessage()]
+    assert len(progress) == scan.slices.count()
+    assert all(f"Lần quét #{scan.pk}" in line for line in progress)

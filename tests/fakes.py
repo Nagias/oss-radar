@@ -80,6 +80,8 @@ class FakeGitHubSearch:
         self.queries: list[str] = []
         self.fail_when: Callable[[str], int | None] | None = None
         self.incomplete_when: Callable[[str], bool] | None = None
+        # Gọi mỗi khi nhận truy vấn — để test giả lập việc xảy ra giữa chừng một lần quét.
+        self.on_query: Callable[[str], None] | None = None
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         params = request.url.params
@@ -87,6 +89,8 @@ class FakeGitHubSearch:
         page = int(params.get("page", "1"))
         per_page = int(params.get("per_page", "30"))
         self.queries.append(query)
+        if self.on_query is not None:
+            self.on_query(query)
 
         if self.fail_when is not None and (status := self.fail_when(query)) is not None:
             return httpx.Response(status, json={"message": "lỗi giả lập"})

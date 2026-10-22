@@ -63,12 +63,16 @@ class ScanForm(forms.Form):
         value: date | None = self.cleaned_data["created_from"]
         if value is not None and value < EARLIEST_DATE:
             raise forms.ValidationError("GitHub ra đời năm 2008 — chọn ngày từ 2008-01-01 trở đi.")
+        if value is not None and value > timezone.localdate():
+            raise forms.ValidationError("Ngày 'từ' không được ở tương lai.")
         return value
 
     def clean_created_to(self) -> date | None:
         value: date | None = self.cleaned_data["created_to"]
         if value is not None and value > timezone.localdate():
             raise forms.ValidationError("Ngày 'đến' không được ở tương lai.")
+        if value is not None and value < EARLIEST_DATE:
+            raise forms.ValidationError("GitHub ra đời năm 2008 — ngày 'đến' phải từ 2008-01-01.")
         return value
 
     def clean(self) -> dict[str, Any]:

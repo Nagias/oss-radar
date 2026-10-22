@@ -88,6 +88,8 @@ def test_pages_needed(total: int, pages: int) -> None:
         ("topic:x Stars:>5", "stars:"),
         ("created:>2024-01-01 topic:x", "created:"),
         ("topic:x SORT:updated", "sort:"),
+        ("topic:x -stars:>5", "stars:"),
+        ("-Created:2020-01-01..2020-02-01 topic:x", "created:"),
         ("topic:github-stars", None),
         ("language:python ai agent", None),
     ],

@@ -15,7 +15,8 @@ PER_PAGE = 100  # GitHub trả tối đa 100 kết quả mỗi trang.
 MAX_RESULTS_PER_QUERY = 1000  # GitHub chỉ cho xem 1.000 kết quả đầu của một truy vấn.
 EARLIEST_DATE = date(2008, 1, 1)  # GitHub ra đời năm 2008: không có repo nào tạo trước đó.
 
-_FORBIDDEN = re.compile(r"(?<![\w-])(stars|created|sort):", re.IGNORECASE)
+# Đứng đầu truy vấn hoặc sau khoảng trắng/ngoặc, có thể kèm dấu phủ định "-" (vd `-stars:>5`).
+_FORBIDDEN = re.compile(r"(?:^|(?<=[\s(]))-?(stars|created|sort):", re.IGNORECASE)
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,7 +8,7 @@ import pytest
 from respx.models import AllMockedAssertionError
 
 ROOT = Path(__file__).resolve().parents[1]
-CODE_DIRS = ("config", "features", "integrations", "templates", "static", "tests")
+CODE_DIRS = ("config", "core", "features", "integrations", "templates", "static", "tests")
 CODE_SUFFIXES = {".py", ".html", ".css", ".js", ".txt"}
 DEBT_MARKER = re.compile(r"DEBT\((D-\d{3})\)")
 DEBT_ROW = re.compile(r"^\|\s*(D-\d{3})\s*\|[^|]*\|\s*([^|]+?)\s*\|", re.MULTILINE)

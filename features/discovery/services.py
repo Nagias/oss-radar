@@ -5,6 +5,7 @@ View và lệnh dòng lệnh chỉ gọi các hàm ở đây; không chứa logi
 
 import logging
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -44,6 +45,7 @@ MAX_CONSECUTIVE_FAILED_SLICES = 3
 REASON_BUDGET = "Hết ngân sách lượt gọi — bấm Tiếp tục để quét nốt phần còn lại."
 REASON_STOPPED = "Bạn đã bấm Dừng — bấm Tiếp tục để quét tiếp."
 REASON_INTERRUPTED = "Bị gián đoạn (app tắt hoặc khởi động lại giữa chừng) — bấm Tiếp tục."
+REASON_CTRL_C = "Lệnh quét bị ngắt (Ctrl+C) — bấm Tiếp tục để quét tiếp."
 REASON_WAIT_TOO_LONG = "GitHub báo hết lượt gọi và bắt chờ quá lâu — bấm Tiếp tục sau ít phút."
 REASON_CONNECTION = (
     "Mất kết nối GitHub liên tục ({count} lát lỗi liền nhau) — kiểm tra mạng rồi bấm Tiếp tục."
@@ -89,6 +91,10 @@ class ScanAlreadyRunningError(Exception):
 
 class StopRequestedError(Exception):
     """Người dùng đã bấm Dừng."""
+
+
+class ScanSupersededError(Exception):
+    """Luồng này không còn giữ lần quét (bị coi là gián đoạn, hoặc đã có lượt Tiếp tục khác)."""
 
 
 # --- Bắt đầu, dừng, tiếp tục -----------------------------------------------------------------
@@ -151,6 +157,7 @@ def resume_scan(scan: ScanRun, *, extra_budget: int) -> ScanRun:
         scan.waiting_until = None
         scan.stop_requested = False
         scan.stop_reason = ""
+        scan.runner_token = ""  # nhả mã: luồng cũ (nếu còn sống) thấy mất quyền và tự rút lui
         scan.save()
     return scan
 
@@ -219,17 +226,23 @@ def problem_slices(scan: ScanRun) -> QuerySet[ScanSlice]:
 
 
 class HeartbeatSleeper:
-    """Hàm ngủ cho client GitHub: ngủ từng khúc, ghi nhịp sống sau mỗi khúc, thấy Dừng thì dừng."""
+    """Hàm ngủ cho client GitHub: ngủ từng khúc, ghi nhịp sống sau mỗi khúc, thấy Dừng thì dừng.
 
-    def __init__(self, scan_id: int, *, chunk: float = HEARTBEAT_CHUNK_SECONDS) -> None:
+    `token` là mã chủ quyền của lượt chạy: mất mã (lần quét bị coi là gián đoạn, hoặc đã có lượt
+    Tiếp tục khác) thì dừng ngay và không ghi gì nữa.
+    """
+
+    def __init__(
+        self, scan_id: int, *, token: str = "", chunk: float = HEARTBEAT_CHUNK_SECONDS
+    ) -> None:
         self._scan_id = scan_id
+        self._token = token
         self._chunk = chunk
 
     def __call__(self, seconds: float) -> None:
         show_wait = seconds > SHOW_WAIT_AFTER_SECONDS
         if show_wait:
-            until = timezone.now() + timedelta(seconds=seconds)
-            ScanRun.objects.filter(pk=self._scan_id).update(waiting_until=until)
+            self._owned().update(waiting_until=timezone.now() + timedelta(seconds=seconds))
         try:
             remaining = seconds
             while remaining > 0:
@@ -239,26 +252,51 @@ class HeartbeatSleeper:
                 self.beat()
         finally:
             if show_wait:
-                ScanRun.objects.filter(pk=self._scan_id).update(waiting_until=None)
+                self._owned().update(waiting_until=None)
 
     def beat(self) -> None:
-        ScanRun.objects.filter(pk=self._scan_id).update(heartbeat_at=timezone.now())
-        if ScanRun.objects.filter(pk=self._scan_id, stop_requested=True).exists():
+        row = (
+            ScanRun.objects.filter(pk=self._scan_id)
+            .values("status", "runner_token", "stop_requested")
+            .first()
+        )
+        if row is None or row["status"] != ScanRun.Status.RUNNING:
+            raise ScanSupersededError
+        if row["runner_token"] != self._token:
+            raise ScanSupersededError
+        if row["stop_requested"]:
             raise StopRequestedError
+        self._owned().update(heartbeat_at=timezone.now())
+
+    def _owned(self) -> QuerySet[ScanRun]:
+        return ScanRun.objects.filter(pk=self._scan_id, runner_token=self._token)
 
 
 def execute_scan(scan_id: int) -> None:
     """Chạy lần quét tới khi xong, hết ngân sách, bị dừng hoặc lỗi. Gọi từ luồng nền hoặc lệnh."""
-    scan = ScanRun.objects.get(pk=scan_id)
-    if scan.status != ScanRun.Status.RUNNING:
-        logger.info("Bỏ qua lần quét #%s vì đang ở trạng thái %s", scan.pk, scan.status)
+    token = uuid.uuid4().hex
+    claimed = ScanRun.objects.filter(
+        pk=scan_id, status=ScanRun.Status.RUNNING, runner_token=""
+    ).update(runner_token=token, heartbeat_at=timezone.now())
+    if not claimed:
+        logger.info(
+            "Bỏ qua lần quét #%s: không ở trạng thái chạy hoặc đã có lượt khác giữ", scan_id
+        )
         return
-    sleeper = HeartbeatSleeper(scan.pk)
+    scan = ScanRun.objects.get(pk=scan_id)
+    sleeper = HeartbeatSleeper(scan.pk, token=token)
     budget = CallBudget(max(0, scan.budget - scan.api_calls_used))
-    runner = _ScanRunner(scan, budget, calls_before=scan.api_calls_used, sleeper=sleeper)
+    runner = _ScanRunner(
+        scan, budget, token=token, calls_before=scan.api_calls_used, sleeper=sleeper
+    )
     try:
         with get_github_client(sleep=sleeper, budget=budget) as github:
             runner.run(github)
+    except ScanSupersededError:
+        logger.info("Lần quét #%s: lượt chạy cũ rút lui, không ghi gì thêm", scan.pk)
+    except KeyboardInterrupt:
+        runner.finish(ScanRun.Status.PAUSED, reason=REASON_CTRL_C)
+        raise
     except Exception:
         logger.exception("Lần quét #%s gặp lỗi không mong đợi", scan.pk)
         runner.finish(ScanRun.Status.FAILED, error=_UNEXPECTED_REASON)
@@ -267,10 +305,17 @@ def execute_scan(scan_id: int) -> None:
 
 class _ScanRunner:
     def __init__(
-        self, scan: ScanRun, budget: CallBudget, *, calls_before: int, sleeper: HeartbeatSleeper
+        self,
+        scan: ScanRun,
+        budget: CallBudget,
+        *,
+        token: str,
+        calls_before: int,
+        sleeper: HeartbeatSleeper,
     ) -> None:
         self.scan = scan
         self.budget = budget
+        self.token = token
         self.calls_before = calls_before
         self.sleeper = sleeper
 
@@ -312,13 +357,14 @@ class _ScanRunner:
         slice_.total_count = first.total_count
         if slice_.stack_order == 1:
             self.scan.total_count = first.total_count
-            self.scan.save(update_fields=["total_count"])
+            self._update(total_count=first.total_count)
 
         if first.total_count > MAX_RESULTS_PER_QUERY:
             top_stars = first.items[0].stars if first.items else slice_.stars_min
             halves = split(slice_.range, top_stars=top_stars)
             if halves is not None:
                 self._replace_with_children(slice_, *halves)
+                self._log_slice(slice_, "quá 1.000 → chia đôi")
                 return
 
         complete = self._fetch_remaining_pages(github, slice_, query, first)
@@ -337,6 +383,27 @@ class _ScanRunner:
             slice_.status = ScanSlice.Status.INCOMPLETE
             slice_.error_message = "GitHub trả thiếu so với số nó báo, kể cả khi làm lại."
         slice_.save()
+        retrying = slice_.status == ScanSlice.Status.PENDING
+        self._log_slice(slice_, "chưa đủ → làm lại" if retrying else slice_.get_status_display())
+
+    def _log_slice(self, slice_: ScanSlice, outcome: str) -> None:
+        """Một dòng tiến độ cho mỗi lát — hiện ở màn hình lệnh `scan` và log của server."""
+        stars_to = "∞" if slice_.stars_max is None else slice_.stars_max
+        logger.info(
+            "Lần quét #%s: lát %s..%s, star %s..%s — %s (GitHub báo %s, lấy %s); "
+            "tổng đã lấy %s, lượt gọi %s/%s",
+            self.scan.pk,
+            slice_.created_from,
+            slice_.created_to,
+            slice_.stars_min,
+            stars_to,
+            outcome,
+            slice_.total_count,
+            slice_.fetched_count,
+            self.scan.fetched_count,
+            self.calls_before + self.budget.used,
+            self.scan.budget,
+        )
 
     def _fetch_remaining_pages(
         self, github: GitHubClient, slice_: ScanSlice, query: str, first: RepoSearchPage
@@ -412,25 +479,34 @@ class _ScanRunner:
 
     def finish(self, status: ScanRun.Status, *, reason: str = "", error: str = "") -> None:
         self._save_calls()
-        self.scan.status = status
-        self.scan.stop_reason = reason
-        self.scan.error_message = error
-        self.scan.finished_at = timezone.now()
-        self.scan.waiting_until = None
-        self.scan.stop_requested = False
-        self.scan.save()
+        self._update(
+            status=status,
+            stop_reason=reason,
+            error_message=error,
+            finished_at=timezone.now(),
+            waiting_until=None,
+            stop_requested=False,
+            runner_token="",
+        )
 
     def _save_calls(self) -> None:
-        self.scan.api_calls_used = self.calls_before + self.budget.used
-        self.scan.heartbeat_at = timezone.now()
-        self.scan.save(update_fields=["api_calls_used", "heartbeat_at"])
+        self._update(
+            api_calls_used=self.calls_before + self.budget.used, heartbeat_at=timezone.now()
+        )
 
     def _save_counts(self) -> None:
         results = self.scan.results
         self.scan.fetched_count = results.count()
-        self.scan.created_count = results.filter(is_new=True).count()
-        self.scan.updated_count = self.scan.fetched_count - self.scan.created_count
-        self.scan.save(update_fields=["fetched_count", "created_count", "updated_count"])
+        created = results.filter(is_new=True).count()
+        self._update(
+            fetched_count=self.scan.fetched_count,
+            created_count=created,
+            updated_count=self.scan.fetched_count - created,
+        )
+
+    def _update(self, **fields: object) -> None:
+        """Mọi lần ghi lần quét đều kèm điều kiện "còn giữ mã" — luồng cũ không ghi đè được."""
+        ScanRun.objects.filter(pk=self.scan.pk, runner_token=self.token).update(**fields)
 
 
 def _reason_for(exc: GitHubError) -> str:

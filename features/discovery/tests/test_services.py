@@ -222,6 +222,8 @@ def test_coverage_percent() -> None:
     assert scan.coverage_percent == 100.0
     scan.total_count, scan.fetched_count = 3, 1
     assert scan.coverage_percent == 33.3
+    scan.total_count, scan.fetched_count = 4618, 4616  # số thật của lần quét ai-agent
+    assert scan.coverage_percent == 99.9
 
 
 def test_scan_slice_and_result_have_readable_names(github_search: respx.Route) -> None:

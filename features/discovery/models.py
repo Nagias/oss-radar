@@ -1,3 +1,4 @@
+import math
 from datetime import timedelta
 
 from django.db import models
@@ -36,6 +37,9 @@ class ScanRun(models.Model):
     heartbeat_at = models.DateTimeField("Nhịp sống gần nhất", null=True, blank=True)
     waiting_until = models.DateTimeField("Đang chờ GitHub tới", null=True, blank=True)
     stop_requested = models.BooleanField("Người dùng bấm Dừng", default=False)
+    runner_token = models.CharField(
+        "Mã lượt chạy đang giữ lần quét", max_length=32, blank=True, default=""
+    )
     stop_reason = models.TextField("Lý do dừng hoặc còn sót", blank=True, default="")
     total_count = models.PositiveIntegerField("Tổng GitHub báo", null=True, blank=True)
     fetched_count = models.PositiveIntegerField("Đã lấy về", default=0)
@@ -69,7 +73,8 @@ class ScanRun(models.Model):
             return None
         if self.total_count == 0:
             return 100.0
-        return min(100.0, round(self.fetched_count * 100 / self.total_count, 1))
+        # Làm tròn XUỐNG: thiếu dù 1 repo cũng không được hiện "100%".
+        return min(100.0, math.floor(self.fetched_count * 1000 / self.total_count) / 10)
 
 
 class ScanSlice(models.Model):
