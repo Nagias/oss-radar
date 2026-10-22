@@ -9,6 +9,7 @@ from typing import Any
 from django.contrib.staticfiles.management.commands.runserver import (
     Command as StaticfilesRunserver,
 )
+from django.core.handlers.wsgi import WSGIHandler
 
 from core import scheduler
 
@@ -16,9 +17,11 @@ from core import scheduler
 class Command(StaticfilesRunserver):
     help = "Chạy web để dùng trên máy (máy chủ phát triển), kèm bộ nhịp chạy việc định kỳ."
 
-    def inner_run(self, *args: Any, **options: Any) -> None:
-        # Django chỉ gọi inner_run ở tiến trình phục vụ web: tiến trình con của bộ tự khởi động
-        # lại, hoặc tiến trình duy nhất khi --noreload. Tiến trình theo dõi file không gọi tới đây,
-        # nên không có hai bộ nhịp cùng đẩy việc.
+    def get_handler(self, *args: Any, **options: Any) -> WSGIHandler:
+        # Django chỉ gọi get_handler trong inner_run, tức ở tiến trình phục vụ web (tiến trình con
+        # của bộ tự khởi động lại, hoặc tiến trình duy nhất khi --noreload), và chỉ SAU khi kiểm
+        # tra hệ thống và migration đã qua. Tiến trình theo dõi file không tới đây → không có hai
+        # bộ nhịp; cấu hình hỏng thì bộ nhịp không bật.
+        handler = super().get_handler(*args, **options)
         scheduler.start()
-        super().inner_run(*args, **options)
+        return handler

@@ -33,10 +33,7 @@ def run_scheduled_jobs(_: int = 0) -> None:
 
 def tick() -> bool:
     """Một nhịp: luồng nền rảnh thì đẩy việc kiểm tra lịch và trả `True`; bận thì `False`."""
-    if background.busy_label() is not None:
-        return False
-    background.submit(run_scheduled_jobs, 0, label=CHECK_LABEL)
-    return True
+    return background.submit_if_idle(run_scheduled_jobs, 0, label=CHECK_LABEL) is not None
 
 
 def start(*, interval: float = TICK_SECONDS) -> None:
@@ -59,5 +56,9 @@ def is_running() -> bool:
 def _beat_forever(interval: float) -> None:
     pause = threading.Event()
     while True:
-        tick()
+        try:
+            tick()
+        except Exception:
+            logger.exception("Bộ nhịp gặp lỗi và dừng; khởi động lại app để bật lại")
+            raise
         pause.wait(interval)

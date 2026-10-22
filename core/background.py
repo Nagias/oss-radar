@@ -38,10 +38,22 @@ _running_label: str | None = None
 
 def submit(job: Callable[[int], None], arg: int, *, label: str = "") -> Future[None]:
     """Xếp `job(arg)` vào luồng nền. Lỗi được ghi log và giữ trong Future, không bị nuốt."""
-    future: Future[None] = Future()
     with _state_lock:
-        _queued_labels.append(label or DEFAULT_LABEL)
-        _jobs.put((job, arg, future))
+        future = _enqueue(job, arg, label)
+    _ensure_worker()
+    return future
+
+
+def submit_if_idle(job: Callable[[int], None], arg: int, *, label: str = "") -> Future[None] | None:
+    """Như `submit`, nhưng chỉ xếp khi luồng nền rảnh hẳn; đang bận thì không xếp, trả `None`.
+
+    Kiểm "rảnh" và xếp việc trong cùng một lần giữ khoá: hai nơi cùng gọi thì chỉ một nơi được xếp,
+    nên không việc nào phải nằm chờ sau việc khác.
+    """
+    with _state_lock:
+        future = None if _busy_label() is not None else _enqueue(job, arg, label)
+    # Gọi cả khi bận: luồng nền đã chết mà hàng chờ còn việc thì dựng lại để hàng chờ chạy hết,
+    # thay vì báo "bận" mãi tới khi khởi động lại app.
     _ensure_worker()
     return future
 
@@ -49,37 +61,57 @@ def submit(job: Callable[[int], None], arg: int, *, label: str = "") -> Future[N
 def busy_label() -> str | None:
     """Nhãn việc đang chạy, hoặc việc đầu hàng chờ nếu chưa chạy; rảnh hẳn thì `None`."""
     with _state_lock:
-        if _running_label is not None:
-            return _running_label
-        return _queued_labels[0] if _queued_labels else None
+        return _busy_label()
 
 
 def relabel(label: str) -> None:
-    """Việc đang chạy trên luồng nền tự đổi nhãn của mình.
+    """Việc đang chạy trên luồng nền tự đổi nhãn của mình (nhãn trống → "việc nền").
 
     Gọi từ luồng khác (hàm việc gọi thẳng trong test hay lệnh dòng lệnh) thì không có việc nền nào
     của nó để đổi tên → bỏ qua, để luồng nền không bị báo "bận" giả mãi.
     """
     if threading.current_thread() is _worker:
-        _set_running(label)
+        _set_running(label or DEFAULT_LABEL)
+
+
+def _enqueue(job: Callable[[int], None], arg: int, label: str) -> Future[None]:
+    # Chỉ gọi khi đang giữ `_state_lock`: nhãn và việc vào hàng cùng lúc nên luôn đúng thứ tự.
+    future: Future[None] = Future()
+    _queued_labels.append(label or DEFAULT_LABEL)
+    _jobs.put((job, arg, future))
+    return future
+
+
+def _busy_label() -> str | None:
+    # Chỉ gọi khi đang giữ `_state_lock`.
+    if _running_label is not None:
+        return _running_label
+    return _queued_labels[0] if _queued_labels else None
 
 
 def _ensure_worker() -> None:
     global _worker
     with _worker_lock:
         if _worker is None or not _worker.is_alive():
-            _worker = threading.Thread(target=_work_forever, name="oss-radar-nen", daemon=True)
+            _worker = threading.Thread(
+                target=_work_forever, args=(_jobs,), name="oss-radar-nen", daemon=True
+            )
             _worker.start()
 
 
-def _work_forever() -> None:
+def _work_forever(jobs: queue.Queue[_Job]) -> None:
+    # Nhận hàng chờ qua tham số: luồng chỉ phục vụ đúng hàng chờ nó được tạo cho, không thành bên
+    # lấy việc thứ hai của hàng chờ khác nếu `_jobs` bị thay (test).
     while True:
-        job, arg, future = _jobs.get()
+        job, arg, future = jobs.get()
         _promote_queued_label()
-        if not future.set_running_or_notify_cancel():
+        try:
+            if not future.set_running_or_notify_cancel():
+                continue
+            error = _run(job, arg)
+        finally:
+            # Về rảnh trong mọi trường hợp, kể cả khi việc làm sập luồng: không kẹt "bận" mãi.
             _set_running(None)
-            continue
-        error = _run(job, arg)
         # Báo Future xong SAU khi đã dọn kết nối và về trạng thái rảnh: ai chờ Future sẽ thấy
         # `busy_label()` đúng ngay.
         if error is None:
@@ -89,15 +121,26 @@ def _work_forever() -> None:
 
 
 def _run(job: Callable[[int], None], arg: int) -> Exception | None:
+    """Chạy việc rồi dọn kết nối CSDL; lỗi (đã ghi log) trả về để báo vào Future."""
+    error: Exception | None = None
     try:
         job(arg)
     except Exception as exc:
         logger.exception("Việc nền %s(%s) gặp lỗi", getattr(job, "__name__", job), arg)
-        return exc
+        error = exc
     finally:
-        # Mỗi luồng có kết nối CSDL riêng; đóng lại để không rò kết nối sau mỗi việc.
+        cleanup_error = _close_connections()
+    return error if error is not None else cleanup_error
+
+
+def _close_connections() -> Exception | None:
+    # Mỗi luồng có kết nối CSDL riêng; đóng lại để không rò kết nối sau mỗi việc. Đóng lỗi thì ghi
+    # log và trả lỗi về, để luồng nền vẫn sống và Future vẫn được báo xong.
+    try:
         connections.close_all()
-        _set_running(None)
+    except Exception as exc:
+        logger.exception("Đóng kết nối CSDL sau việc nền gặp lỗi")
+        return exc
     return None
 
 
