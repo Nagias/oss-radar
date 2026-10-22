@@ -41,7 +41,7 @@
 - [x] Đo thật: độ tươi số star của Search, endpoint lịch sử star mới, phân bố tăng star, 16 chủ đề gợi ý
 - [x] Chủ dự án chọn lịch chạy trong app, chạy bù khi mở app
 - [x] Thiết kế `docs/designs/2026-10-22-f005-rising-star.md` — agent độc lập rà soát, đã chốt 7 điểm
-- [ ] Chủ dự án duyệt thiết kế
-- [ ] Kế hoạch `docs/plans/2026-10-22-f005-rising-star.md`
+- [x] Chủ dự án duyệt thiết kế (2026-10-22)
+- [x] Kế hoạch `docs/plans/2026-10-22-f005-rising-star.md` (9 task)
 - [ ] Code theo TDD, sổ sách (CLAUDE.md, ARCHITECTURE QĐ-15/16, FEATURE_MAP, DEBT trả D-006 + thêm D-008)
 - [ ] Chạy thật (`manage.py daily`, trình duyệt, tắt app giữa chừng), `poe test-live`, PR
