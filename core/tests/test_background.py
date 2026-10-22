@@ -5,6 +5,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -94,3 +95,67 @@ def test_cancelled_job_is_skipped_and_worker_moves_on() -> None:
     background.submit(ran.append, 2).result(timeout=5)
 
     assert ran == [2]
+    assert background.busy_label() is None
+
+
+def _holding_job(started: threading.Event, release: threading.Event) -> Callable[[int], None]:
+    """Việc giữ luồng nền tới khi test cho đi (tối đa 5 giây để test hỏng không treo luồng)."""
+
+    def hold(_: int) -> None:
+        started.set()
+        release.wait(5)
+
+    return hold
+
+
+def test_busy_label_reports_running_job_and_none_when_idle() -> None:
+    first_started, release_first = threading.Event(), threading.Event()
+    second_started, release_second = threading.Event(), threading.Event()
+    assert background.busy_label() is None
+
+    first = background.submit(
+        _holding_job(first_started, release_first), 0, label="Lượt quét hằng ngày 22/10"
+    )
+    second = background.submit(_holding_job(second_started, release_second), 0)
+    try:
+        assert first_started.wait(5)
+        assert background.busy_label() == "Lượt quét hằng ngày 22/10"
+        release_first.set()
+        assert second_started.wait(5)
+        assert background.busy_label() == "việc nền"  # việc không có nhãn
+    finally:
+        release_first.set()
+        release_second.set()
+    first.result(timeout=5)
+    second.result(timeout=5)
+
+    assert background.busy_label() is None
+
+
+def test_relabel_changes_label_of_running_job() -> None:
+    started, release = threading.Event(), threading.Event()
+    seen: list[str | None] = []
+
+    def daily_check(_: int) -> None:
+        seen.append(background.busy_label())
+        background.relabel("Lượt quét hằng ngày 22/10")
+        started.set()
+        release.wait(5)
+
+    future = background.submit(daily_check, 0, label="Kiểm tra lịch")
+    try:
+        assert started.wait(5)
+        assert background.busy_label() == "Lượt quét hằng ngày 22/10"
+    finally:
+        release.set()
+    future.result(timeout=5)
+
+    assert seen == ["Kiểm tra lịch"]
+    assert background.busy_label() is None
+
+
+def test_relabel_outside_background_job_changes_nothing() -> None:
+    # Hàm việc định kỳ gọi thẳng (test, lệnh dòng lệnh) không được làm luồng nền "bận" giả.
+    background.relabel("Lượt quét hằng ngày 22/10")
+
+    assert background.busy_label() is None

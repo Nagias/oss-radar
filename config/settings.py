@@ -55,6 +55,8 @@ ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
 # Ứng dụng — mỗi tính năng là một thư mục trong features/ (xem FEATURE_MAP.md).
 INSTALLED_APPS = [
+    # Đứng trước staticfiles để lệnh `runserver` của dự án (bật bộ nhịp) được dùng thay lệnh gốc.
+    "core",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
     "features.catalog",
@@ -122,6 +124,11 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 GITHUB_TOKEN = _env_str("GITHUB_TOKEN")
 GITHUB_API_URL = "https://api.github.com"
 GITHUB_TIMEOUT_SECONDS = 20.0
+
+
+# Việc định kỳ (QĐ-15): bộ nhịp `core/scheduler.py` gọi lần lượt các hàm này trên luồng nền, đúng
+# thứ tự khai. Nhìn danh sách này là biết app tự làm những gì.
+SCHEDULED_JOBS: list[str] = []
 
 
 # Log ra màn hình console; code dùng logging.getLogger(__name__), không dùng print().
