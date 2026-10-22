@@ -1,9 +1,8 @@
 # Kiến trúc OSS Radar
 
-> **Trạng thái: ĐỀ XUẤT — chờ chủ dự án duyệt** (soạn ngày 2026-10-21).
-> Mọi lựa chọn dưới đây là quyết định của Claude, chưa phải của chủ dự án. Chỗ nào bị bác thì sửa
-> ở đây trước khi làm tính năng thứ hai. Quyết định mới được thêm vào cuối bảng, không xoá dòng cũ
-> (đổi trạng thái thành "Thay bởi QĐ-xx").
+> **Trạng thái: ĐÃ DUYỆT** — nền QĐ-01…QĐ-13 do chủ dự án duyệt qua PR #1 (2026-10-21); QĐ-14 duyệt cùng
+> thiết kế F-002 (2026-10-22). Quyết định mới được thêm vào cuối bảng, không xoá dòng cũ (đổi trạng thái
+> thành "Thay bởi QĐ-xx").
 
 Mục tiêu của tài liệu: giải thích **vì sao** chọn từng thứ, theo hệ quả vận hành (được gì, tốn gì,
 rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đường nào") nằm ở `CLAUDE.md`.
@@ -14,19 +13,20 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 
 | Mã | Hạng mục | Chọn | Trạng thái |
 |---|---|---|---|
-| QĐ-01 | Ngôn ngữ | Python 3.13 | Đề xuất, đã dùng |
-| QĐ-02 | Môi trường & phụ thuộc | uv + `uv.lock`, cache trong `.cache/uv` | Đề xuất, đã dùng |
-| QĐ-03 | Web framework | Django 5.2 LTS | Đề xuất, đã dùng |
-| QĐ-04 | Cơ sở dữ liệu | SQLite chế độ WAL, file trong `data/` | Đề xuất, đã dùng |
-| QĐ-05 | Giao diện | Template Django render phía máy chủ | Đề xuất, đã dùng |
-| QĐ-06 | Gọi dịch vụ ngoài | httpx, chỉ trong `integrations/<dịch vụ>/` | Đề xuất, đã dùng |
-| QĐ-07 | Kiểm thử | pytest + pytest-django + respx + pytest-cov (≥ 90%) | Đề xuất, đã dùng |
-| QĐ-08 | Chất lượng code | ruff (format + lint) + mypy strict + django-stubs | Đề xuất, đã dùng |
-| QĐ-09 | Một lệnh kiểm tra | `uv run poe check` (poethepoet) | Đề xuất, đã dùng |
-| QĐ-10 | CI & bảo vệ nhánh | GitHub Actions trên `windows-latest`, action ghim SHA, main chỉ nhận PR có CI xanh | Đề xuất, chờ tạo repo GitHub |
-| QĐ-11 | Việc nền & lịch hằng ngày | Huey + SqliteHuey | Dự kiến — chưa cài (xem nợ D-003) |
+| QĐ-01 | Ngôn ngữ | Python 3.13 | Đã duyệt, đã dùng |
+| QĐ-02 | Môi trường & phụ thuộc | uv + `uv.lock`, cache trong `.cache/uv` | Đã duyệt, đã dùng |
+| QĐ-03 | Web framework | Django 5.2 LTS | Đã duyệt, đã dùng |
+| QĐ-04 | Cơ sở dữ liệu | SQLite chế độ WAL, file trong `data/` | Đã duyệt, đã dùng |
+| QĐ-05 | Giao diện | Template Django render phía máy chủ | Đã duyệt, đã dùng |
+| QĐ-06 | Gọi dịch vụ ngoài | httpx, chỉ trong `integrations/<dịch vụ>/` | Đã duyệt, đã dùng |
+| QĐ-07 | Kiểm thử | pytest + pytest-django + respx + pytest-cov (≥ 90%) | Đã duyệt, đã dùng |
+| QĐ-08 | Chất lượng code | ruff (format + lint) + mypy strict + django-stubs | Đã duyệt, đã dùng |
+| QĐ-09 | Một lệnh kiểm tra | `uv run poe check` (poethepoet) | Đã duyệt, đã dùng |
+| QĐ-10 | CI & bảo vệ nhánh | GitHub Actions trên `windows-latest`, action ghim SHA, main chỉ nhận PR có CI xanh | Đã duyệt, đã bật (Nagias/oss-radar) |
+| QĐ-11 | Việc nền & lịch hằng ngày | Huey + SqliteHuey | Thay bởi QĐ-14 (2026-10-22) |
 | QĐ-12 | AI | Gemini qua 9router (chuẩn OpenAI), AI chỉ phân loại/đánh giá | Dự kiến — chưa cài |
 | QĐ-13 | Nguồn khám phá phụ | Exa, Tavily | Dự kiến — chưa cài |
+| QĐ-14 | Việc nền | Một luồng trong tiến trình web (`core/background.py`), trạng thái + nhịp sống trong CSDL | Đã duyệt 2026-10-22, đã dùng (F-002) |
 
 ---
 
@@ -127,7 +127,7 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 - **Ràng buộc gói GitHub Free:** bảo vệ nhánh chỉ bật được cho repo **public**. Repo **private** cần gói
   GitHub Pro (khoảng 4 USD/tháng). → Chủ dự án quyết định.
 
-### QĐ-11 — Việc nền và lịch quét hằng ngày (dự kiến)
+### QĐ-11 — Việc nền và lịch quét hằng ngày (đã thay bởi QĐ-14)
 - Dự kiến dùng **Huey với SqliteHuey**: hàng đợi lưu trong file SQLite (không cần Redis), có lịch định kỳ
   kiểu crontab cho quét hằng ngày, có chế độ chạy ngay (`immediate`) để test.
 - **Chưa cài ở nền**: bộ khung chỉ quét một trang (1–2 giây) nên chạy thẳng trong request là đủ — đây là
@@ -149,6 +149,18 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
   mà tìm kiếm của GitHub bỏ sót. Link tìm được đi qua **cùng một đường chuẩn hoá** bằng GitHub API như mọi
   nguồn khác, nên không thể lọt dữ liệu bịa hoặc trùng.
 
+### QĐ-14 — Việc nền: một luồng trong tiến trình web (thay QĐ-11)
+- **Chủ dự án chốt 2026-10-22** khi duyệt thiết kế F-002 (`docs/designs/2026-10-22-f002-quet-sau.md`).
+- `core.background.submit(job, id)` đẩy việc vào **một** luồng nền ngay trong tiến trình web. Trạng thái,
+  điểm dừng (từng lát) và **nhịp sống** (`heartbeat_at`, ghi ≤ 30 giây/lần) nằm trong CSDL.
+- **Được:** không thêm thư viện, không thêm tiến trình — bạn vẫn chỉ chạy `uv run poe dev`. Mỗi lúc một việc
+  ghi → hợp SQLite; hạn mức GitHub không bị hai việc tranh nhau.
+- **Tốn / rủi ro:** tắt app (hoặc server tự khởi động lại khi sửa code) là việc dừng → nhận ra nhờ nhịp sống
+  cũ, chuyển "Tạm dừng", bấm Tiếp tục chạy từ lát dang dở (tự chạy bù: nợ D-006, làm ở F-005).
+- Mỗi lúc chỉ một lần quét trên **mọi** tiến trình (trang web lẫn `manage.py scan`): kiểm trong transaction
+  (SQLite `IMMEDIATE` giữ khoá ghi) dựa trên nhịp sống.
+- Ruff cấm `threading`/`concurrent.futures` ngoài `core/background.py`.
+
 ---
 
 ## 3. Cấu trúc thư mục theo tính năng
@@ -157,20 +169,25 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 config/                  Cấu hình Django (settings, urls gốc). Không chứa nghiệp vụ.
 features/
   catalog/               LÕI "kho repo": bảng Repository, hàm ghi không trùng. Nơi duy nhất ghi bảng này.
-  discovery/             F-001 Quét theo truy vấn (tính năng mẫu — mọi tính năng sau copy cấu trúc này)
+  discovery/             F-002 Quét sâu (tính năng mẫu — mọi tính năng sau copy cấu trúc này)
     models.py            Bảng của tính năng
     services.py          Toàn bộ nghiệp vụ
+    slicing.py           Logic thuần tách riêng (chia lát truy vấn) — không gọi mạng, không CSDL
     forms.py             Kiểm tra dữ liệu người dùng nhập
     views.py, urls.py    Lớp web mỏng: nhận request → gọi service → render
     templates/discovery/ Giao diện
     management/commands/ Lệnh dòng lệnh (cho lịch chạy và cho agent tự kiểm chứng)
     tests/               Test của riêng tính năng
 integrations/
-  github/                Client GitHub. Không biết gì về Django model.
+  github/                Client GitHub (+ pacing.py: giãn nhịp, gọi lại, ngân sách). Không biết Django model.
+core/
+  background.py          Chạy việc nền một luồng (QĐ-14) — nơi duy nhất được tạo luồng.
 templates/base.html      Khung trang chung
 static/css/app.css       CSS chung
 tests/                   Test toàn dự án (lính gác quy tắc: sổ nợ, bản đồ tính năng…)
 docs/ARCHITECTURE.md     Tài liệu này
+docs/designs/            Thiết kế từng tính năng (chủ dự án duyệt trước khi code)
+docs/plans/              Kế hoạch thực thi từng tính năng
 CLAUDE.md                Luật làm việc cho agent
 FEATURE_MAP.md           Bản đồ tính năng (cập nhật cùng PR với tính năng)
 DEBT.md                  Sổ nợ có chủ đích
@@ -211,8 +228,8 @@ flowchart LR
   SN --> RS[Báo rising star hằng ngày]
 ```
 
-Bộ khung F-001 đi xuyên một lát mỏng của luồng này:
-**GitHub Search (1 trang) → chuẩn hoá → kho repo không trùng → hiển thị sắp theo star.**
+Đã làm (F-001 + F-002): **GitHub Search chia lát (đủ, vượt trần 1.000) → chuẩn hoá → kho repo không
+trùng → hiển thị sắp theo star, kèm độ phủ.**
 
 ---
 

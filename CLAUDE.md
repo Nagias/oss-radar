@@ -5,6 +5,7 @@
 - `docs/ARCHITECTURE.md` — vì sao chọn công nghệ/cấu trúc này (bảng quyết định QĐ-xx).
 - `DEBT.md` — sổ nợ có chủ đích. Nợ không có trong sổ thì không được tồn tại.
 - `TASKS.md` — checklist việc đang làm.
+- `docs/designs/`, `docs/plans/` — thiết kế đã duyệt và kế hoạch thực thi của từng tính năng.
 
 ## 1. Mục đích (nguyên văn ý của chủ dự án — không sửa)
 
@@ -45,14 +46,16 @@ tắc phải biến thành luật kiểm được, không để làm khẩu hi�
 | Kiểm tra dữ liệu nhập | Django Form (dùng chung cho web và dòng lệnh) | `features/discovery/forms.py` |
 | Lệnh dòng lệnh / để agent tự kiểm chứng | management command gọi service | `features/discovery/management/commands/scan.py` |
 | Ghi bảng `Repository` | chỉ qua `features/catalog/services.py` | `upsert_repositories` |
-| Gọi dịch vụ ngoài | client httpx trong `integrations/<dịch vụ>/`, trả dataclass | `integrations/github/client.py` |
+| Gọi dịch vụ ngoài | client httpx trong `integrations/<dịch vụ>/`, trả dataclass; giãn nhịp, gọi lại, ngân sách nằm trong client | `integrations/github/client.py`, `pacing.py` |
 | Cấu hình, bí mật | `.env` → `config/settings.py` → `django.conf.settings` | `config/settings.py` |
 | Đổi cấu trúc CSDL | sửa `models.py` → `uv run python manage.py makemigrations` | — |
 | Ghi log | `logger = logging.getLogger(__name__)` | `features/discovery/services.py` |
 | Test có gọi API ngoài | fixture `http_mock` (respx) + JSON phản hồi thật trong `tests/fixtures/` | `integrations/github/tests/` |
 | Thêm thư viện | ghi QĐ mới trong `docs/ARCHITECTURE.md` → `uv add <gói>` (phải hỏi chủ dự án) | — |
 | Đi đường tắt | ghi `DEBT.md` + đánh dấu `DEBT(D-xxx)` trong code | `DEBT.md` |
-| Việc nền, lịch hằng ngày | chưa có đường — làm theo QĐ-11 khi tới tính năng Quét sâu | — |
+| Việc nền | `core.background.submit(job, id)` — một luồng trong tiến trình web (QĐ-14); trạng thái + nhịp sống lưu CSDL | `features/discovery/views.py` + `services.execute_scan` |
+| Lịch hằng ngày | chưa có đường — làm ở F-005 (cùng lúc trả D-006) | — |
+| Thiết kế tính năng mới | `docs/designs/YYYY-MM-DD-fNNN-<slug>.md` → chủ dự án duyệt → kế hoạch `docs/plans/` → TDD | `docs/designs/2026-10-22-f002-quet-sau.md` |
 | Gọi AI | chưa có đường — `integrations/llm/` theo QĐ-12 | — |
 
 Gặp loại việc chưa có trong bảng: dừng, đề xuất đường đi + ghi QĐ trong `docs/ARCHITECTURE.md`, rồi mới làm.
@@ -75,7 +78,10 @@ Gặp loại việc chưa có trong bảng: dừng, đề xuất đường đi +
 | Commit/push thẳng `main`, force-push, `--no-verify` | mất lưới an toàn | branch protection + settings.json chặn |
 | Ghi token/mật khẩu vào code, settings.json, log, chat | lộ khoá | `.gitignore` + chặn đọc `.env` + review |
 | Thêm thư viện không có QĐ | phình phụ thuộc, tăng bề mặt lỗi | settings.json hỏi `uv add` |
-| Gọi API trong vòng lặp không giới hạn | khoá token, cháy quota | review (sau có ngân sách quét) |
+| Gọi API trong vòng lặp không giới hạn | khoá token, cháy quota | `CallBudget` bắt buộc khi quét + review |
+| Tạo thread / `ThreadPoolExecutor` ngoài `core/background.py` | mỗi lúc chỉ một luồng ghi SQLite | ruff `TID251` |
+| Tự viết vòng gọi lại hoặc `time.sleep` khi gọi GitHub | giãn nhịp/gọi lại đã có trong client | review |
+| Viết code tính năng lớn trước khi thiết kế được duyệt | làm sai thứ chủ dự án cần | quy trình mục 6 |
 
 ## 5. Lệnh
 
@@ -90,7 +96,8 @@ uv run poe check                                # TOÀN BỘ cổng kiểm tra �
 uv run poe fmt                                  # tự sửa định dạng + lỗi lint sửa được
 uv run poe test                                 # chỉ chạy test (có đo độ phủ)
 uv run poe test-live                            # test gọi GitHub thật (cần GITHUB_TOKEN)
-uv run python manage.py scan "topic:ai-agent"   # chạy thật luồng F-001 từ dòng lệnh
+uv run python manage.py scan "topic:ai-agent" --budget 50   # quét thật từ dòng lệnh (xem --help)
+uv run python manage.py scan --resume 12 --extra-budget 300  # tiếp tục lần quét #12
 ```
 
 ## 6. Nhánh, PR và tự kiểm chứng
@@ -98,6 +105,7 @@ uv run python manage.py scan "topic:ai-agent"   # chạy thật luồng F-001 t�
 - Không làm việc trên `main`. Tên nhánh: `feat/fNNN-<slug>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>`.
 - Một PR = một tính năng hoặc một sửa lỗi. Cùng PR phải cập nhật: `FEATURE_MAP.md`; `DEBT.md` nếu có đường
   tắt; `docs/ARCHITECTURE.md` nếu có quyết định mới.
+- Tính năng lớn: viết thiết kế (`docs/designs/`) → chủ dự án duyệt → kế hoạch (`docs/plans/`) → mới code.
 - Viết test đỏ trước cho hành vi mới (TDD), rồi mới viết code cho xanh.
 - **Chưa được báo "xong" khi chưa:**
   1. `uv run poe check` xanh;

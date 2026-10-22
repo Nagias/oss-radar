@@ -17,9 +17,9 @@ nhận, khi nào trả, quên trả thì sao.
 |---|---|---|---|
 | D-001 | Chạy bằng máy chủ phát triển (`runserver`), `DEBUG` bật mặc định, không đăng nhập | Mở | Trước khi chạy thường trực hoặc mở ra mạng |
 | D-002 | CI và bảo vệ nhánh `main` chưa bật trên GitHub | Đã trả (2026-10-21) | Đã bật trên `Nagias/oss-radar` |
-| D-003 | Quét chạy đồng bộ ngay trong request web, chưa có việc nền | Mở | Làm F-002 Quét sâu |
-| D-004 | Mỗi lần quét chỉ lấy trang đầu (tối đa 100 repo nhiều star nhất) | Mở | Làm F-002 Quét sâu |
-| D-005 | Gọi GitHub một lần, lỗi là dừng — chưa thử lại, chưa giãn nhịp, chưa có ngân sách gọi API | Mở | Làm F-002 Quét sâu |
+| D-003 | Quét chạy đồng bộ ngay trong request web, chưa có việc nền | Đã trả (2026-10-22) | F-002: chạy nền qua `core.background` |
+| D-004 | Mỗi lần quét chỉ lấy trang đầu (tối đa 100 repo nhiều star nhất) | Đã trả (2026-10-22) | F-002: chia lát vượt trần 1.000 |
+| D-005 | Gọi GitHub một lần, lỗi là dừng — chưa thử lại, chưa giãn nhịp, chưa có ngân sách gọi API | Đã trả (2026-10-22) | F-002: `integrations/github/pacing.py` |
 | D-006 | Tắt app giữa chừng thì lần quét chỉ chuyển sang Tạm dừng; phải bấm Tiếp tục bằng tay | Mở | Làm F-005 (lịch quét hằng ngày, chạy bù) |
 | D-007 | Trang kết quả lần quét chỉ hiện 500 repo nhiều star nhất | Mở | Khi làm trang duyệt kho (lọc, phân trang) |
 
@@ -61,6 +61,8 @@ nhận, khi nào trả, quên trả thì sao.
   việc nào chạy quá ~5 giây.
 - **Quên trả thì sao:** quét lâu thì trình duyệt treo rồi hết thời gian chờ; người dùng tưởng app hỏng.
 - **Vị trí:** `features/discovery/services.py` (`run_scan`).
+- **Đã trả (2026-10-22, F-002):** bấm Quét chỉ tạo lần quét rồi đẩy vào luồng nền (`core/background.py`,
+  QĐ-14); trang tiến độ tự cập nhật; đường quét đồng bộ `run_scan` đã bỏ.
 
 ### D-004 — Mỗi lần quét chỉ lấy trang đầu
 - **Nợ gì:** chỉ lấy tối đa 100 repo nhiều star nhất của một truy vấn, trong khi GitHub có thể báo hàng
@@ -73,6 +75,8 @@ nhận, khi nào trả, quên trả thì sao.
   nằm ngoài trang đầu sẽ không bao giờ được thấy.
 - **Vị trí:** `features/discovery/services.py` (`_fetch_and_store`),
   `features/discovery/templates/discovery/scan_detail.html` (cảnh báo).
+- **Đã trả (2026-10-22, F-002):** chia lát theo ngày tạo (và theo star khi chỉ còn một ngày) để mỗi lát
+  ≤ 1.000 kết quả; trang báo độ phủ và liệt kê chỗ còn sót (lát bị cắt, chưa chắc đủ, lỗi).
 
 ### D-005 — Gọi GitHub một lần, lỗi là dừng
 - **Nợ gì:** client không thử lại khi GitHub lỗi tạm thời (5xx, mất mạng chốc lát), không tự chờ khi hết
@@ -84,6 +88,8 @@ nhận, khi nào trả, quên trả thì sao.
 - **Quên trả thì sao:** lượt quét dài hỏng giữa chừng vì một lỗi vặt; dội request khi hết lượt có thể làm
   GitHub khoá token.
 - **Vị trí:** `integrations/github/client.py` (`_get_json`).
+- **Đã trả (2026-10-22, F-002):** `integrations/github/pacing.py` — giãn nhịp 2,1/6,1 giây + ngẫu nhiên,
+  chờ hồi lượt (tối đa 5 phút), gọi lại 3 lần khi lỗi tạm thời, ngân sách lượt gọi cho mỗi lần quét.
 
 ### D-006 — Lần quét bị gián đoạn phải tiếp tục bằng tay
 - **Nợ gì:** quét chạy trong luồng nền của app web; tắt app (hoặc server tự khởi động lại khi sửa code)

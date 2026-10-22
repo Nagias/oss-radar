@@ -20,4 +20,14 @@
 ## Tiếp theo
 
 - [ ] Chủ dự án tạo token GitHub fine-grained (chỉ đọc repo public), điền `GITHUB_TOKEN` vào `.env`
-- [ ] F-002 Quét sâu (trả nợ D-003, D-004, D-005) — bắt đầu bằng đề xuất thiết kế để chủ dự án duyệt
+- [x] F-002 Quét sâu: thiết kế đã duyệt, kế hoạch, code theo TDD (xem mục dưới)
+
+## F-002 Quét sâu (2026-10-22)
+
+- [x] Thiết kế `docs/designs/2026-10-22-f002-quet-sau.md` — agent độc lập rà soát, chủ dự án duyệt
+- [x] Kế hoạch `docs/plans/2026-10-22-f002-quet-sau.md`
+- [x] Task 1–6: giả lập GitHub, giãn nhịp/thử lại/ngân sách, chia lát, chạy nền, vòng quét, trang web + lệnh
+- [x] Sổ sách: CLAUDE.md, ARCHITECTURE (QĐ-14), FEATURE_MAP (F-002), DEBT (trả D-003/4/5, thêm D-006/7)
+- [ ] Chạy thật (lệnh + trình duyệt + `poe test-live`)
+- [ ] Agent độc lập rà soát cả nhánh, sửa điều đúng
+- [ ] Mở PR, CI xanh, chủ dự án duyệt → squash-merge
