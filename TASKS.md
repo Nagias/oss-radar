@@ -14,5 +14,10 @@
 - [x] Chạy thật F-001 (dòng lệnh + trình duyệt + `poe test-live`)
 - [x] Ghi nợ của F-001 vào `DEBT.md` (D-003, D-004, D-005), cập nhật `FEATURE_MAP.md`
 - [x] Chủ dự án chọn public → chạy `scripts/github_setup.ps1`, CI xanh trên `main` (trả nợ D-002)
-- [ ] Mở PR F-001, CI xanh
-- [ ] Chủ dự án duyệt nền qua PR → squash-merge
+- [x] Mở PR F-001 (Nagias/oss-radar#1), CI xanh
+- [x] Chủ dự án duyệt nền → squash-merge vào `main` (commit `726fe2d`, 2026-10-21)
+
+## Tiếp theo
+
+- [ ] Chủ dự án tạo token GitHub fine-grained (chỉ đọc repo public), điền `GITHUB_TOKEN` vào `.env`
+- [ ] F-002 Quét sâu (trả nợ D-003, D-004, D-005) — bắt đầu bằng đề xuất thiết kế để chủ dự án duyệt
