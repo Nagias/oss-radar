@@ -15,6 +15,7 @@ test ở đâu, đang nợ gì.
 |---|---|---|---|---|---|---|
 | F-001 | Quét GitHub theo truy vấn → lưu không trùng → xem sắp theo star | Đã gộp vào F-002 (= mức Nhanh) | `features/discovery/` | như F-002 | `features/discovery/tests/` | — |
 | F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py` | D-006, D-007 |
+| F-005 | Sao đang lên (rising star) và lượt quét hằng ngày | Đang làm (nhánh feat/f005-rising-star) | `features/rising/` | — | `features/rising/tests/` | — |
 
 ## Mô-đun lõi và cửa ra ngoài
 

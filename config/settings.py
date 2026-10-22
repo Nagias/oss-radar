@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "features.catalog",
     "features.discovery",
+    "features.rising",
 ]
 
 MIDDLEWARE = [
