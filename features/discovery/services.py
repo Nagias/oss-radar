@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from django.db import transaction
-from django.db.models import F, Max, Q, QuerySet
+from django.db.models import Case, F, Max, Q, QuerySet, Value, When
 from django.utils import timezone
 
 from core import background
@@ -208,13 +208,19 @@ def live_scan() -> ScanRun | None:
 def pause_stale_scans() -> int:
     """Lần quét "đang chạy" mà nhịp sống đã cũ → bị gián đoạn → chuyển sang Tạm dừng.
 
+    Người dùng đã bấm Dừng nhưng app tắt trước khi luồng quét kịp thấy → ghi là "đã bấm Dừng",
+    không phải "bị gián đoạn", để không bị tự chạy tiếp tốn lượt gọi người dùng đã từ chối.
     Giữ nguyên `heartbeat_at`: nó là lúc bị gián đoạn, `resume_interrupted_scan` dựa vào đó.
     """
     threshold = timezone.now() - LIVE_HEARTBEAT_WINDOW
+    reason = Case(
+        When(stop_requested=True, then=Value(REASON_STOPPED)),
+        default=Value(REASON_INTERRUPTED),
+    )
     return (
         ScanRun.objects.filter(status=ScanRun.Status.RUNNING)
         .filter(Q(heartbeat_at__lt=threshold) | Q(heartbeat_at__isnull=True))
-        .update(status=ScanRun.Status.PAUSED, stop_reason=REASON_INTERRUPTED, waiting_until=None)
+        .update(status=ScanRun.Status.PAUSED, stop_reason=reason, waiting_until=None)
     )
 
 
@@ -232,17 +238,24 @@ def resume_interrupted_scan(*, now: datetime | None = None) -> ScanRun | None:
     scan = ScanRun.objects.filter(
         status=ScanRun.Status.PAUSED,
         stop_reason=REASON_INTERRUPTED,
+        stop_requested=False,
         origin=ScanRun.Origin.MANUAL,
         auto_resume_count__lt=MAX_AUTO_RESUMES,
         heartbeat_at__gte=moment - AUTO_RESUME_WINDOW,
     ).first()
     if scan is None:
         return None
-    with transaction.atomic():
-        resume_scan(scan, extra_budget=0)
-        ScanRun.objects.filter(pk=scan.pk).update(
-            auto_resume_count=F("auto_resume_count") + 1, last_auto_resume_at=moment
-        )
+    try:
+        # Đếm cùng transaction với lúc nối lại, TRƯỚC khi chạy: lần quét làm sập app vẫn bị đếm.
+        with transaction.atomic():
+            resume_scan(scan, extra_budget=0)
+            ScanRun.objects.filter(pk=scan.pk).update(
+                auto_resume_count=F("auto_resume_count") + 1, last_auto_resume_at=moment
+            )
+    except ScanAlreadyRunningError as exc:
+        # Tiến trình khác (vd lệnh `scan`) vừa bắt đầu quét sau lần kiểm ở trên: chờ nhịp sau.
+        logger.info("Chưa tự chạy tiếp lần quét #%s: %s", scan.pk, exc)
+        return None
     logger.info("Tự chạy tiếp lần quét #%s bị gián đoạn", scan.pk)
     background.relabel(f"Lần quét #{scan.pk} (tự chạy tiếp)")
     execute_scan(scan.pk)
@@ -250,15 +263,18 @@ def resume_interrupted_scan(*, now: datetime | None = None) -> ScanRun | None:
     return scan
 
 
-def release_unstarted_scan(scan: ScanRun) -> None:
+def release_unstarted_scan(scan: ScanRun, *, refund_budget: int = 0) -> None:
     """Lần quét vừa giữ chỗ nhưng luồng nền đã bị việc khác chiếm → Tạm dừng, chờ bấm Tiếp tục.
 
     Không để nó "đang chạy" nằm chờ sau một việc dài (vd lượt hằng ngày): nhịp sống sẽ cũ đi và nó
     bị coi là gián đoạn. Lý do dừng khác "bị gián đoạn" nên cũng không bị tự chạy tiếp.
+    `refund_budget`: phần ngân sách lượt Tiếp tục vừa thêm — chưa chạy được thì trả lại, để lần bấm
+    Tiếp tục sau không phải thêm một mức nữa.
     """
     ScanRun.objects.filter(pk=scan.pk, status=ScanRun.Status.RUNNING).update(
         status=ScanRun.Status.PAUSED,
         stop_reason=REASON_BUSY,
+        budget=F("budget") - refund_budget,
         heartbeat_at=None,
         runner_token="",
         waiting_until=None,
@@ -282,12 +298,15 @@ def repositories_seen_in(scan_ids: Collection[int]) -> QuerySet[Repository]:
 def prune_daily_results(*, before: datetime) -> int:
     """Xoá danh sách repo của lần quét hằng ngày tạo trước `before`; trả số dòng đã xoá.
 
-    Phần tóm tắt của lần quét giữ nguyên, chỉ đánh dấu "đã dọn". Lần quét tay không bị dọn.
+    Phần tóm tắt của lần quét giữ nguyên; chỉ lần quét thật sự bị xoá dòng mới được đánh dấu "đã
+    dọn" (lần quét không có repo nào thì không có gì để dọn). Lần quét tay không bị dọn.
     """
     old_daily = ScanRun.objects.filter(origin=ScanRun.Origin.DAILY, created_at__lt=before)
+    old_results = ScanResult.objects.filter(scan_run__in=old_daily)
     with transaction.atomic():
-        deleted, _ = ScanResult.objects.filter(scan_run__in=old_daily).delete()
-        old_daily.filter(results_pruned=False).update(results_pruned=True)
+        # Đánh dấu trước khi xoá: sau khi xoá thì không còn biết lần quét nào từng có dòng.
+        ScanRun.objects.filter(pk__in=old_results.values("scan_run_id")).update(results_pruned=True)
+        deleted, _ = old_results.delete()
     return deleted
 
 

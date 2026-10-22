@@ -109,6 +109,71 @@ def test_does_not_resume_user_stopped_ctrl_c_or_budget_paused(
     assert github_search.call_count == 0
 
 
+def test_does_not_resume_scan_user_stopped_before_app_closed(github_search: respx.Route) -> None:
+    # Bấm Dừng rồi tắt app trước khi luồng quét kịp thấy cờ: lần quét kẹt "đang chạy" với cờ Dừng.
+    scan = services.start_scan(DEFAULT_REQUEST)
+    services.request_stop(scan)
+    ScanRun.objects.filter(pk=scan.pk).update(heartbeat_at=timezone.now() - timedelta(minutes=10))
+
+    assert services.resume_interrupted_scan() is None
+
+    scan.refresh_from_db()
+    assert (scan.status, scan.stop_reason) == (ScanRun.Status.PAUSED, services.REASON_STOPPED)
+    assert scan.auto_resume_count == 0
+    assert github_search.call_count == 0
+
+
+def test_does_not_resume_interrupted_scan_user_then_stopped(github_search: respx.Route) -> None:
+    scan = interrupted_scan()
+    services.request_stop(scan)  # bấm Dừng từ một trang cũ, sau khi lần quét đã bị coi là gián đoạn
+
+    assert services.resume_interrupted_scan() is None
+
+    scan.refresh_from_db()
+    assert (scan.status, scan.auto_resume_count) == (ScanRun.Status.PAUSED, 0)
+    assert github_search.call_count == 0
+
+
+def test_gives_way_when_another_scan_starts_meanwhile(
+    github_search: respx.Route, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scan = interrupted_scan()
+    services.start_scan(DEFAULT_REQUEST)  # vd lệnh `scan` ở cửa sổ khác, ngay sau lần kiểm đầu tiên
+    real_live_scan = services.live_scan
+    checks: list[int] = []
+
+    def live_scan_missed_at_first_check() -> ScanRun | None:
+        checks.append(1)
+        return None if len(checks) == 1 else real_live_scan()
+
+    monkeypatch.setattr(services, "live_scan", live_scan_missed_at_first_check)
+
+    assert services.resume_interrupted_scan() is None
+
+    scan.refresh_from_db()
+    assert (scan.status, scan.stop_reason) == (ScanRun.Status.PAUSED, services.REASON_INTERRUPTED)
+    assert scan.auto_resume_count == 0
+    assert github_search.call_count == 0
+
+
+def test_resume_is_counted_before_running_so_a_crashing_scan_cannot_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scan = interrupted_scan()
+
+    def crash(scan_id: int) -> None:
+        raise RuntimeError("lần quét làm sập luồng nền (giả lập)")
+
+    monkeypatch.setattr(services, "execute_scan", crash)
+
+    with pytest.raises(RuntimeError, match="giả lập"):
+        services.resume_interrupted_scan()
+
+    scan.refresh_from_db()
+    assert scan.auto_resume_count == 1
+    assert scan.last_auto_resume_at is not None
+
+
 def test_does_not_resume_after_24_hours(github_search: respx.Route) -> None:
     scan = interrupted_scan(ago=timedelta(hours=2))
 

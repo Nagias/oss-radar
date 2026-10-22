@@ -1,5 +1,6 @@
 """Nghiệp vụ quét: bắt đầu, chạy, dừng, tiếp tục; mỗi lúc một lần quét; lỗi nói rõ tiếng Việt."""
 
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any
 
@@ -248,6 +249,17 @@ def test_prune_daily_results_keeps_manual_and_recent(github_search: respx.Route)
     assert (recent_daily.results.count(), recent_daily.results_pruned) == (3, False)
     assert old_daily.fetched_count == 3  # phần tóm tắt của lần quét vẫn giữ
     assert Repository.objects.count() == 3
+
+
+def test_prune_does_not_flag_daily_scan_that_had_no_results() -> None:
+    empty = services.start_scan(replace(DEFAULT_REQUEST, origin=ScanRun.Origin.DAILY))
+    long_ago = timezone.now() - timedelta(days=40)
+    ScanRun.objects.filter(pk=empty.pk).update(status=ScanRun.Status.FAILED, created_at=long_ago)
+
+    assert services.prune_daily_results(before=timezone.now() - timedelta(days=35)) == 0
+
+    empty.refresh_from_db()
+    assert empty.results_pruned is False
 
 
 def test_repositories_seen_in_returns_distinct_repos(github_search: respx.Route) -> None:

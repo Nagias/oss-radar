@@ -333,6 +333,7 @@ def test_resume_released_when_background_taken_meanwhile(
     partial.refresh_from_db()
     assert response["Location"] == detail_url(partial)
     assert (partial.status, partial.stop_reason) == (ScanRun.Status.PAUSED, services.REASON_BUSY)
+    assert partial.budget == 1  # chưa chạy được thì trả lại phần ngân sách vừa thêm
 
 
 def test_scan_detail_shows_auto_resume_and_pruned_notes(

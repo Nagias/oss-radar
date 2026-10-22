@@ -61,14 +61,15 @@ def scan_resume(request: HttpRequest, scan_id: int) -> HttpResponse:
     if busy is not None:
         form.add_error(None, _busy_message(busy))
     elif form.is_valid():
+        extra = form.cleaned_data["extra_budget"]
         try:
-            services.resume_scan(scan, extra_budget=form.cleaned_data["extra_budget"])
+            services.resume_scan(scan, extra_budget=extra)
         except services.ScanAlreadyRunningError as exc:
             form.add_error(None, _already_running_message(exc))
         except ValueError as exc:
             form.add_error(None, str(exc))
         else:
-            _run_in_background(scan)
+            _run_in_background(scan, refund_budget=extra)
             return redirect("discovery:scan_detail", scan_id=scan.pk)
     context = _detail_context(scan, resume_form=form)
     return render(request, "discovery/scan_detail.html", context, status=409)
@@ -89,11 +90,11 @@ def _detail_context(scan: ScanRun, *, resume_form: ResumeForm | None = None) -> 
     }
 
 
-def _run_in_background(scan: ScanRun) -> None:
+def _run_in_background(scan: ScanRun, *, refund_budget: int = 0) -> None:
     """Xếp lần quét vào luồng nền nếu nó còn rảnh; vừa bị việc khác chiếm thì nhả lần quét ra."""
     queued = background.submit_if_idle(services.execute_scan, scan.pk, label=f"Lần quét #{scan.pk}")
     if queued is None:
-        services.release_unstarted_scan(scan)
+        services.release_unstarted_scan(scan, refund_budget=refund_budget)
 
 
 def _already_running_message(exc: services.ScanAlreadyRunningError) -> str:
