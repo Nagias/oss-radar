@@ -3,7 +3,7 @@
 
 {% block title %}Rising star{% endblock %}
 
-{% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+{% block head_extra %}{% if refresh_url %}<meta http-equiv="refresh" content="10; url={{ refresh_url }}">{% endif %}{% endblock %}
 
 {% block content %}
 <section class="card">
@@ -13,7 +13,7 @@
     trong 7 ngày). Số tăng lấy từ lịch sử star chính thức của GitHub (ngày tính theo UTC); repo nào chưa
     xác minh được thì nằm ở mục riêng bên dưới, ghi rõ là ước lượng.
   </p>
-  {% include "rising/_today.html" %}
+  {% include "rising/_today.html" with stop_next="report" %}
 </section>
 
 {% if missing_day %}
@@ -192,8 +192,13 @@
 <section class="card">
   <h2>Chưa có báo cáo nào</h2>
   <p>
-    Lượt quét hằng ngày tự chạy sau 7:00 sáng khi app đang mở. Muốn có báo cáo đầu tiên ngay, bấm Chạy ngay ở trên
-    (khoảng 30 phút nếu có token, khoảng 1 giờ nếu không có).
+    Lượt quét hằng ngày tự chạy sau 7:00 sáng khi app đang mở.
+    {% if status.can_run_now %}
+      Muốn có báo cáo đầu tiên ngay, bấm {{ status.run_now_label }} ở trên (khoảng 30 phút nếu có token, khoảng 1 giờ
+      nếu không có).
+    {% elif status.is_live %}
+      Lượt hôm nay đang chạy — báo cáo sẽ hiện ở đây khi nó xong.
+    {% endif %}
   </p>
 </section>
 {% endif %}

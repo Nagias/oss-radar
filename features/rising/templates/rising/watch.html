@@ -3,7 +3,7 @@
 
 {% block title %}Theo dõi{% endblock %}
 
-{% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+{% block head_extra %}{% if refresh_url %}<meta http-equiv="refresh" content="10; url={{ refresh_url }}">{% endif %}{% endblock %}
 
 {% block content %}
 <section class="card">
@@ -12,7 +12,7 @@
     Mỗi ngày app quét lại từng truy vấn đang bật bằng một lần quét sâu, rồi tìm repo dưới ngưỡng star mà đang tăng
     nhanh. Truy vấn viết theo cú pháp tìm kiếm của GitHub, cùng luật với ô Quét.
   </p>
-  {% include "rising/_today.html" %}
+  {% include "rising/_today.html" with stop_next="watch" %}
 </section>
 
 <section>

@@ -3,7 +3,8 @@
 Truy vấn theo dõi được kiểm bằng cùng luật với ô Quét (không tự ghi `stars:`, `created:`, `sort:`).
 """
 
-from typing import Any, ClassVar
+from datetime import date
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django import forms
 
@@ -14,8 +15,14 @@ from features.rising.models import WatchQuery
 DEFAULT_WATCH_BUDGET = 300  # mức "Sâu": đủ quét trọn một truy vấn cỡ vài nghìn repo
 
 
-# Lúc chạy `ModelForm` không subscript được (`ModelForm[WatchQuery]`), nên chỉ mypy cần nhắc kiểu.
-class WatchQueryForm(forms.ModelForm):  # type: ignore[type-arg]
+if TYPE_CHECKING:
+    _WatchQueryFormBase = forms.ModelForm[WatchQuery]
+else:
+    # Lúc chạy `ModelForm[WatchQuery]` không subscript được; chỉ mypy cần biết kiểu.
+    _WatchQueryFormBase = forms.ModelForm
+
+
+class WatchQueryForm(_WatchQueryFormBase):
     budget = forms.TypedChoiceField(
         label="Mức quét",
         choices=BUDGET_CHOICES,
@@ -67,6 +74,22 @@ class ReportFilterForm(forms.Form):
         label="Tăng tối thiểu trong 7 ngày", min_value=0, required=False, initial=RISING_MIN_GAIN_7D
     )
     day = forms.DateField(label="Ngày báo cáo", required=False)
+
+    def values(self) -> tuple[int, int, date | None]:
+        """(star tối đa, tăng tối thiểu, ngày) dùng để lọc.
+
+        Ô nào để trống hoặc nhập sai thì dùng mặc định (ô sai vẫn báo lỗi), không làm mất giá trị
+        hợp lệ của ô khác — vd ngày đã chọn.
+        """
+        cleaned: dict[str, Any] = {}
+        if self.is_bound:
+            self.is_valid()  # chạy kiểm tra: `cleaned_data` chỉ còn các ô hợp lệ
+            cleaned = self.cleaned_data
+        return (
+            cleaned.get("max_stars", RISING_MAX_STARS),
+            cleaned.get("min_gain", RISING_MIN_GAIN_7D),
+            cleaned.get("day"),
+        )
 
     def clean_max_stars(self) -> int:
         value: int | None = self.cleaned_data["max_stars"]

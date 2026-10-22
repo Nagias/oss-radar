@@ -6,8 +6,9 @@ from concurrent.futures import Future
 from datetime import timedelta
 
 import pytest
-from django.test import Client
-from django.urls import reverse
+from django.template.loader import render_to_string
+from django.test import Client, RequestFactory
+from django.urls import ResolverMatch, reverse
 from django.utils import timezone
 from pytest_django.fixtures import Settings
 
@@ -172,6 +173,24 @@ def test_report_with_invalid_filter_shows_error_and_falls_back_to_defaults(
     assert "repo-1<" in page  # vẫn hiện báo cáo theo ngưỡng mặc định
 
 
+def test_report_keeps_a_valid_day_when_another_filter_is_invalid(client: Client) -> None:
+    older = make_run(DAY - timedelta(days=1))
+    make_check(older, 9, stars=100, gain_7d=70, is_rising=True)
+    make_check(older, 8, stars=900, gain_7d=60, is_rising=True)
+    make_run()
+    day = older.day.isoformat()
+
+    bad_gain = client.get(REPORT_URL, {"day": day, "min_gain": "-5", "max_stars": "500"}).text
+    bad_day = client.get(REPORT_URL, {"day": "hôm qua", "max_stars": "500", "min_gain": "65"}).text
+
+    assert 'class="error"' in bad_gain
+    assert f'<option value="{day}" selected>' in bad_gain  # vẫn đúng ngày đã chọn
+    assert "repo-9<" in bad_gain  # ngưỡng tăng sai → mặc định 50; ngưỡng star 500 hợp lệ vẫn giữ
+    assert "repo-8<" not in bad_gain  # 900 star: trên ngưỡng 500 của ô hợp lệ
+    assert 'class="error"' in bad_day
+    assert "repo-9<" not in bad_day  # ngày sai → báo cáo mới nhất (không có repo-9)
+
+
 def test_report_for_a_day_without_report_says_so(client: Client) -> None:
     make_run()
 
@@ -187,9 +206,10 @@ def test_report_auto_refresh_only_while_live(client: Client) -> None:
 
     live_page = client.get(REPORT_URL).text
 
-    assert '<meta http-equiv="refresh" content="10">' in live_page
+    assert f'<meta http-equiv="refresh" content="10; url={REPORT_URL}">' in live_page
     assert reverse("rising:stop", args=[run.pk]) in live_page
     assert "Chạy ngay" not in live_page
+    assert "Chạy tiếp" not in live_page
 
     DailyRun.objects.filter(pk=run.pk).update(
         status=Status.SUCCEEDED, step=DailyRun.Step.REPORT, finished_at=at(7, 31)
@@ -200,7 +220,33 @@ def test_report_auto_refresh_only_while_live(client: Client) -> None:
     assert 'http-equiv="refresh"' not in done_page
     assert reverse("rising:stop", args=[run.pk]) not in done_page
     assert "Chạy ngay" not in done_page  # hôm nay đã xong: không chạy lại
+    assert "Chạy tiếp" not in done_page
     assert "Xong lúc 07:31" in done_page
+
+
+def test_report_refresh_target_keeps_the_current_filter(client: Client) -> None:
+    today_run()
+
+    page = client.get(REPORT_URL, {"max_stars": "500", "min_gain": "100"}).text
+
+    # `&` trong thuộc tính HTML phải viết `&amp;`; trình duyệt đọc lại thành `&`.
+    assert (
+        f'<meta http-equiv="refresh" content="10; url={REPORT_URL}?max_stars=500&amp;min_gain=100">'
+        in page
+    )
+
+
+def test_refused_run_now_never_auto_refreshes(client: Client) -> None:
+    # Lượt hôm nay đang chạy thật (vd mở trang trước 7:00, rồi bộ nhịp bắt đầu lượt): "Chạy ngay"
+    # bị từ chối ở /rising/run/, nơi chỉ nhận POST → tự tải lại sẽ ra lỗi 405 trống.
+    run = today_run()
+
+    response = client.post(RUN_URL)
+
+    assert response.status_code == 409
+    assert "đang chạy" in response.text
+    assert reverse("rising:stop", args=[run.pk]) in response.text  # vẫn thấy nút Dừng
+    assert 'http-equiv="refresh"' not in response.text
 
 
 def test_report_page_marks_a_stale_run_as_interrupted_and_offers_run_now(client: Client) -> None:
@@ -210,7 +256,8 @@ def test_report_page_marks_a_stale_run_as_interrupted_and_offers_run_now(client:
 
     run.refresh_from_db()
     assert run.status == Status.PAUSED  # xem trang là biết lượt đã chết, như trang lần quét
-    assert "Chạy ngay" in page
+    assert ">Chạy tiếp</button>" in page
+    assert "Chạy ngay" not in page
     assert 'http-equiv="refresh"' not in page
 
 
@@ -221,8 +268,47 @@ def test_report_empty_state_before_first_run(client: Client) -> None:
     assert response.status_code == 200
     assert "Chưa có báo cáo nào" in page
     assert "sau 7:00" in page
-    assert "Chạy ngay" in page
+    assert ">Chạy ngay</button>" in page
+    assert "bấm Chạy ngay" in page
+    assert "Chạy tiếp" not in page
     assert 'action="/rising/run/"' in page
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"status": Status.PAUSED},
+        {"status": Status.FAILED, "error_message": "Token sai."},
+    ],
+)
+def test_run_now_button_says_continue_when_todays_run_exists(
+    client: Client, fields: dict[str, object]
+) -> None:
+    today_run(heartbeat_at=None, stop_reason=services.REASON_BUSY_APP, **fields)
+
+    for url in (REPORT_URL, WATCH_URL):
+        page = client.get(url).text
+
+        assert ">Chạy tiếp</button>" in page
+        assert "Chạy ngay" not in page  # kể cả trong câu lý do và câu hướng dẫn
+
+
+def test_empty_state_points_only_at_a_button_that_is_shown(client: Client) -> None:
+    run = today_run()  # lượt đầu tiên đang chạy, chưa có báo cáo nào, nút Chạy bị ẩn
+
+    live = client.get(REPORT_URL).text
+
+    assert "Chưa có báo cáo nào" in live
+    assert "Chạy ngay" not in live
+    assert "Chạy tiếp" not in live
+    assert "đang chạy" in live
+
+    DailyRun.objects.filter(pk=run.pk).update(status=Status.PAUSED, heartbeat_at=None)
+
+    paused = client.get(REPORT_URL).text
+
+    assert "Chưa có báo cáo nào" in paused
+    assert "bấm Chạy tiếp" in paused
 
 
 def test_report_page_disables_run_now_while_background_is_busy(
@@ -234,6 +320,19 @@ def test_report_page_disables_run_now_while_background_is_busy(
 
     assert "Lần quét #3" in page
     assert re.search(r"<button[^>]*disabled[^>]*>Chạy ngay", page)
+
+
+def test_busy_hint_names_the_button_that_is_shown(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("core.background.busy_label", lambda: "Lần quét #3")
+    today_run(status=Status.PAUSED, heartbeat_at=None)
+
+    page = client.get(REPORT_URL).text
+
+    assert re.search(r"<button[^>]*disabled[^>]*>Chạy tiếp", page)
+    assert "chờ xong rồi bấm Chạy tiếp" in page
+    assert "Chạy ngay" not in page
 
 
 # --- Trang Theo dõi --------------------------------------------------------------------------
@@ -264,7 +363,7 @@ def test_watch_page_lists_queries_estimate_history_and_buttons(
     assert "Tắt" in page
     assert "800 lượt gọi" in page  # ước lượng: 500 + 300 lượt gọi của lần chạy gần nhất
     assert "Token sai rồi." in page
-    assert "Chạy ngay" in page  # hôm nay Lỗi → được chạy lại
+    assert ">Chạy tiếp</button>" in page  # hôm nay Lỗi → được chạy tiếp
     assert reverse("rising:stop", args=[failed.pk]) not in page
     assert '<td class="num">14</td>' in page  # số rising star trong lịch sử các lượt
     assert '<td class="small">Truy vấn «topic:x» lỗi.<br>Hết ngân sách xác minh.</td>' in page
@@ -277,7 +376,18 @@ def test_watch_page_shows_live_run_with_stop_button(client: Client) -> None:
 
     assert reverse("rising:stop", args=[run.pk]) in page
     assert "Chạy ngay" not in page
-    assert 'http-equiv="refresh"' in page
+    assert f'<meta http-equiv="refresh" content="10; url={WATCH_URL}">' in page
+    assert 'name="next" value="watch"' in page
+
+
+def test_watch_page_error_after_post_does_not_auto_refresh(client: Client) -> None:
+    today_run()  # đang chạy: trang GET sẽ tự tải lại, nhưng trang báo lỗi form thì không
+
+    response = client.post(WATCH_URL, {**WATCH_FORM, "query": "topic:x stars:>5"})
+
+    assert response.status_code == 200
+    assert "Không tự ghi `stars:`" in response.text
+    assert 'http-equiv="refresh"' not in response.text
 
 
 def test_watch_page_estimate_without_any_run(client: Client) -> None:
@@ -455,6 +565,35 @@ def test_stop_requests_daily_stop(client: Client) -> None:
     assert run.stop_requested is True
 
 
+@pytest.mark.parametrize(
+    ("form", "expected"),
+    [
+        ({"next": "watch"}, WATCH_URL),
+        ({"next": "report"}, REPORT_URL),
+        ({}, REPORT_URL),
+        ({"next": "https://evil.example/"}, REPORT_URL),  # chỉ nhận tên trong danh sách cho phép
+        ({"next": "//evil.example"}, REPORT_URL),
+    ],
+)
+def test_stop_returns_to_the_page_it_was_pressed_on(
+    client: Client, form: dict[str, str], expected: str
+) -> None:
+    run = today_run()
+
+    response = client.post(reverse("rising:stop", args=[run.pk]), form)
+
+    run.refresh_from_db()
+    assert (response.status_code, response["Location"]) == (302, expected)
+    assert run.stop_requested is True
+
+
+def test_stop_buttons_remember_which_page_they_are_on(client: Client) -> None:
+    today_run()
+
+    assert 'name="next" value="report"' in client.get(REPORT_URL).text
+    assert 'name="next" value="watch"' in client.get(WATCH_URL).text
+
+
 def test_stop_unknown_run_is_404_and_get_is_refused(client: Client) -> None:
     assert client.post(reverse("rising:stop", args=[999])).status_code == 404
     assert client.get(reverse("rising:stop", args=[1])).status_code == 405
@@ -496,6 +635,18 @@ def test_nav_marks_rising_star_on_the_refused_run_now_page(client: Client) -> No
     page = client.post(RUN_URL).text
 
     assert 'aria-current="page">Rising star<' in page
+
+
+def test_nav_ignores_a_same_named_view_of_another_namespace() -> None:
+    # Chỉ "rising:watch" (có namespace) đánh dấu "Theo dõi"; view `watch` của app khác thì không.
+    request = RequestFactory().get("/khac/watch/")
+    request.resolver_match = ResolverMatch(
+        lambda request: None, (), {}, url_name="watch", app_names=["khac"], namespaces=["khac"]
+    )
+
+    page = render_to_string("base.html", request=request)
+
+    assert 'aria-current="page"' not in _nav(page)
 
 
 def _nav(page: str) -> str:

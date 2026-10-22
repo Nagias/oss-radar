@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 import pytest
 from django.utils import timezone
-from pytest_django.fixtures import Settings
+from pytest_django.fixtures import DjangoAssertNumQueries, Settings
 
 from features.discovery.models import ScanRun
 from features.rising import services
@@ -156,6 +156,30 @@ def test_status_of_finished_run_offers_neither_button() -> None:
     assert (partial.can_stop, partial.can_run_now) == (False, False)
 
 
+def test_run_now_label_says_continue_only_when_todays_run_exists() -> None:
+    assert services.today_status(now=at(9, 0)).run_now_label == "Chạy ngay"
+
+    run = today_run(status=Status.PAUSED, heartbeat_at=None)
+    assert services.today_status().run_now_label == "Chạy tiếp"
+
+    DailyRun.objects.filter(pk=run.pk).update(status=Status.FAILED)
+    assert services.today_status().run_now_label == "Chạy tiếp"
+
+    # Lượt "đang chạy" nhưng nhịp sống đã cũ (trang chưa kịp đánh dấu Tạm dừng): cũng là chạy tiếp.
+    DailyRun.objects.filter(pk=run.pk).update(
+        status=Status.RUNNING, heartbeat_at=timezone.now() - timedelta(minutes=10)
+    )
+    stale = services.today_status()
+    assert (stale.can_run_now, stale.run_now_label) == (True, "Chạy tiếp")
+
+
+def test_busy_and_stale_texts_name_the_continue_button() -> None:
+    assert "Chạy tiếp" in services.REASON_BUSY_APP
+    assert "Chạy tiếp" in services.HEADLINE_STALE
+    assert "Chạy ngay" not in services.REASON_BUSY_APP + services.HEADLINE_STALE
+    assert "Chạy ngay" in services.HEADLINE_NO_RUN_LATE  # chưa có lượt: nút là Chạy ngay
+
+
 def test_status_ignores_other_days() -> None:
     make_run(timezone.localdate() - timedelta(days=1))
 
@@ -166,7 +190,7 @@ def test_status_ignores_other_days() -> None:
 
 
 def test_watch_overview_pairs_each_query_with_its_latest_scan(
-    watch_list: list[WatchQuery],
+    watch_list: list[WatchQuery], django_assert_max_num_queries: DjangoAssertNumQueries
 ) -> None:
     today = timezone.localdate()
     old_run = make_run(today - timedelta(days=1))
@@ -179,7 +203,8 @@ def test_watch_overview_pairs_each_query_with_its_latest_scan(
     )
     link_scan(old_run, watch_list[1], status=ScanRun.Status.SUCCEEDED, position=2, fetched_count=7)
 
-    rows = services.watch_overview()
+    with django_assert_max_num_queries(2):  # không tốn một truy vấn cho mỗi truy vấn theo dõi
+        rows = services.watch_overview()
 
     assert [row.watch for row in rows] == watch_list
     assert (rows[0].last_scan, rows[0].last_day) == (last, today)

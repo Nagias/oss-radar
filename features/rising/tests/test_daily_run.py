@@ -621,11 +621,11 @@ def test_release_unstarted_daily_run_pauses_it_without_auto_continue(use_fake: U
     services.release_unstarted_daily_run(run)  # luồng nền đã bị việc khác chiếm
 
     assert (run.status, run.pause_kind) == (Status.PAUSED, PauseKind.STOPPED)
-    assert run.stop_reason == "App đang bận việc nền khác — bấm Chạy ngay khi app rảnh."
+    assert run.stop_reason == "App đang bận việc nền khác — bấm Chạy tiếp khi app rảnh."
     assert (run.heartbeat_at, run.runner_token) == (None, "")
     assert services.live_daily_run() is None
     assert services.run_daily_if_due() is None
-    assert services.prepare_daily_run().pk == run.pk  # bấm Chạy ngay khi app rảnh
+    assert services.prepare_daily_run().pk == run.pk  # bấm Chạy tiếp khi app rảnh
     assert fake.search.queries == []
 
 

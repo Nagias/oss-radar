@@ -11,11 +11,15 @@ from features.rising import growth, services
 from features.rising.forms import ReportFilterForm, WatchQueryForm
 from features.rising.models import DailyRun, WatchQuery
 
+# Trang mà nút Dừng được bấm từ đó → nơi quay về. Chỉ nhận tên trong danh sách này.
+_STOP_RETURNS = {"report": "rising:report", "watch": "rising:watch"}
+
 
 @require_GET
 def report(request: HttpRequest) -> HttpResponse:
     services.pause_stale_daily_runs()
-    return render(request, "rising/report.html", _report_context(request.GET))
+    context = _report_context(request.GET, refresh_url=request.get_full_path())
+    return render(request, "rising/report.html", context)
 
 
 @require_http_methods(["GET", "POST"])
@@ -28,7 +32,9 @@ def watch(request: HttpRequest) -> HttpResponse:
             return redirect("rising:watch")
     else:
         form = WatchQueryForm(initial={"position": services.next_watch_position()})
-    return render(request, "rising/watch.html", _watch_context(form))
+    # Trang trả về sau POST (form báo lỗi) không tự tải lại: tải lại bằng GET sẽ mất chữ đã nhập.
+    refresh_url = request.get_full_path() if request.method == "GET" else None
+    return render(request, "rising/watch.html", _watch_context(form, refresh_url=refresh_url))
 
 
 @require_http_methods(["GET", "POST"])
@@ -67,17 +73,19 @@ def run_now(request: HttpRequest) -> HttpResponse:
 def stop(request: HttpRequest, run_id: int) -> HttpResponse:
     run = get_object_or_404(DailyRun, pk=run_id)
     services.request_daily_stop(run)
-    return redirect("rising:report")
+    return redirect(_STOP_RETURNS.get(request.POST.get("next", ""), "rising:report"))
 
 
-def _report_context(query: QueryDict, *, run_error: str | None = None) -> dict[str, Any]:
+def _report_context(
+    query: QueryDict, *, refresh_url: str | None = None, run_error: str | None = None
+) -> dict[str, Any]:
+    """`refresh_url`: nơi trang tự tải lại khi lượt đang chạy; `None` = không tự tải lại.
+
+    Trang từ chối "Chạy ngay" nằm ở /rising/run/ (chỉ nhận POST) nên không được truyền URL nào.
+    """
     status = services.today_status()
     form = ReportFilterForm(query or None)
-    max_stars, min_gain, day = growth.RISING_MAX_STARS, growth.RISING_MIN_GAIN_7D, None
-    if form.is_bound and form.is_valid():
-        max_stars, min_gain, day = (
-            form.cleaned_data[name] for name in ("max_stars", "min_gain", "day")
-        )
+    max_stars, min_gain, day = form.values()
     run = services.report_run_for(day) if day is not None else services.latest_report_run()
     return {
         "status": status,
@@ -92,12 +100,12 @@ def _report_context(query: QueryDict, *, run_error: str | None = None) -> dict[s
         "min_gain": min_gain,
         "candidate_min": growth.CANDIDATE_MIN_ESTIMATE_7D,
         "run_error": run_error,
-        "auto_refresh": status.is_live,
+        "refresh_url": refresh_url if status.is_live else None,
         "busy_label": background.busy_label(),
     }
 
 
-def _watch_context(form: WatchQueryForm) -> dict[str, Any]:
+def _watch_context(form: WatchQueryForm, *, refresh_url: str | None) -> dict[str, Any]:
     status = services.today_status()
     return {
         "status": status,
@@ -107,7 +115,7 @@ def _watch_context(form: WatchQueryForm) -> dict[str, Any]:
         "runs": services.recent_daily_runs(),
         "form": form,
         "run_error": None,
-        "auto_refresh": status.is_live,
+        "refresh_url": refresh_url if status.is_live else None,
         "busy_label": background.busy_label(),
     }
 

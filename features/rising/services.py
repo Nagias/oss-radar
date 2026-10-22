@@ -23,7 +23,7 @@ from datetime import time as clock_time
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import F, Max, QuerySet, Sum
+from django.db.models import F, Max, OuterRef, QuerySet, Subquery, Sum
 from django.utils import formats, timezone
 
 from core import background
@@ -82,7 +82,7 @@ REASON_BLOCKED = (
 REASON_BUSY = (
     "Đang có lần quét khác chạy (#{scan_id}) — app tự chạy tiếp sau ít nhất {minutes} phút."
 )
-REASON_BUSY_APP = "App đang bận việc nền khác — bấm Chạy ngay khi app rảnh."
+REASON_BUSY_APP = "App đang bận việc nền khác — bấm Chạy tiếp khi app rảnh."
 REASON_VERIFY_BLOCKED = (
     "GitHub hoặc mạng đang chặn lúc xác minh lịch sử star — app tự chạy tiếp sau ít nhất "
     "{minutes} phút."
@@ -264,7 +264,7 @@ def request_daily_stop(run: DailyRun) -> None:
 
 
 def release_unstarted_daily_run(run: DailyRun) -> None:
-    """Lượt vừa giữ chỗ nhưng luồng nền đã bị việc khác chiếm → Tạm dừng, chờ bấm Chạy ngay.
+    """Lượt vừa giữ chỗ nhưng luồng nền đã bị việc khác chiếm → Tạm dừng, chờ bấm Chạy tiếp.
 
     Không để nó "đang chạy" nằm chờ sau một việc dài: nhịp sống sẽ cũ đi và nó bị coi là gián đoạn.
     Ghi là "bấm Dừng" (không phải gián đoạn) nên cũng không bị tự chạy tiếp.
@@ -1084,20 +1084,25 @@ HEADLINE_NO_RUN_LATE = (
     "hoặc bấm Chạy ngay."
 )
 HEADLINE_STALE = (
-    "Bị gián đoạn — lượt không còn nhịp sống. App tự chạy tiếp ở nhịp sau, hoặc bấm Chạy ngay."
+    "Bị gián đoạn — lượt không còn nhịp sống. App tự chạy tiếp ở nhịp sau, hoặc bấm Chạy tiếp."
 )
 RECENT_RUNS_SHOWN = 14
 
 
 @dataclass(frozen=True, slots=True)
 class TodayStatus:
-    """Lượt hôm nay cho đầu trang: câu mô tả, và nút nào được hiện (Chạy ngay / Dừng)."""
+    """Lượt hôm nay cho đầu trang: câu mô tả và các nút được hiện (Chạy ngay / Chạy tiếp / Dừng)."""
 
     run: DailyRun | None
     headline: str
     is_live: bool
     can_stop: bool
     can_run_now: bool
+
+    @property
+    def run_now_label(self) -> str:
+        """Tên nút chạy: "Chạy ngay" khi hôm nay chưa có lượt, "Chạy tiếp" khi đã có lượt dở."""
+        return "Chạy ngay" if self.run is None else "Chạy tiếp"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1123,8 +1128,8 @@ class DailyEstimate:
 def today_status(*, now: datetime | None = None) -> TodayStatus:
     """Trạng thái lượt hôm nay (giờ Việt Nam) và các nút được hiện.
 
-    - "Dừng" chỉ khi lượt đang chạy thật; "Chạy ngay" khi chưa có lượt, hoặc lượt đang Tạm dừng /
-      Lỗi / bị gián đoạn. Lượt đã Xong thì không nút nào: mỗi ngày một báo cáo.
+    - "Dừng" chỉ khi lượt đang chạy thật; nút chạy ("Chạy ngay" khi chưa có lượt, "Chạy tiếp" khi
+      lượt đang Tạm dừng / Lỗi / bị gián đoạn). Lượt đã Xong thì không nút nào: mỗi ngày một lượt.
     - `now` quyết định ngày nào là "hôm nay"; nhịp sống luôn so với giờ thật.
     """
     moment = now if now is not None else timezone.now()
@@ -1148,17 +1153,21 @@ def today_status(*, now: datetime | None = None) -> TodayStatus:
 
 def watch_overview() -> list[WatchRow]:
     """Danh sách theo dõi (theo thứ tự), mỗi truy vấn kèm lần quét gần nhất của nó."""
+    newest_link = (
+        DailyRunScan.objects.filter(watch_query=OuterRef("pk"))
+        .order_by("-daily_run__day", "-position")
+        .values("pk")[:1]
+    )
+    watches = list(WatchQuery.objects.annotate(newest_link_id=Subquery(newest_link)))
+    links = DailyRunScan.objects.select_related("scan_run", "daily_run").in_bulk(
+        [watch.newest_link_id for watch in watches if watch.newest_link_id is not None]
+    )
     rows: list[WatchRow] = []
-    for watch in WatchQuery.objects.all():
-        link = (
-            DailyRunScan.objects.filter(watch_query=watch)
-            .select_related("scan_run", "daily_run")
-            .order_by("-daily_run__day", "-position")
-            .first()
-        )
-        if link is None:
+    for watch in watches:
+        if watch.newest_link_id is None:
             rows.append(WatchRow(watch, None, None))
         else:
+            link = links[watch.newest_link_id]
             rows.append(WatchRow(watch, link.scan_run, link.daily_run.day))
     return rows
 

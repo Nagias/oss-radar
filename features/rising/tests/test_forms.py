@@ -114,6 +114,16 @@ def test_report_filter_reads_values_including_zero_gain() -> None:
     assert form.cleaned_data == {"max_stars": 500, "min_gain": 0, "day": date(2026, 10, 21)}
 
 
+def test_report_filter_values_keep_the_valid_fields_when_another_is_wrong() -> None:
+    wrong_gain = ReportFilterForm(data={"max_stars": "500", "min_gain": "-5", "day": "2026-10-21"})
+    wrong_day = ReportFilterForm(data={"max_stars": "500", "min_gain": "70", "day": "hôm qua"})
+    unbound = ReportFilterForm()
+
+    assert wrong_gain.values() == (500, 50, date(2026, 10, 21))
+    assert wrong_day.values() == (500, 70, None)
+    assert unbound.values() == (1000, 50, None)
+
+
 @pytest.mark.parametrize(
     ("data", "field"),
     [
