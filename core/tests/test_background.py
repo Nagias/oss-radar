@@ -81,7 +81,11 @@ def test_process_exits_promptly_while_a_long_job_runs() -> None:
 def test_cancelled_job_is_skipped_and_worker_moves_on() -> None:
     gate = threading.Event()
     ran: list[int] = []
-    blocker = background.submit(lambda arg: gate.wait(5), 0)
+
+    def hold_worker(arg: int) -> None:
+        gate.wait(arg)
+
+    blocker = background.submit(hold_worker, 5)
     waiting = background.submit(ran.append, 1)
 
     assert waiting.cancel()  # huỷ khi còn đang xếp hàng
