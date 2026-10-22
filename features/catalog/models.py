@@ -34,3 +34,34 @@ class Repository(models.Model):
     def is_organization(self) -> bool:
         """Chủ sở hữu là tổ chức (công ty, viện nghiên cứu…) chứ không phải cá nhân."""
         return self.owner_type == "Organization"
+
+
+class StarSnapshot(models.Model):
+    """Số star của một repo vào một ngày (giờ Việt Nam). Mỗi repo tối đa một dòng mỗi ngày.
+
+    Làm mốc để lọc thô rising star mà không tốn lượt gọi API; chỉ giữ ngắn hạn
+    (xem `prune_snapshots`).
+    """
+
+    repository = models.ForeignKey(
+        Repository,
+        verbose_name="Repo",
+        on_delete=models.CASCADE,
+        related_name="star_snapshots",
+    )
+    day = models.DateField("Ngày")
+    stars = models.PositiveIntegerField("Số star")
+    captured_at = models.DateTimeField("Thời điểm ghi")
+
+    class Meta:
+        verbose_name = "ảnh chụp star"
+        verbose_name_plural = "ảnh chụp star"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["repository", "day"], name="catalog_unique_snapshot_per_day"
+            ),
+        ]
+        indexes = [models.Index(fields=["day"], name="catalog_snapshot_day_idx")]
+
+    def __str__(self) -> str:
+        return f"{self.repository_id} @ {self.day}: {self.stars}"
