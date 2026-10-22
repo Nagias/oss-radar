@@ -47,6 +47,7 @@ REASON_BLOCKED = (
 REASON_BUSY = (
     "Đang có lần quét khác chạy (#{scan_id}) — app tự chạy tiếp sau ít nhất {minutes} phút."
 )
+REASON_BUSY_APP = "App đang bận việc nền khác — bấm Chạy ngay khi app rảnh."
 _UNEXPECTED_REASON = "Lỗi không mong đợi trong lượt quét hằng ngày — xem log của máy chủ."
 # Lý do "mất kết nối" của lần quét có điền số lát lỗi → nhận ra bằng phần đầu cố định của câu.
 _CONNECTION_PREFIX = discovery.REASON_CONNECTION.partition("{")[0]
@@ -55,6 +56,10 @@ _SCAN_FINISHED = (
     ScanRun.Status.SUCCEEDED_PARTIAL,
     ScanRun.Status.FAILED,
 )
+_SCAN_UNFINISHED = (ScanRun.Status.RUNNING, ScanRun.Status.PAUSED)
+# Lỗi tự khỏi được sau khi người dùng sửa (token, code) → chạy tiếp thì quét lại truy vấn đó bằng
+# một lần quét mới. Truy vấn sai cú pháp thì không tự khỏi → coi như đã xong.
+_RESCAN_ERROR_KINDS = (ScanRun.ErrorKind.AUTH, ScanRun.ErrorKind.UNEXPECTED)
 
 
 class DailyRunBlockedError(Exception):
@@ -68,13 +73,14 @@ class DailySupersededError(Exception):
 # --- Nhịp sống, dọn lượt cũ ------------------------------------------------------------------
 
 
-def live_daily_run(*, now: datetime | None = None) -> DailyRun | None:
-    """Lượt đang chạy thật: nhịp sống của chính lượt, hoặc của lần quét con đang chạy, còn mới.
+def live_daily_run() -> DailyRun | None:
+    """Lượt đang chạy thật: nhịp sống của chính lượt, hoặc của lần quét con, còn mới.
 
     Ở bước quét lại, lượt không tự ghi nhịp sống trong lúc lần quét con chạy (có khi hàng chục
-    phút) — lần quét con còn sống thì lượt còn sống.
+    phút) — lần quét con còn sống thì lượt còn sống. Nhịp sống luôn so với giờ thật, vì nó được ghi
+    bằng giờ thật.
     """
-    threshold = (now if now is not None else timezone.now()) - discovery.LIVE_HEARTBEAT_WINDOW
+    threshold = timezone.now() - discovery.LIVE_HEARTBEAT_WINDOW
     for run in DailyRun.objects.filter(status=DailyRun.Status.RUNNING):
         if _is_live(run, threshold):
             return run
@@ -144,6 +150,7 @@ def prepare_daily_run(*, now: datetime | None = None) -> DailyRun:
 
     Lượt trả về đã giữ chỗ "đang chạy"; chạy thật bằng `execute_daily_run`. Từ chối
     (`DailyRunBlockedError`) khi đang có lần quét hay lượt khác chạy thật, hoặc hôm nay đã xong.
+    Bấm trước 7:00 vẫn được: chỉ lịch tự động mới chờ 7:00.
     `now` là lúc bấm (quyết định ngày nào); nhịp sống luôn ghi bằng giờ thật.
     """
     moment = now if now is not None else timezone.now()
@@ -187,9 +194,11 @@ def request_daily_stop(run: DailyRun) -> None:
     """Bấm Dừng ở trang lượt: luồng chạy dừng trước truy vấn kế tiếp.
 
     Đang quét lại thì dừng luôn lần quét con đang chạy. Lượt đang Tạm dừng chờ tự chạy tiếp thì
-    thôi không tự chạy tiếp nữa.
+    thôi không tự chạy tiếp nữa. Lượt đã xong hoặc đã Lỗi thì không có gì để dừng.
     """
-    DailyRun.objects.filter(pk=run.pk).update(stop_requested=True)
+    DailyRun.objects.filter(
+        pk=run.pk, status__in=[DailyRun.Status.RUNNING, DailyRun.Status.PAUSED]
+    ).update(stop_requested=True)
     DailyRun.objects.filter(pk=run.pk, status=DailyRun.Status.PAUSED).update(
         pause_kind=DailyRun.PauseKind.STOPPED, stop_reason=REASON_STOPPED
     )
@@ -200,6 +209,23 @@ def request_daily_stop(run: DailyRun) -> None:
     for link in children:
         if link.scan_run.is_live:
             discovery.request_stop(link.scan_run)
+
+
+def release_unstarted_daily_run(run: DailyRun) -> None:
+    """Lượt vừa giữ chỗ nhưng luồng nền đã bị việc khác chiếm → Tạm dừng, chờ bấm Chạy ngay.
+
+    Không để nó "đang chạy" nằm chờ sau một việc dài: nhịp sống sẽ cũ đi và nó bị coi là gián đoạn.
+    Ghi là "bấm Dừng" (không phải gián đoạn) nên cũng không bị tự chạy tiếp.
+    """
+    DailyRun.objects.filter(pk=run.pk, status=DailyRun.Status.RUNNING, runner_token="").update(
+        status=DailyRun.Status.PAUSED,
+        pause_kind=DailyRun.PauseKind.STOPPED,
+        stop_reason=REASON_BUSY_APP,
+        paused_at=timezone.now(),
+        heartbeat_at=None,
+        runner_token="",
+    )
+    run.refresh_from_db()
 
 
 def run_daily_if_due(*, now: datetime | None = None) -> DailyRun | None:
@@ -291,8 +317,6 @@ class _DailyRunner:
     def _rescan(self) -> bool:
         """Mỗi truy vấn đang bật là một lần quét sâu, chạy lần lượt. `False` = lượt phải dừng."""
         watch_ids = list(WatchQuery.objects.filter(enabled=True).values_list("pk", flat=True))
-        if not watch_ids:
-            self._add_problem(EMPTY_WATCH_LIST_NOTE)
         for index, watch_id in enumerate(watch_ids, start=1):
             run = self._check_in()
             if run.stop_requested:
@@ -311,12 +335,15 @@ class _DailyRunner:
             )
             if not self._rescan_one(run, watch):
                 return False
+        self._note_left_behind()
         self._update(**self._totals(), heartbeat_at=timezone.now())
         return True
 
     def _rescan_one(self, run: DailyRun, watch: WatchQuery) -> bool:
-        link = run.scans.select_related("scan_run").filter(watch_query=watch).first()
-        if link is None:
+        # Xét lần quét mới nhất của truy vấn: lần quét lỗi token / lỗi code được thay bằng lần mới.
+        links = run.scans.select_related("scan_run").filter(watch_query=watch)
+        link = links.order_by("-position").first()
+        if link is None or _needs_new_scan(link.scan_run):
             try:
                 scan = self._start_scan(run, watch)
             except discovery.ScanAlreadyRunningError as exc:
@@ -380,6 +407,22 @@ class _DailyRunner:
             self.pause(DailyRun.PauseKind.INTERRUPTED, REASON_INTERRUPTED)
         return False
 
+    def _note_left_behind(self) -> None:
+        """Lần quét dở của truy vấn đã bị tắt hoặc xoá (lúc lượt đang dừng) → ghi lại, không bỏ rơi.
+
+        Sau vòng quét lại, mọi truy vấn đang bật đều đã xong lần quét mới nhất của nó; lần quét còn
+        dở chỉ có thể thuộc truy vấn không còn được quét nữa.
+        """
+        leftovers = DailyRunScan.objects.filter(
+            daily_run_id=self.run_id, scan_run__status__in=_SCAN_UNFINISHED
+        ).select_related("scan_run")
+        for link in leftovers:
+            scan = link.scan_run
+            self._add_problem(
+                f"Truy vấn «{scan.query}» (lần quét #{scan.pk}) đã tắt hoặc bị xoá khỏi danh sách "
+                "theo dõi — lần quét còn dở, tiếp tục bằng tay ở trang lần quét đó được."
+            )
+
     def _note(self, scan: ScanRun) -> None:
         """Lần quét con xong mà còn sót hoặc lỗi → ghi vào `problems` (ghi một lần dù chạy tiếp)."""
         if scan.status == ScanRun.Status.SUCCEEDED_PARTIAL:
@@ -411,11 +454,16 @@ class _DailyRunner:
         )
 
     def _finish(self) -> None:
-        problems = list(self._load().problems)
+        run = self._load()
+        problems = list(run.problems)
         status = DailyRun.Status.SUCCEEDED_PARTIAL if problems else DailyRun.Status.SUCCEEDED
+        reason = _summary(problems)
+        if not problems and not run.scans.exists():
+            # Danh sách theo dõi trống không làm sót gì → vẫn Xong, chỉ nhắc thêm truy vấn.
+            reason = EMPTY_WATCH_LIST_NOTE
         self._write_outcome(
             status=status,
-            stop_reason=_summary(problems),
+            stop_reason=reason,
             stop_requested=False,
             finished_at=timezone.now(),
         )
@@ -475,17 +523,33 @@ def _is_live(run: DailyRun, threshold: datetime) -> bool:
         return False
     if run.heartbeat_at is not None and run.heartbeat_at >= threshold:
         return True
-    # Lần quét con xét bằng `ScanRun.is_live` (giờ thật): nhịp sống luôn được ghi bằng giờ thật.
-    children = run.scans.select_related("scan_run").filter(scan_run__status=ScanRun.Status.RUNNING)
-    return any(link.scan_run.is_live for link in children)
+    # Xét nhịp sống của lần quét con bất kể trạng thái: lần quét con vừa xong (nhịp sống còn mới)
+    # mà lượt chưa kịp ghi nhịp sống của mình thì lượt vẫn đang chạy, không phải bị gián đoạn.
+    return run.scans.filter(scan_run__heartbeat_at__gte=threshold).exists()
 
 
 def _child_stop_requested(run: DailyRun) -> bool:
-    """Có lần quét con người dùng đã bấm Dừng mà chưa kịp dừng (cờ còn nguyên vì app tắt trước)."""
-    return run.scans.filter(
-        scan_run__stop_requested=True,
-        scan_run__status__in=[ScanRun.Status.RUNNING, ScanRun.Status.PAUSED],
-    ).exists()
+    """Lần quét con làm gần nhất đã bị bấm Dừng, mà app tắt trước khi lượt kịp ghi "Tạm dừng".
+
+    Hai cách bị lỡ: lần quét con chưa kịp thấy cờ Dừng (cờ còn nguyên), hoặc đã dừng xong theo cờ
+    nhưng lượt chưa kịp xử lý kết quả đó. Chỉ xét lần quét làm gần nhất: lần quét dở cũ của truy vấn
+    đã tắt không được biến mọi lần gián đoạn sau thành "bấm Dừng".
+    """
+    latest = (
+        run.scans.select_related("scan_run")
+        .order_by(F("scan_run__heartbeat_at").desc(nulls_last=True), "-position")
+        .first()
+    )
+    if latest is None:
+        return False
+    scan = latest.scan_run
+    if scan.status in _SCAN_UNFINISHED and scan.stop_requested:
+        return True
+    return scan.status == ScanRun.Status.PAUSED and scan.stop_reason == discovery.REASON_STOPPED
+
+
+def _needs_new_scan(scan: ScanRun) -> bool:
+    return scan.status == ScanRun.Status.FAILED and scan.error_kind in _RESCAN_ERROR_KINDS
 
 
 def _ensure_nothing_live() -> None:

@@ -90,7 +90,9 @@ class DailyRun(models.Model):
 class DailyRunScan(models.Model):
     """Lần quét của một truy vấn theo dõi trong một lượt hằng ngày.
 
-    Truy vấn bị xoá giữa chừng thì liên kết tới lần quét vẫn còn (`watch_query` thành trống).
+    Truy vấn bị xoá giữa chừng thì liên kết tới lần quét vẫn còn (`watch_query` thành trống). Một
+    truy vấn có thể có hai lần quét trong cùng lượt: lần đầu lỗi token / lỗi code, chạy tiếp thì
+    quét lại bằng lần mới (`position` lớn hơn).
     """
 
     daily_run = models.ForeignKey(DailyRun, on_delete=models.CASCADE, related_name="scans")

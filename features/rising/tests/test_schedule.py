@@ -171,6 +171,43 @@ def test_stop_pressed_just_before_app_closed_is_not_auto_continued(
     assert fake.search.queries == []
 
 
+def test_child_stopped_just_before_app_closed_is_not_auto_continued(
+    watch_list: list[WatchQuery], use_fake: UseFake
+) -> None:
+    fake = use_fake(some_repos())
+    run = services.prepare_daily_run()
+    child = discovery.start_scan(
+        discovery.ScanRequest(
+            watch_list[0].query, 10, None, None, None, budget=300, origin=ScanRun.Origin.DAILY
+        )
+    )
+    DailyRunScan.objects.create(
+        daily_run=run, watch_query=watch_list[0], scan_run=child, position=1
+    )
+    # Lần quét con đã tự dừng theo nút Dừng (cờ đã được xoá); app tắt trước khi lượt kịp ghi.
+    long_ago = timezone.now() - timedelta(minutes=10)
+    ScanRun.objects.filter(pk=child.pk).update(
+        status=ScanRun.Status.PAUSED,
+        stop_reason=discovery.REASON_STOPPED,
+        stop_requested=False,
+        heartbeat_at=long_ago,
+    )
+    DailyRun.objects.filter(pk=run.pk).update(heartbeat_at=long_ago)
+
+    assert services.run_daily_if_due(now=at(10)) is None
+
+    run.refresh_from_db()
+    assert (run.status, run.pause_kind) == (Status.PAUSED, PauseKind.STOPPED)
+    assert fake.search.queries == []
+
+
+def test_run_now_before_7am_is_allowed() -> None:
+    # "Bấm Chạy ngay trước 7:00 vẫn được" (thiết kế mục 5): chỉ lịch tự động mới chờ 7:00.
+    run = services.prepare_daily_run(now=at(6))
+
+    assert (run.day, run.status, run.started_at) == (timezone.localdate(), Status.RUNNING, at(6))
+
+
 def test_previous_day_unfinished_run_is_closed_then_today_runs(
     watch_list: list[WatchQuery], use_fake: UseFake
 ) -> None:

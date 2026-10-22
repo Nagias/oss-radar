@@ -101,7 +101,10 @@ class AppKilledError(BaseException):
 
 
 def make_heartbeats_stale() -> None:
-    """Nhịp sống của mọi lượt và lần quét "đang chạy" lùi về 10 phút trước: app đã tắt từ lúc đó."""
+    """App đã tắt từ 10 phút trước: mọi nhịp sống mới hơn mốc đó lùi về đúng mốc đó.
+
+    Kể cả lần quét đã xong: lần quét con vừa xong (nhịp sống còn mới) vẫn giữ cho lượt "đang chạy".
+    """
     long_ago = timezone.now() - timedelta(minutes=10)
-    DailyRun.objects.filter(status=DailyRun.Status.RUNNING).update(heartbeat_at=long_ago)
-    ScanRun.objects.filter(status=ScanRun.Status.RUNNING).update(heartbeat_at=long_ago)
+    DailyRun.objects.filter(heartbeat_at__gt=long_ago).update(heartbeat_at=long_ago)
+    ScanRun.objects.filter(heartbeat_at__gt=long_ago).update(heartbeat_at=long_ago)

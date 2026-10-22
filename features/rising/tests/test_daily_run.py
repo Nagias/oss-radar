@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
+from features.catalog.services import upsert_repositories
 from features.discovery import services as discovery
 from features.discovery.models import ScanRun
 from features.rising import services
@@ -37,7 +38,13 @@ def run_daily_now() -> DailyRun:
 
 
 def scan_of(run: DailyRun, query: str) -> ScanRun:
-    return run.scans.select_related("scan_run").get(scan_run__query=query).scan_run
+    """Lần quét mới nhất của truy vấn trong lượt (truy vấn quét lại sau lỗi token có hai lần)."""
+    return scans_of(run, query)[-1]
+
+
+def scans_of(run: DailyRun, query: str) -> list[ScanRun]:
+    links = run.scans.select_related("scan_run").filter(scan_run__query=query)
+    return [link.scan_run for link in links.order_by("position")]
 
 
 def manual_request(query: str = "topic:llm") -> discovery.ScanRequest:
@@ -116,6 +123,71 @@ def test_auth_error_fails_whole_run(watch_list: list[WatchQuery], use_fake: UseF
     assert run.scans.count() == 2
     assert run.finished_at is not None
     assert run.runner_token == ""
+
+
+def test_continue_after_auth_error_rescans_only_the_failed_query(
+    watch_list: list[WatchQuery], use_fake: UseFake
+) -> None:
+    fake = use_fake(some_repos())
+    fake.search.fail_when = lambda sent: 401 if sent.startswith(f"{B} ") else None
+    failed = run_daily_now()
+    assert failed.status == Status.FAILED
+
+    fake.search.fail_when = None  # chủ dự án sửa token rồi bấm "Chạy tiếp"
+    run = run_daily_now()
+
+    assert (run.pk, run.status) == (failed.pk, Status.SUCCEEDED)
+    assert run.problems == []  # không còn ghi chú "token sai" cũ của truy vấn nay đã xong
+    first_b, second_b = scans_of(run, B)
+    assert first_b.error_kind == ScanRun.ErrorKind.AUTH
+    assert (second_b.status, second_b.origin) == (ScanRun.Status.SUCCEEDED, ScanRun.Origin.DAILY)
+    assert list(run.scans.values_list("position", flat=True)) == [1, 2, 3, 4]
+    assert calls_for(fake, A) == 3  # không quét lại truy vấn đã xong
+    assert calls_for(fake, B) == 1 + 3
+    assert calls_for(fake, C) == 3
+    assert run.search_calls_used == 3 + 1 + 3 + 3
+
+
+def test_continue_after_unexpected_error_rescans_the_crashed_query(
+    watch_list: list[WatchQuery], use_fake: UseFake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = use_fake(some_repos())
+
+    def broken_upsert(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("lỗi lập trình giả lập")
+
+    monkeypatch.setattr(discovery, "upsert_repositories", broken_upsert)
+    run = services.prepare_daily_run()
+    with pytest.raises(RuntimeError, match="giả lập"):
+        services.execute_daily_run(run.pk)
+
+    monkeypatch.setattr(discovery, "upsert_repositories", upsert_repositories)  # đã sửa lỗi code
+    continued = run_daily_now()
+
+    assert (continued.pk, continued.status) == (run.pk, Status.SUCCEEDED)
+    assert [scan.error_kind for scan in scans_of(continued, A)] == [
+        ScanRun.ErrorKind.UNEXPECTED,
+        "",
+    ]
+    assert calls_for(fake, A) == 1 + 3
+
+
+def test_continue_does_not_rescan_query_rejected_by_github(
+    watch_list: list[WatchQuery], use_fake: UseFake
+) -> None:
+    fake = use_fake(some_repos())
+    fake.search.fail_when = lambda sent: {B: 422, C: 401}.get(sent.split(" ")[0])
+    failed = run_daily_now()
+    assert failed.status == Status.FAILED
+
+    fake.search.fail_when = None
+    run = run_daily_now()
+
+    assert run.status == Status.SUCCEEDED_PARTIAL  # truy vấn sai cú pháp không tự khỏi
+    assert len(scans_of(run, B)) == 1
+    assert calls_for(fake, B) == 1
+    assert len(run.problems) == 1
+    assert B in run.problems[0]
 
 
 def test_unexpected_error_marks_failed_and_reraises(
@@ -383,6 +455,80 @@ def test_live_daily_run_uses_child_scan_heartbeat(watch_list: list[WatchQuery]) 
     assert services.live_daily_run() is None
 
 
+def test_run_stays_live_right_after_its_child_scan_finishes(watch_list: list[WatchQuery]) -> None:
+    run = services.prepare_daily_run()
+    child = discovery.start_scan(
+        discovery.ScanRequest(A, 10, None, None, None, budget=300, origin=ScanRun.Origin.DAILY)
+    )
+    DailyRunScan.objects.create(
+        daily_run=run, watch_query=watch_list[0], scan_run=child, position=1
+    )
+    # Lần quét con vừa xong (nhịp sống còn mới); lượt chưa kịp ghi nhịp sống của mình.
+    ScanRun.objects.filter(pk=child.pk).update(status=ScanRun.Status.SUCCEEDED)
+    DailyRun.objects.filter(pk=run.pk).update(heartbeat_at=timezone.now() - timedelta(minutes=10))
+
+    assert services.live_daily_run() == run
+    assert services.pause_stale_daily_runs() == 0
+
+
+@pytest.mark.parametrize("edit", ["disable", "delete"])
+def test_unfinished_scan_of_removed_watch_query_is_noted_on_continue(
+    watch_list: list[WatchQuery], use_fake: UseFake, edit: str
+) -> None:
+    fake = use_fake(some_repos())
+
+    def press_stop_on_scan_page(sent: str) -> None:
+        live = discovery.live_scan()
+        if sent.startswith(f"{B} ") and live is not None:
+            discovery.request_stop(live)
+
+    fake.search.on_query = press_stop_on_scan_page
+    stopped = run_daily_now()
+    assert stopped.pause_kind == PauseKind.STOPPED
+    fake.search.on_query = None
+    if edit == "disable":
+        WatchQuery.objects.filter(query=B).update(enabled=False)
+    else:
+        WatchQuery.objects.filter(query=B).delete()
+
+    run = run_daily_now()
+
+    left_behind = scan_of(run, B)
+    assert left_behind.status == ScanRun.Status.PAUSED
+    assert run.status == Status.SUCCEEDED_PARTIAL  # không bỏ rơi lần quét dở trong im lặng
+    assert len(run.problems) == 1
+    assert B in run.problems[0]
+    assert f"#{left_behind.pk}" in run.problems[0]
+    assert "còn dở" in run.problems[0]
+    assert calls_for(fake, B) == 1
+    assert calls_for(fake, C) == 3
+
+
+@pytest.mark.parametrize("status", [Status.SUCCEEDED, Status.SUCCEEDED_PARTIAL, Status.FAILED])
+def test_request_daily_stop_ignores_finished_run(status: str) -> None:
+    run = DailyRun.objects.create(day=timezone.localdate(), status=status, stop_reason="giữ nguyên")
+
+    services.request_daily_stop(run)
+
+    run.refresh_from_db()
+    assert (run.stop_requested, run.pause_kind, run.stop_reason) == (False, "", "giữ nguyên")
+
+
+def test_release_unstarted_daily_run_pauses_it_without_auto_continue(use_fake: UseFake) -> None:
+    fake = use_fake(some_repos())
+    run = services.prepare_daily_run()
+
+    services.release_unstarted_daily_run(run)  # luồng nền đã bị việc khác chiếm
+
+    assert (run.status, run.pause_kind) == (Status.PAUSED, PauseKind.STOPPED)
+    assert run.stop_reason == "App đang bận việc nền khác — bấm Chạy ngay khi app rảnh."
+    assert (run.heartbeat_at, run.runner_token) == (None, "")
+    assert services.live_daily_run() is None
+    assert services.run_daily_if_due() is None
+    assert services.prepare_daily_run().pk == run.pk  # bấm Chạy ngay khi app rảnh
+    assert fake.search.queries == []
+
+
 @pytest.mark.parametrize("status", [Status.SUCCEEDED, Status.SUCCEEDED_PARTIAL])
 def test_prepare_refuses_when_today_succeeded(status: str) -> None:
     DailyRun.objects.create(day=timezone.localdate(), status=status)
@@ -432,8 +578,9 @@ def test_empty_watch_list_finishes_with_note(use_fake: UseFake) -> None:
 
     run = run_daily_now()
 
-    assert run.status == Status.SUCCEEDED_PARTIAL
-    assert run.problems == ["Danh sách theo dõi trống — thêm truy vấn ở trang Theo dõi."]
+    assert run.status == Status.SUCCEEDED  # không có gì để sót
+    assert run.stop_reason == "Danh sách theo dõi trống — thêm truy vấn ở trang Theo dõi."
+    assert run.problems == []
     assert run.scans.count() == 0
     assert fake.search.queries == []
     assert run.search_calls_used == 0
