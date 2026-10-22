@@ -20,6 +20,7 @@ MAX_RESULTS = 1000  # GitHub chỉ trả tối đa 1.000 kết quả cho một t
 _STARS_MIN = re.compile(r"(?<![\w-])stars:>=(\d+)")
 _STARS_RANGE = re.compile(r"(?<![\w-])stars:(\d+)\.\.(\d+)")
 _CREATED = re.compile(r"(?<![\w-])created:(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})")
+_HISTORY_PATH = re.compile(r"/repositories/(\d+)/stargazers/history$")
 
 
 class FakeTime:
@@ -111,6 +112,53 @@ class FakeGitHubSearch:
         }
         headers = {"x-ratelimit-remaining": "29", "x-ratelimit-reset": str(int(time.time()) + 60)}
         return httpx.Response(200, json=body, headers=headers)
+
+
+def make_star_history(
+    daily: dict[date, int], *, today: date, weeks: int = 6
+) -> list[dict[str, Any]]:
+    """Dựng lịch sử star theo tuần (mới nhất trước) đúng hình dạng GitHub trả.
+
+    Mỗi tuần bắt đầu Chủ nhật 00:00 UTC; tuần mới nhất là tuần chứa `today`. `daily` là star mới
+    theo ngày UTC, ngày không có thì là 0. Ngày nằm ngoài `weeks` tuần dựng ra bị bỏ, giống việc
+    GitHub chỉ trả `per_page` tuần.
+    """
+    newest_sunday = today - timedelta(days=(today.weekday() + 1) % 7)
+    history: list[dict[str, Any]] = []
+    for weeks_back in range(weeks):
+        sunday = newest_sunday - timedelta(weeks=weeks_back)
+        days = [daily.get(sunday + timedelta(days=offset), 0) for offset in range(7)]
+        history.append(
+            {
+                "week": int(datetime.combine(sunday, clock_time(0, 0), tzinfo=UTC).timestamp()),
+                "total": sum(days),
+                "days": days,
+            }
+        )
+    return history
+
+
+class FakeStarHistory:
+    """Dùng làm `side_effect` của respx cho GET /repositories/{id}/stargazers/history."""
+
+    def __init__(self, histories: dict[int, list[dict[str, Any]]]) -> None:
+        self.histories = histories
+        self.requested: list[int] = []
+        self.fail_when: Callable[[int], int | None] | None = None
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        found = _HISTORY_PATH.search(request.url.path)
+        if found is None:
+            raise ValueError(f"không phải đường dẫn lịch sử star: {request.url.path}")
+        repo_id = int(found.group(1))
+        self.requested.append(repo_id)
+
+        if self.fail_when is not None and (status := self.fail_when(repo_id)) is not None:
+            return httpx.Response(status, json={"message": "lỗi giả lập"})
+        if repo_id not in self.histories:
+            return httpx.Response(404, json={"message": "Not Found"})
+        headers = {"x-ratelimit-remaining": "59", "x-ratelimit-reset": str(int(time.time()) + 3600)}
+        return httpx.Response(200, json=self.histories[repo_id], headers=headers)
 
 
 def _matches(item: dict[str, Any], query: str) -> bool:

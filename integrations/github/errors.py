@@ -19,6 +19,10 @@ class GitHubRateLimitError(GitHubError):
         self.reset_at = reset_at
 
 
+class GitHubNotFoundError(GitHubError):
+    """GitHub báo không có thứ cần tìm (404): repo đã bị xoá hoặc chuyển sang riêng tư."""
+
+
 class GitHubQueryError(GitHubError):
     """GitHub không chấp nhận truy vấn tìm kiếm (422)."""
 
