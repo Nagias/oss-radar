@@ -131,6 +131,7 @@ GITHUB_TIMEOUT_SECONDS = 20.0
 # thứ tự khai. Nhìn danh sách này là biết app tự làm những gì.
 SCHEDULED_JOBS: list[str] = [
     "features.discovery.services.resume_interrupted_scan",
+    "features.rising.services.run_daily_if_due",
 ]
 
 
