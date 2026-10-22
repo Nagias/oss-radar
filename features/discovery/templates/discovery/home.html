@@ -7,19 +7,43 @@
 <section class="card">
   <h1>Quét GitHub theo truy vấn</h1>
   <p class="muted">
-    Kết quả được lưu vào kho, không trùng lặp (một repo luôn chỉ là một dòng), và sắp theo số star.
+    Quét lấy đủ repo (vượt giới hạn 1.000 kết quả của GitHub bằng cách chia nhỏ theo ngày tạo),
+    lưu vào kho không trùng lặp, sắp theo số star. Quét chạy nền — bấm xong là xem được tiến độ.
   </p>
+
+  {% if live_scan %}
+    <p class="notice">
+      Đang chạy <a href="{% url 'discovery:scan_detail' live_scan.pk %}">lần quét #{{ live_scan.pk }}</a>
+      (<code>{{ live_scan.query }}</code>). Mỗi lúc chỉ một lần quét — chờ nó xong hoặc bấm Dừng ở lần đó.
+    </p>
+  {% endif %}
+
   <form method="post" action="{% url 'discovery:home' %}" class="scan-form" novalidate>
     {% csrf_token %}
+    {% if form.non_field_errors %}
+      <p class="error" role="alert">{{ form.non_field_errors|join:" " }}</p>
+    {% endif %}
+
     <label for="{{ form.query.id_for_label }}">{{ form.query.label }}</label>
     <div class="input-row">
       {{ form.query }}
-      <button type="submit">Quét</button>
+      <button type="submit" {% if live_scan %}disabled{% endif %}>Quét</button>
     </div>
-    {% if form.query.errors %}
-      <p class="error" role="alert">{{ form.query.errors|join:" " }}</p>
-    {% endif %}
+    {% if form.query.errors %}<p class="error" role="alert">{{ form.query.errors|join:" " }}</p>{% endif %}
     <p class="hint">{{ form.query.help_text }}</p>
+
+    <div class="field-grid">
+      {% for field in form %}
+        {% if field.name != "query" %}
+          <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="hint">{{ field.help_text }}</p>{% endif %}
+            {% if field.errors %}<p class="error" role="alert">{{ field.errors|join:" " }}</p>{% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
   </form>
 </section>
 
@@ -30,18 +54,19 @@
       <table>
         <thead>
           <tr>
-            <th>#</th><th>Truy vấn</th><th>Trạng thái</th>
-            <th class="num">Lấy về / GitHub báo</th><th class="num">Mới</th><th>Lúc</th>
+            <th>#</th><th>Truy vấn</th><th>Trạng thái</th><th class="num">Độ phủ</th>
+            <th class="num">Lấy về / GitHub báo</th><th class="num">Lượt gọi</th><th>Lúc</th>
           </tr>
         </thead>
         <tbody>
           {% for scan in recent_scans %}
             <tr>
               <td><a href="{% url 'discovery:scan_detail' scan.pk %}">#{{ scan.pk }}</a></td>
-              <td><code>{{ scan.query }}</code></td>
+              <td><code>{{ scan.query }}</code><div class="muted small">star ≥ {{ scan.min_stars }}{% if scan.max_stars is not None %}, ≤ {{ scan.max_stars }}{% endif %}</div></td>
               <td><span class="status status-{{ scan.status }}">{{ scan.get_status_display }}</span></td>
+              <td class="num">{% if scan.coverage_percent is not None %}{{ scan.coverage_percent|floatformat:"-1" }}%{% else %}—{% endif %}</td>
               <td class="num">{{ scan.fetched_count|intcomma }} / {{ scan.total_count|default_if_none:"—"|intcomma }}</td>
-              <td class="num">{{ scan.created_count|intcomma }}</td>
+              <td class="num">{{ scan.api_calls_used }}/{{ scan.budget }}</td>
               <td>{{ scan.created_at|date:"H:i d/m/Y" }}</td>
             </tr>
           {% endfor %}

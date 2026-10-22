@@ -230,3 +230,29 @@ def test_scan_slice_and_result_have_readable_names(github_search: respx.Route) -
     assert str(scan) == f"#{scan.pk} topic:ai-agent"
     assert str(services.scan_results(scan)[0]) == f"#{scan.pk} topic:ai-agent → {REAL_TOP_REPOS[0]}"
     assert "2008-01-01" in str(scan.slices.get(stack_order=1))
+
+
+def test_slice_progress_counts_only_leaf_slices(github_search: respx.Route) -> None:
+    scan = run_scan_now()  # mức Nhanh: lát gốc đã chia thành 2 lát con, chưa làm lát con nào
+
+    assert services.slice_progress(scan) == services.SliceProgress(finished=0, total=2)
+
+
+def test_execute_skips_scan_that_is_not_running(github_search: respx.Route) -> None:
+    scan = run_scan_now()
+    calls = github_search.call_count
+
+    services.execute_scan(scan.pk)
+
+    assert github_search.call_count == calls
+
+
+def test_unreadable_github_data_fails_only_that_slice(http_mock: respx.MockRouter) -> None:
+    http_mock.get(SEARCH_URL).respond(json={"unexpected": True})
+
+    scan = run_scan_now()
+
+    root = scan.slices.get(stack_order=1)
+    assert root.status == ScanSlice.Status.FAILED
+    assert "không đọc được" in root.error_message
+    assert scan.status == ScanRun.Status.SUCCEEDED_PARTIAL

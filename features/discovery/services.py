@@ -196,6 +196,20 @@ def scan_results(scan: ScanRun) -> QuerySet[ScanResult]:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class SliceProgress:
+    finished: int
+    total: int
+
+
+def slice_progress(scan: ScanRun) -> SliceProgress:
+    """Số lát đã xử lý / tổng số lát (chỉ tính lát lá — lát đã chia nhỏ không tính)."""
+    leaves = scan.slices.exclude(status=ScanSlice.Status.SPLIT)
+    pending = leaves.filter(status=ScanSlice.Status.PENDING).count()
+    total = leaves.count()
+    return SliceProgress(finished=total - pending, total=total)
+
+
 def problem_slices(scan: ScanRun) -> QuerySet[ScanSlice]:
     """Các lát bị cắt, chưa chắc đủ hoặc lỗi — để người dùng biết còn sót ở đâu."""
     return scan.slices.filter(status__in=_PROBLEM_STATUSES).order_by("created_from", "stars_min")

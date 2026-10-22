@@ -20,6 +20,8 @@ nhận, khi nào trả, quên trả thì sao.
 | D-003 | Quét chạy đồng bộ ngay trong request web, chưa có việc nền | Mở | Làm F-002 Quét sâu |
 | D-004 | Mỗi lần quét chỉ lấy trang đầu (tối đa 100 repo nhiều star nhất) | Mở | Làm F-002 Quét sâu |
 | D-005 | Gọi GitHub một lần, lỗi là dừng — chưa thử lại, chưa giãn nhịp, chưa có ngân sách gọi API | Mở | Làm F-002 Quét sâu |
+| D-006 | Tắt app giữa chừng thì lần quét chỉ chuyển sang Tạm dừng; phải bấm Tiếp tục bằng tay | Mở | Làm F-005 (lịch quét hằng ngày, chạy bù) |
+| D-007 | Trang kết quả lần quét chỉ hiện 500 repo nhiều star nhất | Mở | Khi làm trang duyệt kho (lọc, phân trang) |
 
 ## Chi tiết
 
@@ -82,3 +84,25 @@ nhận, khi nào trả, quên trả thì sao.
 - **Quên trả thì sao:** lượt quét dài hỏng giữa chừng vì một lỗi vặt; dội request khi hết lượt có thể làm
   GitHub khoá token.
 - **Vị trí:** `integrations/github/client.py` (`_get_json`).
+
+### D-006 — Lần quét bị gián đoạn phải tiếp tục bằng tay
+- **Nợ gì:** quét chạy trong luồng nền của app web; tắt app (hoặc server tự khởi động lại khi sửa code)
+  thì lần quét dừng. Lần mở sau, app nhận ra nhờ nhịp sống cũ và chuyển nó sang "Tạm dừng (bị gián
+  đoạn)" — nhưng không tự chạy tiếp.
+- **Vì sao chấp nhận:** tự chạy tiếp khi app khởi động cần một cơ chế khởi động nền an toàn (không chạy
+  khi `migrate`, khi test…), mà đúng cơ chế đó F-005 (lịch quét hằng ngày, chạy bù khi lỡ giờ) cũng cần.
+  Làm một lần ở F-005 thay vì làm hai lần. Phần đã quét không mất: Tiếp tục chạy từ lát dang dở.
+- **Khi nào trả:** F-005.
+- **Quên trả thì sao:** lần quét lớn bị bỏ dở nếu người dùng không để ý nút Tiếp tục.
+- **Vị trí:** `features/discovery/services.py` (`pause_stale_scans`).
+
+### D-007 — Trang kết quả chỉ hiện 500 repo nhiều star nhất
+- **Nợ gì:** quét sâu có thể lấy hàng nghìn repo, nhưng trang kết quả một lần quét chỉ in 500 repo nhiều
+  star nhất (ghi rõ "đang hiện 500 trên N"). Toàn bộ vẫn nằm trong kho.
+- **Vì sao chấp nhận:** in hàng nghìn dòng làm trang nặng, khó đọc; trang duyệt kho có lọc và phân trang
+  là một tính năng riêng, chưa nằm trong F-002.
+- **Khi nào trả:** khi làm trang duyệt kho (lọc theo star, ngôn ngữ, chủ đề; phân trang).
+- **Quên trả thì sao:** repo ít star (đúng nhóm "tiềm năng") của lần quét lớn không xem được trên web,
+  chỉ thấy qua lệnh hoặc CSDL.
+- **Vị trí:** `features/discovery/views.py` (`RESULTS_SHOWN_LIMIT`),
+  `features/discovery/templates/discovery/scan_detail.html`.
