@@ -203,8 +203,12 @@ def test_interrupted_owner_step_continues_without_refetching(
     assert continued.owner_calls_used == 3  # lượt gọi đã tiêu lúc sập không được "hoàn"
 
 
-@pytest.mark.parametrize("status", [429, 502])
-def test_github_blocking_owner_step_pauses_for_retry_later(
+# Bước hồ sơ chủ chỉ làm giàu dữ liệu: hỏng ở đây không được chặn báo cáo của ngày (nguyên tắc 8).
+# Chủ còn thiếu hồ sơ được lấy ở lượt hôm sau.
+
+
+@pytest.mark.parametrize("status", [429, 502, 401, 422])
+def test_github_failure_in_owner_step_notes_it_and_still_reports(
     watch_list: list[WatchQuery], use_fake: UseFake, status: int
 ) -> None:
     fake = four_repos(use_fake)
@@ -212,38 +216,23 @@ def test_github_blocking_owner_step_pauses_for_retry_later(
 
     run = run_daily_now()
 
-    assert (run.status, run.pause_kind, run.step) == (
-        Status.PAUSED,
-        PauseKind.RETRY_LATER,
-        Step.OWNERS,
-    )
-    assert "hồ sơ chủ repo" in run.stop_reason
-    assert "15 phút" in run.stop_reason
-
-    fake.users.fail_when = None
-    DailyRun.objects.update(paused_at=timezone.now() - timedelta(minutes=16))
-    continued = services.run_daily_if_due()
-
-    assert continued is not None
-    assert continued.status == Status.SUCCEEDED
-    assert OwnerProfile.objects.filter(login="alice").exists()
-
-
-def test_auth_error_in_owner_step_fails_run(
-    watch_list: list[WatchQuery], use_fake: UseFake
-) -> None:
-    fake = four_repos(use_fake)
-    fake.users.fail_when = lambda login: 401
-
-    run = run_daily_now()
-
-    assert run.status == Status.FAILED
-    assert "hồ sơ chủ repo" in run.error_message
-    assert "GITHUB_TOKEN" in run.error_message
+    assert (run.status, run.step) == (Status.SUCCEEDED_PARTIAL, Step.REPORT)
     assert run.runner_token == ""
+    assert services.latest_report_run() == run
+    assert run.rising_count == 3
+    assert OwnerProfile.objects.filter(login="bob").exists()
+    assert len(run.problems) == 1
+    assert "hồ sơ chủ repo" in run.problems[0]
 
 
-def test_stop_during_owner_step_pauses_and_continue_finishes(
+def test_owner_step_failure_notes_owners_left_and_reason() -> None:
+    assert services.OWNERS_BLOCKED_NOTE.format(count=2, detail="x") == (
+        "Lấy hồ sơ chủ repo bị ngắt (x) — 2 chủ repo chưa có hồ sơ, lượt sau lấy tiếp (điểm nghi "
+        "star giả của repo đó chưa tính phần hồ sơ chủ)."
+    )
+
+
+def test_stop_during_owner_step_skips_remaining_owners_and_reports_now(
     watch_list: list[WatchQuery], use_fake: UseFake
 ) -> None:
     fake = four_repos(use_fake)
@@ -257,14 +246,15 @@ def test_stop_during_owner_step_pauses_and_continue_finishes(
 
     run = run_daily_now()
 
-    assert (run.status, run.pause_kind, run.step) == (Status.PAUSED, PauseKind.STOPPED, Step.OWNERS)
+    # Dừng = thôi gọi GitHub; lập báo cáo chỉ đọc CSDL nên làm luôn, không để mất báo cáo của ngày.
     assert fake.users.requested == ["bob"]
-
-    fake.users.fail_when = None
-    continued = run_daily_now()
-
-    assert continued.status == Status.SUCCEEDED
-    assert fake.users.requested == ["bob", "Alice"]
+    assert (run.status, run.step, run.stop_requested) == (
+        Status.SUCCEEDED_PARTIAL,
+        Step.REPORT,
+        False,
+    )
+    assert services.latest_report_run() == run
+    assert run.problems[0].startswith("Lấy hồ sơ chủ repo bị ngắt (bạn bấm Dừng) — 1 chủ repo")
 
 
 # --- Trạng thái, ước lượng ---------------------------------------------------------------------

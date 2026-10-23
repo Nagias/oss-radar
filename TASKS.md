@@ -77,5 +77,11 @@
 - [x] Kế hoạch `docs/plans/2026-10-23-f006-cham-diem.md` (10 task)
 - [x] Code theo TDD (task 1–9): `poe check` xanh — 673 test, độ phủ 99,07%
 - [x] Sổ sách: ARCHITECTURE (QĐ-17), FEATURE_MAP (F-006), DEBT (D-009 dời sang PR `fix/` sau F-006)
-- [ ] `poe check` xanh, `poe test-live`, chạy thật trên CSDL thật
-- [ ] Agent độc lập rà soát cả nhánh, PR
+- [x] `poe check` xanh (674 test, 99,07%); `poe test-live` 4/4; chạy thật trên CSDL thật (sao lưu
+      `data/backup-truoc-f006-2026-10-23.sqlite3`, migrate, 20 lượt gọi hồ sơ chủ không token): khớp 3 ví dụ
+      thiết kế — `genspark-claw` 75 Nghi cao (ẩn), `xop01` 50 Cần xem, `feder-cr/git-ai` không nghi; trang
+      `/rising/` 46 dòng + 1 ẩn, trang lần quét #7 có cột điểm. Chạy thật lộ ra 2 điểm đã sửa: ưu tiên hồ sơ
+      chủ của repo đang bị nghi; phần giải thích điểm tràn cột
+- [x] Agent độc lập rà soát cả nhánh: 0 nghiêm trọng, 1 quan trọng (kẹt ở bước hồ sơ chủ thì mất báo cáo
+      của ngày — đã sửa: bước này không còn chặn báo cáo), 7 nhỏ (sửa 4; còn lại ghi trong báo cáo)
+- [ ] Chủ dự án duyệt → push, PR, CI xanh, squash-merge

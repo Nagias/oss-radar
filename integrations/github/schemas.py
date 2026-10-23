@@ -16,7 +16,7 @@ class GitHubRepo:
     topics: tuple[str, ...]
     stars: int
     forks: int
-    open_issues: int  # GitHub gộp số issue và pull request đang mở
+    open_issues: int | None  # issue + pull request đang mở; None = GitHub không trả
     owner_login: str
     owner_type: str
     license_spdx: str

@@ -221,6 +221,21 @@ def test_fetch_skips_unreadable_profiles_and_goes_on(
     assert OwnerProfile.objects.filter(login="broken").exists() is False
 
 
+def test_fetch_treats_rejected_request_422_as_unreadable(
+    users: FakeGitHubUsers, fake_time: FakeTime
+) -> None:
+    users.fail_when = lambda login: 422 if login == "alice" else None
+    calls = Calls()
+
+    with get_github_client(sleep=fake_time.sleep) as github:
+        outcome = services.fetch_owner_profiles(
+            github, ["alice", "bob"], before_each=calls.before_each, after_call=calls.after_call
+        )
+
+    assert [login for login, _ in outcome.unreadable] == ["alice"]
+    assert outcome.fetched == 1
+
+
 def test_fetch_stops_on_github_outage_keeping_profiles_already_saved(
     users: FakeGitHubUsers, fake_time: FakeTime
 ) -> None:

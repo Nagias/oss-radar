@@ -580,7 +580,20 @@ def test_search_reads_open_issue_count(client: GitHubClient, http_mock: respx.Mo
     assert [repo.open_issues for repo in page.items] == [50372, 234, 69]
 
 
-@pytest.mark.parametrize("bad_value", ["12", None, True])
+def test_search_without_open_issue_count_leaves_it_unknown(
+    client: GitHubClient, http_mock: respx.MockRouter
+) -> None:
+    payload = load_fixture("search_repositories.json")
+    del payload["items"][0]["open_issues_count"]
+    payload["items"][1]["open_issues_count"] = None
+    http_mock.get(SEARCH_URL).respond(json=payload)
+
+    page = client.search_repositories("topic:ai-agent")
+
+    assert [repo.open_issues for repo in page.items] == [None, None, 69]
+
+
+@pytest.mark.parametrize("bad_value", ["12", True, -1])
 def test_search_rejects_wrong_open_issue_count(
     client: GitHubClient, http_mock: respx.MockRouter, bad_value: object
 ) -> None:

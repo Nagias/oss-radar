@@ -287,7 +287,7 @@ def _parse_repo(raw: object) -> GitHubRepo:
         topics=tuple(_as_str(topic) for topic in _as_list(data.get("topics", []))),
         stars=_as_int(data["stargazers_count"]),
         forks=_as_int(data["forks_count"]),
-        open_issues=_as_int(data["open_issues_count"]),
+        open_issues=_as_optional_count(data.get("open_issues_count")),
         owner_login=_as_str(owner["login"]),
         owner_type=_as_str(owner["type"]),
         license_spdx=(
@@ -372,6 +372,15 @@ def _as_str(value: object) -> str:
     if not isinstance(value, str):
         raise TypeError(f"cần chuỗi, nhận {value!r}")
     return value
+
+
+def _as_optional_count(value: object) -> int | None:
+    if value is None:
+        return None
+    count = _as_int(value)
+    if count < 0:
+        raise ValueError(f"số đếm không thể âm: {value!r}")
+    return count
 
 
 def _as_optional_str(value: object) -> str:

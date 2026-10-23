@@ -37,7 +37,7 @@ from features.discovery.models import ScanRun
 from features.rising import growth
 from features.rising.models import DailyRun, DailyRunScan, RisingCheck, WatchQuery
 from features.scoring import services as scoring
-from features.scoring.rules import REVIEW_FROM, GrowthFacts, Score
+from features.scoring.services import REVIEW_FROM, GrowthFacts, Score
 from integrations.github.client import GitHubClient, get_github_client
 from integrations.github.errors import (
     GitHubAuthError,
@@ -105,14 +105,13 @@ UNREADABLE_HISTORY_NOTE = (
     "Không xác minh được {repo}: GitHub trả lịch sử star không đọc được — repo nằm ở mục chưa "
     "xác minh. (Chi tiết: {detail})"
 )
-REASON_OWNERS_BLOCKED = (
-    "GitHub hoặc mạng đang chặn lúc lấy hồ sơ chủ repo — app tự chạy tiếp sau ít nhất {minutes} "
-    "phút."
+OWNERS_BLOCKED_NOTE = (
+    "Lấy hồ sơ chủ repo bị ngắt ({detail}) — {count} chủ repo chưa có hồ sơ, lượt sau lấy tiếp "
+    "(điểm nghi star giả của repo đó chưa tính phần hồ sơ chủ)."
 )
-REASON_OWNERS_AUTH = (
-    "Lấy hồ sơ chủ repo: GitHub từ chối token — kiểm tra lại GITHUB_TOKEN trong .env. "
-    "(Chi tiết: {detail})"
-)
+_OWNERS_STOPPED = "bạn bấm Dừng"
+_OWNERS_BLOCKED = "GitHub hoặc mạng đang chặn"
+_OWNERS_AUTH = "GitHub từ chối token — kiểm tra lại GITHUB_TOKEN trong .env"
 OWNER_BUDGET_NOTE = (
     "Hết ngân sách hồ sơ chủ repo — {count} chủ repo chưa có hồ sơ (điểm nghi star giả của repo "
     "đó chưa tính phần hồ sơ chủ)."
@@ -760,12 +759,18 @@ class _DailyRunner:
         checks.sort(key=lambda check: scores[check.repository_id].suspicion.points < REVIEW_FROM)
         logins = [check.repository.owner_login for check in checks]
         pending = scoring.owners_to_fetch(logins, now=timezone.now())
-        if pending and not self._fetch_owners(run, pending):
-            return False
+        if pending:
+            self._fetch_owners(run, pending)
         self._check_in(step=DailyRun.Step.REPORT)
         return True
 
-    def _fetch_owners(self, run: DailyRun, pending: list[str]) -> bool:
+    def _fetch_owners(self, run: DailyRun, pending: list[str]) -> None:
+        """Gọi GitHub lấy từng hồ sơ. Hỏng giữa chừng thì ghi chú rồi thôi — không chặn báo cáo.
+
+        Bước này chỉ làm giàu dữ liệu (nguyên tắc 8): bấm Dừng, GitHub chặn hay từ chối token thì
+        dừng gọi, ghi lại số chủ còn thiếu (lượt hôm sau lấy tiếp) và đi tiếp tới lập báo cáo —
+        bước đó chỉ đọc CSDL nên xong ngay. Không để lượt kẹt ở đây rồi mất báo cáo khi hết ngày.
+        """
         calls_before = run.owner_calls_used
         budget = CallBudget(max(0, run.owner_budget - calls_before))
 
@@ -781,22 +786,20 @@ class _DailyRunner:
         except CallBudgetExhaustedError:
             left = len(scoring.owners_to_fetch(pending, now=timezone.now()))
             self._add_problem(OWNER_BUDGET_NOTE.format(count=left))
-            return True
+            return
         except _DailyStopRequestedError:
-            self.pause(DailyRun.PauseKind.STOPPED, REASON_STOPPED)
-            return False
+            self._note_owners_left(pending, _OWNERS_STOPPED)
+            return
         except (GitHubRateLimitError, GitHubUnavailableError) as exc:
             logger.warning(
                 "Lượt hằng ngày #%s: GitHub chặn lúc lấy hồ sơ chủ: %r", self.run_id, exc
             )
-            self.pause(
-                DailyRun.PauseKind.RETRY_LATER, REASON_OWNERS_BLOCKED.format(minutes=_RETRY_MINUTES)
-            )
-            return False
+            self._note_owners_left(pending, _OWNERS_BLOCKED)
+            return
         except GitHubAuthError as exc:
             logger.warning("Lượt hằng ngày #%s: GitHub từ chối token: %r", self.run_id, exc)
-            self.fail(REASON_OWNERS_AUTH.format(detail=exc))
-            return False
+            self._note_owners_left(pending, _OWNERS_AUTH)
+            return
         for login, detail in outcome.unreadable:
             self._add_problem(UNREADABLE_OWNER_NOTE.format(login=login, detail=detail))
         logger.info(
@@ -806,7 +809,10 @@ class _DailyRunner:
             outcome.missing,
             len(outcome.unreadable),
         )
-        return True
+
+    def _note_owners_left(self, pending: list[str], detail: str) -> None:
+        left = len(scoring.owners_to_fetch(pending, now=timezone.now()))
+        self._add_problem(OWNERS_BLOCKED_NOTE.format(count=left, detail=detail))
 
     def _beat_or_stop(self) -> None:
         """Ghi nhịp sống ở bước xác minh; người dùng đã bấm Dừng thì thôi, kể cả đang chờ GitHub."""

@@ -15,9 +15,18 @@ from django.utils import timezone
 from features.catalog import services as catalog
 from features.catalog.models import OwnerProfile, Repository
 from features.scoring import rules
-from features.scoring.rules import GrowthFacts, OwnerFacts, RepoFacts, Score, Suspicion
+
+# Xuất lại cho tính năng khác: chúng chỉ được import `scoring.services` (CLAUDE.md, nguyên tắc 5).
+from features.scoring.rules import REVIEW_FROM as REVIEW_FROM
+from features.scoring.rules import GrowthFacts as GrowthFacts
+from features.scoring.rules import OwnerFacts, RepoFacts, Suspicion
+from features.scoring.rules import Score as Score
 from integrations.github.client import GitHubClient
-from integrations.github.errors import GitHubNotFoundError, GitHubResponseError
+from integrations.github.errors import (
+    GitHubNotFoundError,
+    GitHubQueryError,
+    GitHubResponseError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +113,8 @@ def fetch_owner_profiles(
     - `before_each()` chạy trước mỗi chủ (bên gọi ghi nhịp sống, ném lỗi khi người dùng bấm Dừng).
     - `after_call()` chạy sau mỗi lượt gọi kể cả khi lỗi (bên gọi ghi số lượt đã dùng); không được
       ném lỗi.
-    - Tài khoản không còn (404) → ghi "không còn tồn tại", đi tiếp. Dữ liệu lạ hoặc login không hợp
-      lệ → ghi vào `unreadable`, đi tiếp.
+    - Tài khoản không còn (404) → ghi "không còn tồn tại", đi tiếp. Dữ liệu lạ, GitHub từ chối yêu
+      cầu (422) hoặc login không hợp lệ → ghi vào `unreadable`, đi tiếp.
     - Hết lượt, mất mạng, token sai, hết ngân sách → ném ra cho bên gọi; hồ sơ đã lưu vẫn giữ.
     """
     outcome = OwnerFetchOutcome()
@@ -120,7 +129,7 @@ def fetch_owner_profiles(
             logger.info("Chủ repo %s không còn trên GitHub (404)", login)
             catalog.mark_owner_missing(login, fetched_at=timezone.now())
             outcome.missing += 1
-        except (GitHubResponseError, ValueError) as exc:
+        except (GitHubResponseError, GitHubQueryError, ValueError) as exc:
             logger.warning("Không đọc được hồ sơ chủ repo %s: %r", login, exc)
             outcome.unreadable.append((login, str(exc)))
         else:
