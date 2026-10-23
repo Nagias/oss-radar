@@ -16,6 +16,7 @@ test ở đâu, đang nợ gì.
 | F-001 | Quét GitHub theo truy vấn → lưu không trùng → xem sắp theo star | Đã gộp vào F-002 (= mức Nhanh) | `features/discovery/` | như F-002 | `features/discovery/tests/` | — |
 | F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py`, `test_auto_resume.py` | D-007 |
 | F-005 | Rising star + lượt quét hằng ngày: ảnh chụp star, lọc thô, xác minh bằng lịch sử star chính thức, lịch chạy trong app, chạy bù, tự chạy tiếp | Chạy thật | `features/rising/` | Web `/rising/`, `/rising/watch/`, nút Chạy ngay/Chạy tiếp/Dừng; lệnh `manage.py daily`; tự chạy sau 7:00 khi app mở | `features/rising/tests/test_daily_run.py`, `test_verify.py`, `test_e2e.py` | D-009 |
+| F-006 | Chấm điểm Chất lượng / Tiềm năng có giải thích, lọc star giả (ẩn "Nghi cao", có nút hiện), hồ sơ chủ repo cho rising star | Đang làm | `features/scoring/` | Cột điểm ở `/rising/` và `/scans/<id>/`; bước "Lấy hồ sơ chủ repo" của lượt hằng ngày | `features/scoring/tests/` | — |
 
 ## Mô-đun lõi và cửa ra ngoài
 
