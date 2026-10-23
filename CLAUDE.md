@@ -53,8 +53,8 @@ tắc phải biến thành luật kiểm được, không để làm khẩu hi�
 | Test có gọi API ngoài | fixture `http_mock` (respx) + JSON phản hồi thật trong `tests/fixtures/` | `integrations/github/tests/` |
 | Thêm thư viện | ghi QĐ mới trong `docs/ARCHITECTURE.md` → `uv add <gói>` (phải hỏi chủ dự án) | — |
 | Đi đường tắt | ghi `DEBT.md` + đánh dấu `DEBT(D-xxx)` trong code | `DEBT.md` |
-| Việc nền | `core.background.submit(job, id)` — một luồng trong tiến trình web (QĐ-14); trạng thái + nhịp sống lưu CSDL | `features/discovery/views.py` + `services.execute_scan` |
-| Lịch hằng ngày | chưa có đường — làm ở F-005 (cùng lúc trả D-006) | — |
+| Việc nền | `core.background.submit_if_idle(job, id, label=…)` từ view (bận thì từ chối kèm nhãn, không xếp hàng); `submit` cho việc nội bộ — một luồng trong tiến trình web (QĐ-14, QĐ-15); trạng thái + nhịp sống lưu CSDL | `features/discovery/views.py` + `services.execute_scan` |
+| Việc định kỳ, lịch hằng ngày | khai đường dẫn hàm trong `settings.SCHEDULED_JOBS`; bộ nhịp `core/scheduler.py` (bật trong lệnh `runserver` của dự án) cứ 5 phút gọi trên luồng nền; mỗi hàm tự kiểm "đến lượt chưa" và phải rẻ khi chưa đến (QĐ-15) | `features/rising/services.py` (`run_daily_if_due`) |
 | Thiết kế tính năng mới | `docs/designs/YYYY-MM-DD-fNNN-<slug>.md` → chủ dự án duyệt → kế hoạch `docs/plans/` → TDD | `docs/designs/2026-10-22-f002-quet-sau.md` |
 | Gọi AI | chưa có đường — `integrations/llm/` theo QĐ-12 | — |
 
@@ -79,7 +79,8 @@ Gặp loại việc chưa có trong bảng: dừng, đề xuất đường đi +
 | Ghi token/mật khẩu vào code, settings.json, log, chat | lộ khoá | `.gitignore` + chặn đọc `.env` + review |
 | Thêm thư viện không có QĐ | phình phụ thuộc, tăng bề mặt lỗi | settings.json hỏi `uv add` |
 | Gọi API trong vòng lặp không giới hạn | khoá token, cháy quota | `CallBudget` bắt buộc khi quét + review |
-| Tạo thread / `ThreadPoolExecutor` ngoài `core/background.py` | mỗi lúc chỉ một luồng ghi SQLite | ruff `TID251` |
+| Tạo thread / `ThreadPoolExecutor` ngoài `core/background.py` và `core/scheduler.py` | mỗi lúc chỉ một luồng ghi SQLite | ruff `TID251` |
+| Tự khởi động việc nền trong `AppConfig.ready()` hoặc signal | chạy cả khi `migrate`, test, lệnh khác | review |
 | Tự viết vòng gọi lại hoặc `time.sleep` khi gọi GitHub | giãn nhịp/gọi lại đã có trong client | review |
 | Viết code tính năng lớn trước khi thiết kế được duyệt | làm sai thứ chủ dự án cần | quy trình mục 6 |
 
@@ -98,6 +99,7 @@ uv run poe test                                 # chỉ chạy test (có đo đ�
 uv run poe test-live                            # test gọi GitHub thật (cần GITHUB_TOKEN)
 uv run python manage.py scan "topic:ai-agent" --budget 50   # quét thật từ dòng lệnh (xem --help)
 uv run python manage.py scan --resume 12 --extra-budget 300  # tiếp tục lần quét #12
+uv run python manage.py daily                   # chạy lượt quét hằng ngày của hôm nay ở tiền cảnh
 ```
 
 ## 6. Nhánh, PR và tự kiểm chứng

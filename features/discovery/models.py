@@ -15,6 +15,7 @@ class ScanRun(models.Model):
     """Một lần quét GitHub: truy vấn, phạm vi, ngân sách, trạng thái, số liệu, lý do dừng/lỗi."""
 
     class Status(models.TextChoices):
+        # DEBT(D-008): dòng cũ thời F-001 còn trạng thái "queued" không có trong danh sách này.
         RUNNING = "running", "Đang quét"
         PAUSED = "paused", "Tạm dừng"
         SUCCEEDED = "succeeded", "Xong"

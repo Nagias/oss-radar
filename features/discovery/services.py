@@ -598,6 +598,7 @@ class _ScanRunner:
         slice_.save()
 
     def _finish_all_slices(self) -> None:
+        # DEBT(D-008): lát gốc lỗi mà 0 repo vẫn ra "Xong nhưng còn sót" thay vì "Lỗi".
         problems = problem_slices(self.scan)
         if not problems.exists():
             self.finish(ScanRun.Status.SUCCEEDED)

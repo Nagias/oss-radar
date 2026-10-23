@@ -43,5 +43,7 @@
 - [x] Thiết kế `docs/designs/2026-10-22-f005-rising-star.md` — agent độc lập rà soát, đã chốt 7 điểm
 - [x] Chủ dự án duyệt thiết kế (2026-10-22)
 - [x] Kế hoạch `docs/plans/2026-10-22-f005-rising-star.md` (9 task)
-- [ ] Code theo TDD, sổ sách (CLAUDE.md, ARCHITECTURE QĐ-15/16, FEATURE_MAP, DEBT trả D-006 + thêm D-008)
+- [x] Code theo TDD: 8 task (client lịch sử star, ảnh chụp star, bộ nhịp, tự chạy tiếp D-006, hàm tính tăng star,
+      lượt hằng ngày, lọc thô/xác minh/báo cáo, trang + lệnh `daily`) — mỗi task có agent độc lập rà soát
+- [x] Sổ sách: CLAUDE.md, ARCHITECTURE (QĐ-15, QĐ-16), FEATURE_MAP (F-005), DEBT (trả D-006; thêm D-008, D-009)
 - [ ] Chạy thật (`manage.py daily`, trình duyệt, tắt app giữa chừng), `poe test-live`, PR

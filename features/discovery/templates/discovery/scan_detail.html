@@ -3,7 +3,7 @@
 
 {% block title %}Lần quét #{{ scan.pk }}{% endblock %}
 
-{% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="3; url={% url 'discovery:scan_detail' scan.pk %}">{% endif %}{% endblock %}
 
 {% block content %}
 <p><a href="{% url 'discovery:home' %}">← Quét truy vấn khác</a></p>
@@ -39,6 +39,7 @@
     <p class="muted">Tự chạy tiếp lần {{ scan.auto_resume_count }} lúc {{ scan.last_auto_resume_at|date:"H:i d/m/Y" }} (sau khi app bị tắt giữa chừng).</p>
   {% endif %}
   {% if scan.results_pruned %}
+    {# DEBT(D-009): "35 ngày" viết cứng; hằng RETENTION_DAYS ở rising, discovery không được import. #}
     <p class="muted">Danh sách repo đã dọn sau 35 ngày — phần tóm tắt bên trên vẫn giữ.</p>
   {% endif %}
 

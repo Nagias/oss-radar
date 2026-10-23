@@ -14,18 +14,61 @@ test ở đâu, đang nợ gì.
 | Mã | Tính năng | Trạng thái | Thư mục | Lối vào | Test chính | Nợ |
 |---|---|---|---|---|---|---|
 | F-001 | Quét GitHub theo truy vấn → lưu không trùng → xem sắp theo star | Đã gộp vào F-002 (= mức Nhanh) | `features/discovery/` | như F-002 | `features/discovery/tests/` | — |
-| F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py` | D-006, D-007 |
-| F-005 | Sao đang lên (rising star) và lượt quét hằng ngày | Đang làm (nhánh feat/f005-rising-star) | `features/rising/` | — | `features/rising/tests/` | — |
+| F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py`, `test_auto_resume.py` | D-007, D-008 |
+| F-005 | Rising star + lượt quét hằng ngày: ảnh chụp star, lọc thô, xác minh bằng lịch sử star chính thức, lịch chạy trong app, chạy bù, tự chạy tiếp | Chạy thật | `features/rising/` | Web `/rising/`, `/rising/watch/`, nút Chạy ngay/Chạy tiếp/Dừng; lệnh `manage.py daily`; tự chạy sau 7:00 khi app mở | `features/rising/tests/test_daily_run.py`, `test_verify.py`, `test_e2e.py` | D-009 |
 
 ## Mô-đun lõi và cửa ra ngoài
 
 | Mô-đun | Vai trò | Ai được dùng | Test |
 |---|---|---|---|
-| `features/catalog/` | Lõi "kho repo": bảng `Repository` (khoá chống trùng `github_id`), hàm `upsert_repositories`. Nơi DUY NHẤT ghi bảng này | Mọi tính năng, qua `features.catalog.services` | `features/catalog/tests/` |
-| `integrations/github/` | Cửa ra GitHub REST API: `GitHubClient.search_repositories`, dataclass `GitHubRepo`/`RepoSearchPage`, lỗi có tên (`GitHubRateLimitError`, `GitHubAuthError`…); `pacing.py`: giãn nhịp, chờ hồi lượt, gọi lại khi lỗi tạm thời, `CallBudget` | Service của các tính năng, qua `get_github_client(sleep=, budget=)` | `integrations/github/tests/` |
-| `core/` | Hạ tầng dùng chung, không phải tính năng: `core.background.submit(job, id)` chạy việc nền trên MỘT luồng trong tiến trình web (QĐ-14). Nơi duy nhất được tạo luồng | View và lệnh của các tính năng | `core/tests/` |
+| `features/catalog/` | Lõi "kho repo": bảng `Repository` (khoá chống trùng `github_id`), hàm `upsert_repositories` (ghi kèm ảnh chụp star `StarSnapshot` theo ngày); `baseline_snapshots`, `prune_snapshots`. Nơi DUY NHẤT ghi hai bảng này | Mọi tính năng, qua `features.catalog.services` | `features/catalog/tests/` |
+| `integrations/github/` | Cửa ra GitHub REST API: `GitHubClient.search_repositories`, `GitHubClient.star_history` (lịch sử star theo `github_id`), dataclass `GitHubRepo`/`RepoSearchPage`/`StarHistory`, lỗi có tên (`GitHubRateLimitError`, `GitHubAuthError`…); `pacing.py`: giãn nhịp, chờ hồi lượt, gọi lại khi lỗi tạm thời, `CallBudget` | Service của các tính năng, qua `get_github_client(sleep=, budget=)` | `integrations/github/tests/` |
+| `core/` | Hạ tầng dùng chung, không phải tính năng: `core.background` chạy việc nền trên MỘT luồng trong tiến trình web (`submit`, `submit_if_idle`, `busy_label`, `relabel` — QĐ-14); `core.scheduler` bộ nhịp gọi `settings.SCHEDULED_JOBS` (QĐ-15); lệnh `runserver` của dự án bật bộ nhịp. Chỉ hai file này được tạo luồng | View và lệnh của các tính năng | `core/tests/` |
 
 ## Chi tiết từng tính năng
+
+### F-005 — Rising star + lượt quét hằng ngày
+- **Phục vụ vế nào của mục tiêu:** tiềm năng (repo dưới 1.000 star tăng nhanh), tìm đủ (mỗi ngày quét lại
+  danh sách theo dõi nên repo mới không bị lỡ), không rác (cờ cảnh giác: dồn một ngày, repo rất mới, không
+  mô tả).
+- **Người dùng làm gì → thấy gì:** mở app sau 7:00 → lượt hằng ngày tự chạy (hoặc bấm **Chạy ngay**) →
+  trang `/rising/` hiện tiến độ ("đã xong k/16 truy vấn"), xong thì hiện bảng rising star: +1/+7/+30 ngày,
+  tăng %, tuổi repo, biểu đồ 30 ngày, nhãn **Mới vào danh sách**, cờ cảnh giác, dòng "Vì sao có mặt" ghi
+  nguồn và khoảng ngày UTC; mục "Ứng viên chưa xác minh" (ước lượng, ghi rõ) và "Chưa đủ dữ liệu". Lọc
+  nhanh theo star tối đa và mức tăng tối thiểu. Trang `/rising/watch/`: thêm/sửa/tắt truy vấn theo dõi,
+  ước lượng lượt gọi và thời gian mỗi ngày, lịch sử các lượt, nút **Chạy ngay / Chạy tiếp / Dừng**. Trong
+  lúc lượt chạy, nút Quét ở trang chủ bị khoá kèm nhãn việc đang chạy.
+- **Luồng chạy:** `core.scheduler` (bật trong `runserver`) cứ 5 phút → `rising.services.run_daily_if_due`
+  (đóng lượt hôm trước còn dở, tự chạy tiếp lượt bị gián đoạn ≤ 3 lần, sau 7:00 chưa có lượt thì tạo) →
+  `execute_daily_run`: bước 1 quét lại từng `WatchQuery` bằng `discovery.services.start_scan/execute_scan`
+  (nguồn "hằng ngày") → bước 2 lọc thô bằng `catalog.services.baseline_snapshots` + `growth.estimate_gain_7d`
+  → bước 3 xác minh bằng `GitHubClient.star_history` (ngân sách 300 lượt có token / 50 không token) →
+  bước 4 đếm, dọn ảnh chụp và kết quả quét hằng ngày cũ hơn 35 ngày.
+- **Thành phần:**
+  - model: `WatchQuery` (16 truy vấn gợi ý tạo sẵn), `DailyRun` (bước, trạng thái, nhịp sống, ngân sách,
+    số đếm, `problems`), `DailyRunScan` (truy vấn ↔ lần quét), `RisingCheck` (số tăng, chuỗi 30 ngày, nguồn,
+    cờ)
+  - hàm thuần: `features/rising/growth.py` (tính +1/+7/+30 ngày theo ngày UTC, ước lượng, quy tắc rising,
+    cờ, điểm biểu đồ)
+  - service: `run_daily_if_due`, `prepare_daily_run`, `execute_daily_run`, `request_daily_stop`,
+    `release_unstarted_daily_run`, `live_daily_run`, `close_previous_days`, `pause_stale_daily_runs`,
+    `daily_report`, `latest_report_run`, `report_run_for`, `report_days`, `today_status`, `watch_overview`,
+    `daily_estimate`, `recent_daily_runs`
+  - form: `WatchQueryForm`, `ReportFilterForm`
+  - view/URL (`app_name = "rising"`): `report` (`/rising/`), `watch` (`/rising/watch/`), `watch_edit`
+    (`/rising/watch/<id>/`), `run_now` (POST `/rising/run/`), `stop` (POST `/rising/runs/<id>/stop/`)
+  - template: `rising/report.html`, `watch.html`, `watch_edit.html`, `_today.html`, `_watch_form.html`
+  - lệnh: `manage.py daily` (chạy lượt của hôm nay ở tiền cảnh)
+- **Phụ thuộc:** `discovery.services` (quét, tự chạy tiếp, dọn kết quả), `catalog.services` (ảnh chụp
+  star), `integrations.github` (`star_history`), `core.background`, `core.scheduler`.
+- **Kiểm chứng tự động:** `features/rising/tests/` — hàm thuần với phản hồi lịch sử star thật đã lưu; lượt
+  hằng ngày với GitHub giả lập (quét lại, lọc thô, xác minh, hết ngân sách, repo bị xoá 404, bị gián đoạn
+  rồi chạy tiếp, Dừng, sang ngày mới, lỗi token rồi Chạy tiếp); lịch (trước/sau 7:00, chạy bù, tối đa 3
+  lần tự chạy tiếp); trang và lệnh; `test_e2e.py` chạy `manage.py daily` trên 300 repo giả rồi mở `/rising/`.
+  `features/discovery/tests/test_auto_resume.py` cho phần trả D-006. Gọi GitHub thật: `uv run poe test-live`.
+- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/rising/` sau 7:00 (lượt tự chạy) hoặc
+  bấm Chạy ngay; sửa một file `.py` giữa lúc chạy để server khởi động lại → khoảng 5 phút sau lượt tự nối.
+- **Nợ liên quan:** D-009 (4 điểm để sau).
 
 ### F-002 — Quét sâu (TÍNH NĂNG MẪU: tính năng mới copy cấu trúc `features/discovery/`)
 - **Phục vụ vế nào của mục tiêu:** tìm đủ (vượt trần 1.000 kết quả), không trùng, không rác (ngưỡng star).
@@ -60,7 +103,8 @@ test ở đâu, đang nợ gì.
   Quét mức Sâu trên 1.500 repo → độ phủ 100%, quét lại không trùng. Gọi GitHub thật: `uv run poe test-live`.
 - **Kiểm chứng tay:** `uv run python manage.py scan "topic:ai-video" --budget 300`; hoặc mở trình duyệt,
   quét mức Vừa, bấm Dừng rồi Tiếp tục.
-- **Nợ liên quan:** D-006 (tiếp tục bằng tay sau gián đoạn), D-007 (trang chỉ hiện 500 repo đầu).
+- **Nợ liên quan:** D-007 (trang chỉ hiện 500 repo đầu), D-008 (5 điểm nhỏ còn lại). D-006 đã trả ở F-005
+  (lần quét bị gián đoạn tự chạy tiếp).
 
 ### F-001 — Quét GitHub theo truy vấn (bộ khung đi được)
 - Đã gộp vào F-002 (2026-10-22, chủ dự án chốt): "quét nhanh" = mức **Nhanh** (1 lượt gọi) của quét sâu.
@@ -84,7 +128,6 @@ test ở đâu, đang nợ gì.
 |---|---|---|
 | F-003 | Làm giàu: số contributor, tổ chức đứng sau, xác minh tổ chức, quốc gia | tìm đúng |
 | F-004 | Ưu tiên repo Trung Quốc: tín hiệu location, README, danh sách tổ chức | tìm đúng |
-| F-005 | Ảnh chụp star hằng ngày + phát hiện rising star + lịch quét hằng ngày | tiềm năng |
 | F-006 | Chấm điểm Chất lượng/Tiềm năng có giải thích | không rác |
 | F-007 | Hồ sơ nhu cầu người dùng + AI chấm mức liên quan (Gemini qua 9router) | tìm đúng |
 | F-008 | Nguồn khám phá phụ Exa, Tavily | tìm đủ |

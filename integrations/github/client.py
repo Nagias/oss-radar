@@ -109,6 +109,7 @@ class GitHubClient:
         rate_limit_waits = 0
         while True:
             if self._budget is not None:
+                # DEBT(D-008): bấm Dừng lúc đang chờ giãn nhịp thì lượt đã trừ mà không gọi.
                 self._budget.take()
             self._pacer.before_request()
             try:

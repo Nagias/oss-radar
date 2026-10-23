@@ -12,6 +12,8 @@ thái hôm nay (`today_status`), danh sách theo dõi (`watch_overview`), ước
 View và lệnh dòng lệnh chỉ gọi các hàm ở đây; không chứa logic riêng.
 """
 
+# DEBT(D-009): file ~1.100 dòng (QĐ R11 giữ một services.py); tách khi thêm bước mới.
+
 import logging
 import math
 import time
@@ -504,6 +506,7 @@ class _DailyRunner:
         """
         self._check_in()
         now = timezone.now()
+        # DEBT(D-009): ngày lấy theo đồng hồ, không theo run.day (lượt vắt qua 0:00 lệch một ngày).
         today = timezone.localdate(now)
         scan_ids = list(
             DailyRunScan.objects.filter(daily_run_id=self.run_id).values_list(
@@ -988,6 +991,7 @@ def daily_report(
     verified = checks.filter(
         source=RisingCheck.Source.HISTORY, stars__lt=max_stars, gain_7d__gte=min_gain
     ).order_by("-gain_7d", "pk")
+    # DEBT(D-009): "Mới vào danh sách" so với ngưỡng mặc định của lượt trước, không theo bộ lọc.
     previous = _reported_runs().filter(day__lt=run.day).order_by("-day").first()
     previous_rising: set[int] = set()
     if previous is not None:

@@ -102,6 +102,7 @@ class RequestPacer:
         if retry_after is not None:
             wait = retry_after
         elif reset_epoch is not None:
+            # DEBT(D-008): đồng hồ máy lệch nhiều phút thì giờ chờ tính từ reset_epoch bị sai.
             wait = max(1.0, reset_epoch - self._wall_clock() + 1.0)
         else:
             wait = DEFAULT_RATE_LIMIT_WAIT_SECONDS

@@ -20,8 +20,10 @@ nhận, khi nào trả, quên trả thì sao.
 | D-003 | Quét chạy đồng bộ ngay trong request web, chưa có việc nền | Đã trả (2026-10-22) | F-002: chạy nền qua `core.background` |
 | D-004 | Mỗi lần quét chỉ lấy trang đầu (tối đa 100 repo nhiều star nhất) | Đã trả (2026-10-22) | F-002: chia lát vượt trần 1.000 |
 | D-005 | Gọi GitHub một lần, lỗi là dừng — chưa thử lại, chưa giãn nhịp, chưa có ngân sách gọi API | Đã trả (2026-10-22) | F-002: `integrations/github/pacing.py` |
-| D-006 | Tắt app giữa chừng thì lần quét chỉ chuyển sang Tạm dừng; phải bấm Tiếp tục bằng tay | Mở | Làm F-005 (lịch quét hằng ngày, chạy bù) |
+| D-006 | Tắt app giữa chừng thì lần quét chỉ chuyển sang Tạm dừng; phải bấm Tiếp tục bằng tay | Đã trả (2026-10-23) | F-005: bộ nhịp tự chạy tiếp lần quét bị gián đoạn |
 | D-007 | Trang kết quả lần quét chỉ hiện 500 repo nhiều star nhất | Mở | Khi làm trang duyệt kho (lọc, phân trang) |
+| D-008 | 5 điểm nhỏ còn lại từ rà soát F-002 (tính dư lượt khi Dừng lúc chờ, lệch đồng hồ, lệnh in "0/None", lát gốc lỗi báo "còn sót", trạng thái `queued` cũ) | Mở | Một PR `fix/` riêng sau F-005 |
+| D-009 | 4 điểm để sau của F-005 (services.py rising ~1.100 dòng, ngày của bước lọc thô, nhãn "Mới vào danh sách" theo ngưỡng mặc định, "35 ngày" viết cứng) | Mở | Khi làm F-006 hoặc khi sửa rising lần tới |
 
 ## Chi tiết
 
@@ -101,6 +103,10 @@ nhận, khi nào trả, quên trả thì sao.
 - **Khi nào trả:** F-005.
 - **Quên trả thì sao:** lần quét lớn bị bỏ dở nếu người dùng không để ý nút Tiếp tục.
 - **Vị trí:** `features/discovery/services.py` (`pause_stale_scans`).
+- **Đã trả (2026-10-23, F-005):** bộ nhịp `core/scheduler.py` (bật trong lệnh `runserver` của dự án)
+  cứ 5 phút gọi `resume_interrupted_scan`: lần quét tay "bị gián đoạn" trong 24 giờ qua được tự chạy
+  tiếp, tối đa 3 lần mỗi lần quét. Lần quét bạn đã bấm Dừng, bị Ctrl+C hoặc hết ngân sách thì không
+  tự chạy. Lần quét thuộc lượt hằng ngày do chính lượt hằng ngày nối lại.
 
 ### D-007 — Trang kết quả chỉ hiện 500 repo nhiều star nhất
 - **Nợ gì:** quét sâu có thể lấy hàng nghìn repo, nhưng trang kết quả một lần quét chỉ in 500 repo nhiều
@@ -111,4 +117,37 @@ nhận, khi nào trả, quên trả thì sao.
 - **Quên trả thì sao:** repo ít star (đúng nhóm "tiềm năng") của lần quét lớn không xem được trên web,
   chỉ thấy qua lệnh hoặc CSDL.
 - **Vị trí:** `features/discovery/views.py` (`RESULTS_SHOWN_LIMIT`),
+  `features/discovery/templates/discovery/scan_detail.html`.
+
+### D-008 — 5 điểm nhỏ còn lại từ rà soát F-002
+- **Nợ gì:** agent rà soát cuối của F-002 chỉ ra 5 điểm nhỏ, ghi trong PR Nagias/oss-radar#2 nhưng chưa sửa:
+  1. bấm Dừng đúng lúc đang chờ giãn nhịp thì lượt gọi đã bị trừ ngân sách mà không gọi (dư 1 lượt);
+  2. đồng hồ máy lệch nhiều phút thì thời gian chờ GitHub hồi lượt tính sai (chờ thừa hoặc thiếu);
+  3. lệnh `scan` in "0/None" khi GitHub chưa kịp trả tổng số kết quả;
+  4. lát gốc lỗi mà chưa lấy được repo nào vẫn hiện "Xong nhưng còn sót" thay vì "Lỗi";
+  5. dòng cũ thời F-001 còn trạng thái `queued` (không còn trong danh sách trạng thái).
+- **Vì sao chấp nhận:** không làm sai số liệu hay mất dữ liệu; mỗi điểm chỉ tốn tối đa 1 lượt gọi hoặc làm
+  một dòng chữ khó hiểu. Gộp vào một PR `fix/` riêng thì không làm loãng PR của F-005.
+- **Khi nào trả:** một PR `fix/` ngay sau F-005.
+- **Quên trả thì sao:** người dùng thỉnh thoảng thấy chữ hiển thị khó hiểu; ngân sách lệch 1 lượt.
+- **Vị trí:** `integrations/github/client.py` (`_get_json`), `integrations/github/pacing.py`
+  (`wait_for_rate_limit`), `features/discovery/management/commands/scan.py` (`_print_summary`),
+  `features/discovery/services.py` (`_finish_all_slices`), `features/discovery/models.py` (`ScanRun.Status`).
+
+### D-009 — 4 điểm để sau của F-005
+- **Nợ gì:**
+  1. `features/rising/services.py` dài khoảng 1.100 dòng: toàn bộ nghiệp vụ của lượt hằng ngày nằm một
+     file, theo luật "nghiệp vụ ở services.py";
+  2. bước lọc thô lấy "hôm nay" theo đồng hồ chứ không theo ngày của lượt: lượt bấm Chạy ngay lúc 23:50 mà
+     bước lọc chạy sau 0:00 thì so mốc lệch một ngày, repo mới tạo có thể bị ước lượng thấp;
+  3. nhãn "Mới vào danh sách" so với rising star của lượt trước theo ngưỡng mặc định (1.000 star, 50 star
+     /7 ngày), không theo bộ lọc bạn đang chọn trên trang;
+  4. câu "đã dọn sau 35 ngày" ở trang lần quét viết cứng số 35 (hằng `RETENTION_DAYS` nằm ở `rising`,
+     mà `discovery` không được import `rising`).
+- **Vì sao chấp nhận:** không làm sai số liệu chính (số star tăng luôn lấy từ lịch sử chính thức). Điểm 2 chỉ
+  xảy ra khi lượt vắt qua nửa đêm; điểm 3 chỉ ảnh hưởng nhãn khi bạn đổi bộ lọc; điểm 1 là chuyện dễ đọc.
+- **Khi nào trả:** khi làm F-006 (chấm điểm, cũng đụng tới rising) hoặc lần sửa rising kế tiếp.
+- **Quên trả thì sao:** file khó đọc dần; thỉnh thoảng một repo mới bị lỡ khỏi danh sách ứng viên trong
+  một ngày (ngày sau vẫn được xét); nhãn "Mới" hơi lệch khi lọc.
+- **Vị trí:** `features/rising/services.py` (đầu file, `_screen`, `daily_report`),
   `features/discovery/templates/discovery/scan_detail.html`.

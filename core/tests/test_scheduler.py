@@ -143,7 +143,11 @@ def test_runserver_command_comes_from_core() -> None:
     assert get_commands()["runserver"] == "core"
 
 
-def test_runserver_get_handler_starts_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runserver_starts_scheduler_only_after_port_is_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Mở app lần hai khi cổng đã bận: Django tắt tiến trình đó ngay khi không giữ được cổng.
+    # Bộ nhịp chỉ được bật ở on_bind (đã giữ cổng) → bản thứ hai không kịp chạy việc định kỳ.
     events: list[str] = []
     handler = object()
 
@@ -151,11 +155,19 @@ def test_runserver_get_handler_starts_scheduler(monkeypatch: pytest.MonkeyPatch)
         events.append("dựng handler phục vụ web và file tĩnh")
         return handler
 
+    def staticfiles_on_bind(self: StaticfilesRunserver, server_port: int) -> None:
+        events.append(f"đã giữ cổng {server_port}")
+
     monkeypatch.setattr(scheduler, "start", lambda **kwargs: events.append("bật bộ nhịp"))
     monkeypatch.setattr(StaticfilesRunserver, "get_handler", staticfiles_get_handler)
+    monkeypatch.setattr(StaticfilesRunserver, "on_bind", staticfiles_on_bind)
+    command = CoreRunserver()
 
-    assert CoreRunserver().get_handler() is handler
-    assert events == ["dựng handler phục vụ web và file tĩnh", "bật bộ nhịp"]
+    assert command.get_handler() is handler
+    assert events == ["dựng handler phục vụ web và file tĩnh"]
+
+    command.on_bind(8765)
+    assert events == ["dựng handler phục vụ web và file tĩnh", "đã giữ cổng 8765", "bật bộ nhịp"]
 
 
 def test_runserver_does_not_start_scheduler_when_system_checks_fail(

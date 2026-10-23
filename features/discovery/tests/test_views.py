@@ -88,8 +88,22 @@ def test_running_scan_page_auto_refreshes(client: Client) -> None:
 
     page = client.get(detail_url(live)).text
 
-    assert 'http-equiv="refresh"' in page
+    assert f'content="3; url={detail_url(live)}"' in page
     assert "Dừng" in page
+
+
+def test_refused_resume_of_live_scan_refreshes_to_detail_page(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Bấm đúp "Tiếp tục": lần bấm thứ hai bị từ chối (409) trong khi lần quét đã chạy. Trang 409
+    # nằm ở địa chỉ /resume/ (chỉ nhận POST) — tự tải lại vào đó sẽ ra trang trắng 405.
+    live = services.start_scan(DEFAULT_REQUEST)
+    monkeypatch.setattr("core.background.busy_label", lambda: f"Lần quét #{live.pk}")
+
+    response = client.post(reverse("discovery:scan_resume", args=[live.pk]), {"extra_budget": "50"})
+
+    assert response.status_code == 409
+    assert f'content="3; url={detail_url(live)}"' in response.text
 
 
 def test_finished_scan_page_does_not_refresh(client: Client, github_search: respx.Route) -> None:

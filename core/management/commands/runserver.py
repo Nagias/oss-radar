@@ -4,12 +4,9 @@ Ghi đè lệnh của `django.contrib.staticfiles` (app `core` đứng trước 
 thừa nó, nên vẫn phục vụ file tĩnh như cũ.
 """
 
-from typing import Any
-
 from django.contrib.staticfiles.management.commands.runserver import (
     Command as StaticfilesRunserver,
 )
-from django.core.handlers.wsgi import WSGIHandler
 
 from core import scheduler
 
@@ -17,11 +14,11 @@ from core import scheduler
 class Command(StaticfilesRunserver):
     help = "Chạy web để dùng trên máy (máy chủ phát triển), kèm bộ nhịp chạy việc định kỳ."
 
-    def get_handler(self, *args: Any, **options: Any) -> WSGIHandler:
-        # Django chỉ gọi get_handler trong inner_run, tức ở tiến trình phục vụ web (tiến trình con
-        # của bộ tự khởi động lại, hoặc tiến trình duy nhất khi --noreload), và chỉ SAU khi kiểm
-        # tra hệ thống và migration đã qua. Tiến trình theo dõi file không tới đây → không có hai
-        # bộ nhịp; cấu hình hỏng thì bộ nhịp không bật.
-        handler = super().get_handler(*args, **options)
+    def on_bind(self, server_port: int) -> None:
+        # Django chỉ gọi on_bind trong inner_run, tức ở tiến trình phục vụ web (tiến trình con của
+        # bộ tự khởi động lại, hoặc tiến trình duy nhất khi --noreload), SAU khi kiểm tra hệ thống,
+        # migration đã qua và máy chủ đã giữ được cổng. Vì vậy: tiến trình theo dõi file không tới
+        # đây (không có hai bộ nhịp); cấu hình hỏng thì bộ nhịp không bật; lỡ mở app lần hai khi
+        # cổng đã bận thì bản thứ hai bị tắt trước khi kịp chạy việc định kỳ nào.
+        super().on_bind(server_port)
         scheduler.start()
-        return handler
