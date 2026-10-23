@@ -104,14 +104,20 @@ def test_report_filter_defaults_when_empty() -> None:
     form = ReportFilterForm(data={"max_stars": "", "min_gain": "", "day": ""})
 
     assert form.is_valid(), form.errors
-    assert form.cleaned_data == {"max_stars": 1000, "min_gain": 50, "day": None}
+    expected = {"max_stars": 1000, "min_gain": 50, "day": None, "sort": "potential"}
+    assert form.cleaned_data == expected
 
 
 def test_report_filter_reads_values_including_zero_gain() -> None:
     form = ReportFilterForm(data={"max_stars": "500", "min_gain": "0", "day": "2026-10-21"})
 
     assert form.is_valid(), form.errors
-    assert form.cleaned_data == {"max_stars": 500, "min_gain": 0, "day": date(2026, 10, 21)}
+    assert form.cleaned_data == {
+        "max_stars": 500,
+        "min_gain": 0,
+        "day": date(2026, 10, 21),
+        "sort": "potential",
+    }
 
 
 def test_report_filter_values_keep_the_valid_fields_when_another_is_wrong() -> None:
@@ -138,3 +144,13 @@ def test_report_filter_rejects_bad_values(data: dict[str, str], field: str) -> N
 
     assert not form.is_valid()
     assert list(form.errors) == [field]
+
+
+def test_report_sort_defaults_to_potential_and_rejects_unknown_values() -> None:
+    gain = ReportFilterForm(data={"sort": "gain"})
+    unknown = ReportFilterForm(data={"sort": "stars"})
+
+    assert gain.sort_order() == "gain"
+    assert unknown.sort_order() == "potential"
+    assert "sort" in unknown.errors
+    assert ReportFilterForm().sort_order() == "potential"

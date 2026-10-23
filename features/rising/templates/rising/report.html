@@ -32,7 +32,7 @@
     <li><strong>{{ report.run.new_repo_count|intcomma }}</strong> repo mới phát hiện</li>
     <li>Ứng viên: <strong>{{ report.run.candidate_count|intcomma }}</strong> — đã xác minh <strong>{{ report.verified_count|intcomma }}</strong>, chưa xác minh <strong>{{ report.unverified|length|intcomma }}</strong></li>
     <li><strong>{{ report.run.insufficient_count|intcomma }}</strong> chưa đủ dữ liệu</li>
-    <li><strong>{{ report.run.rising_count|intcomma }}</strong> rising star</li>
+    <li><strong>{{ report.run.rising_count|intcomma }}</strong> rising star{% if report.hidden_rising_count %} (đã ẩn {{ report.hidden_rising_count }} nghi star giả){% endif %}</li>
   </ul>
 
   {% if report.run.problems and report.run.pk != status.run.pk %}
@@ -86,6 +86,14 @@
         <label for="{{ form.min_gain.id_for_label }}">{{ form.min_gain.label }}</label>
         {{ form.min_gain }}
       </div>
+      <div class="field">
+        <label for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
+        <select name="sort" id="{{ form.sort.id_for_label }}">
+          {% for value, label in form.fields.sort.choices %}
+            <option value="{{ value }}"{% if value == sort %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
     <div class="inline-form">
       <button type="submit">Lọc</button>
@@ -106,7 +114,9 @@
       <table>
         <thead>
           <tr>
-            <th class="num">#</th><th>Repo</th><th>Ngôn ngữ</th><th class="num">Star</th>
+            <th class="num">#</th><th>Repo</th>
+            <th class="num">Tiềm năng</th><th class="num">Chất lượng</th><th class="num">Nghi star giả</th>
+            <th>Ngôn ngữ</th><th class="num">Star</th>
             <th class="num">+1 ngày</th><th class="num">+7 ngày</th><th class="num">+30 ngày</th>
             <th class="num">Tăng 7 ngày</th><th class="num">Tuổi repo</th><th>30 ngày qua</th>
           </tr>
@@ -122,6 +132,9 @@
                 {% if row.repository.description %}<div class="desc">{{ row.repository.description|truncatechars:180 }}</div>{% endif %}
                 <div class="reason muted small">{{ row.reason }}</div>
               </td>
+              <td class="num">{% include "scoring/_score.html" with score=row.scores.potential %}</td>
+              <td class="num">{% include "scoring/_score.html" with score=row.scores.quality %}</td>
+              <td class="num">{% include "scoring/_suspicion.html" with suspicion=row.scores.suspicion %}</td>
               <td>{{ row.repository.language|default:"—" }}</td>
               <td class="num">{{ row.check.stars|intcomma }}</td>
               <td class="num">{% if row.check.gain_1d is not None %}+{{ row.check.gain_1d|intcomma }}{% else %}—{% endif %}</td>
@@ -139,8 +152,44 @@
         </tbody>
       </table>
     </div>
-  {% else %}
+  {% elif not report.hidden %}
     <p class="muted">Không có repo nào đạt ngưỡng (dưới {{ max_stars|intcomma }} star, tăng từ {{ min_gain|intcomma }} star trong 7 ngày) ở báo cáo này.</p>
+  {% endif %}
+
+  {% if report.hidden %}
+    <details class="hidden-repos">
+      <summary>Đã ẩn {{ report.hidden|length }} repo nghi star giả — Hiện</summary>
+      <p class="muted small">
+        Các repo này có nhiều dấu hiệu star mua (cộng dồn từ 60 điểm trở lên). Chỉ bị ẩn khỏi bảng chính, không bị xoá;
+        lý do ghi ngay bên dưới từng repo — tự mở GitHub xem lại nếu thấy nghi oan.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Repo</th><th class="num">Star</th><th class="num">+7 ngày</th><th class="num">Nghi star giả</th><th>Vì sao bị ẩn</th></tr>
+          </thead>
+          <tbody>
+            {% for row in report.hidden %}
+              <tr>
+                <td>
+                  <a href="{{ row.repository.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ row.repository.full_name }}</strong></a>
+                  {% if row.repository.description %}<div class="desc">{{ row.repository.description|truncatechars:180 }}</div>{% endif %}
+                </td>
+                <td class="num">{{ row.check.stars|intcomma }}</td>
+                <td class="num">+{{ row.check.gain_7d|intcomma }}</td>
+                <td class="num"><span class="badge badge-danger">{{ row.scores.suspicion.label }}</span> {{ row.scores.suspicion.points }}</td>
+                <td class="small">
+                  <ul class="score-parts">
+                    {% for signal in row.scores.suspicion.signals %}<li>{% if signal.points > 0 %}+{% endif %}{{ signal.points }} — {{ signal.reason }}</li>{% endfor %}
+                    {% for note in row.scores.suspicion.notes %}<li class="muted">{{ note }}</li>{% endfor %}
+                  </ul>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
   {% endif %}
 </section>
 
@@ -153,9 +202,9 @@
   </p>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Repo</th><th class="num">Star</th><th class="num">Ước lượng +7 ngày</th><th>Nguồn</th></tr></thead>
+      <thead><tr><th>Repo</th><th class="num">Star</th><th class="num">Ước lượng +7 ngày</th><th class="num">Tiềm năng (ước lượng)</th><th>Nguồn</th></tr></thead>
       <tbody>
-        {% for check in report.unverified %}
+        {% for row in report.unverified %}{% with check=row.check %}
           <tr>
             <td>
               <a href="{{ check.repository.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ check.repository.full_name }}</strong></a>
@@ -163,6 +212,7 @@
             </td>
             <td class="num">{{ check.stars|intcomma }}</td>
             <td class="num">~+{{ check.gain_7d|intcomma }}</td>
+            <td class="num">{% include "scoring/_score.html" with score=row.potential %}</td>
             <td class="small">
               {% if check.source == "snapshot" %}
                 ước lượng từ ảnh chụp ngày {{ check.baseline_day|date:"d/m" }} và ngày {{ report.run.day|date:"d/m" }}, chưa xác minh
@@ -171,7 +221,7 @@
               {% endif %}
             </td>
           </tr>
-        {% endfor %}
+        {% endwith %}{% endfor %}
       </tbody>
     </table>
   </div>

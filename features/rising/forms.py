@@ -11,6 +11,7 @@ from django import forms
 from features.discovery.services import BUDGET_CHOICES, forbidden_qualifier_hint
 from features.rising.growth import RISING_MAX_STARS, RISING_MIN_GAIN_7D
 from features.rising.models import WatchQuery
+from features.rising.services import SORT_GAIN, SORT_POTENTIAL
 
 DEFAULT_WATCH_BUDGET = 300  # mức "Sâu": đủ quét trọn một truy vấn cỡ vài nghìn repo
 
@@ -74,6 +75,12 @@ class ReportFilterForm(forms.Form):
         label="Tăng tối thiểu trong 7 ngày", min_value=0, required=False, initial=RISING_MIN_GAIN_7D
     )
     day = forms.DateField(label="Ngày báo cáo", required=False)
+    sort = forms.ChoiceField(
+        label="Sắp theo",
+        choices=[(SORT_POTENTIAL, "Điểm Tiềm năng"), (SORT_GAIN, "Tăng 7 ngày")],
+        required=False,
+        initial=SORT_POTENTIAL,
+    )
 
     def values(self) -> tuple[int, int, date | None]:
         """(star tối đa, tăng tối thiểu, ngày) dùng để lọc.
@@ -90,6 +97,18 @@ class ReportFilterForm(forms.Form):
             cleaned.get("min_gain", RISING_MIN_GAIN_7D),
             cleaned.get("day"),
         )
+
+    def sort_order(self) -> str:
+        """Thứ tự bảng rising star; để trống hoặc giá trị lạ thì theo điểm Tiềm năng."""
+        if not self.is_bound:
+            return SORT_POTENTIAL
+        self.is_valid()
+        sort: str = self.cleaned_data.get("sort", SORT_POTENTIAL)
+        return sort
+
+    def clean_sort(self) -> str:
+        value: str = self.cleaned_data["sort"]
+        return value or SORT_POTENTIAL
 
     def clean_max_stars(self) -> int:
         value: int | None = self.cleaned_data["max_stars"]

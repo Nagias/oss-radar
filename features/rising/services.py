@@ -37,6 +37,7 @@ from features.discovery.models import ScanRun
 from features.rising import growth
 from features.rising.models import DailyRun, DailyRunScan, RisingCheck, WatchQuery
 from features.scoring import services as scoring
+from features.scoring.rules import GrowthFacts, Score
 from integrations.github.client import GitHubClient, get_github_client
 from integrations.github.errors import (
     GitHubAuthError,
@@ -1043,6 +1044,11 @@ class _HeartbeatSleep:
 # --- Đọc báo cáo -----------------------------------------------------------------------------
 
 
+# Thứ tự bảng rising star: theo điểm Tiềm năng (mặc định, F-006) hoặc theo số tăng 7 ngày.
+SORT_POTENTIAL = "potential"
+SORT_GAIN = "gain"
+
+
 @dataclass(frozen=True, slots=True)
 class RisingRow:
     """Một dòng của bảng rising star, kèm sẵn mọi thứ trang cần hiện (không tính trong template)."""
@@ -1055,16 +1061,29 @@ class RisingRow:
     flag_labels: tuple[str, ...]
     sparkline: str
     reason: str
+    scores: scoring.RepoScores
+
+
+@dataclass(frozen=True, slots=True)
+class UnverifiedRow:
+    """Ứng viên chưa xác minh: số tăng chỉ là ước lượng, điểm Tiềm năng cũng ghi "(ước lượng)"."""
+
+    check: RisingCheck
+    potential: Score
 
 
 @dataclass(frozen=True, slots=True)
 class DailyReport:
     run: DailyRun
     rising: list[RisingRow]
-    unverified: list[RisingCheck]
+    # Dòng qua bộ lọc nhưng "Nghi cao" star giả: ẩn khỏi bảng chính, có nút hiện (kèm lý do).
+    hidden: list[RisingRow]
+    unverified: list[UnverifiedRow]
     scans: list[DailyRunScan]
     # Số dòng đã xác minh bằng lịch sử chính thức, bất kể ngưỡng lọc của người xem.
     verified_count: int
+    # Số rising star của lượt (ngưỡng mặc định, như `run.rising_count`) bị ẩn vì "Nghi cao".
+    hidden_rising_count: int
 
 
 def daily_report(
@@ -1072,18 +1091,29 @@ def daily_report(
     *,
     max_stars: int = growth.RISING_MAX_STARS,
     min_gain: int = growth.RISING_MIN_GAIN_7D,
+    sort: str = SORT_POTENTIAL,
 ) -> DailyReport:
     """Báo cáo của một lượt, lọc theo ngưỡng người dùng chọn. Chỉ đọc dữ liệu đã lưu, không gọi API.
 
     - Bảng rising: dòng đã xác minh bằng lịch sử chính thức, dưới `max_stars` star và tăng từ
-      `min_gain` trong 7 ngày, tăng nhiều trước.
+      `min_gain` trong 7 ngày; sắp theo điểm Tiềm năng (hoà thì tăng nhiều trước), hoặc theo số
+      tăng 7 ngày khi `sort="gain"`.
+    - Dòng "Nghi cao" star giả (sau bộ lọc) nằm ở `hidden`, không ở bảng chính.
     - "Mới vào danh sách": repo không là rising star trong báo cáo liền trước.
     - Mục chưa xác minh: dòng còn là ước lượng (hết ngân sách xác minh, hoặc GitHub trả lỗi).
+    - Điểm tính lúc xem (không lưu), từ số liệu repo và hồ sơ chủ đang có trong kho.
     """
     checks = RisingCheck.objects.filter(daily_run=run).select_related("repository")
-    verified = checks.filter(
-        source=RisingCheck.Source.HISTORY, stars__lt=max_stars, gain_7d__gte=min_gain
-    ).order_by("-gain_7d", "pk")
+    all_verified = list(checks.filter(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk"))
+    unverified = list(checks.exclude(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk"))
+    every = [*all_verified, *unverified]
+    scores = scoring.score_repositories(
+        [check.repository for check in every],
+        growth={check.repository_id: _growth_facts(check) for check in every},
+    )
+    verified = [
+        check for check in all_verified if check.stars < max_stars and check.gain_7d >= min_gain
+    ]
     # DEBT(D-009): "Mới vào danh sách" so với ngưỡng mặc định của lượt trước, không theo bộ lọc.
     previous = _reported_runs().filter(day__lt=run.day).order_by("-day").first()
     previous_rising: set[int] = set()
@@ -1098,17 +1128,29 @@ def daily_report(
             is_new_entry=check.repository_id not in previous_rising,
             max_stars=max_stars,
             min_gain=min_gain,
+            scores=scores[check.repository_id],
         )
         for check in verified
     ]
+    if sort != SORT_GAIN:
+        # Sắp ổn định: hoà điểm thì giữ thứ tự tăng nhiều trước đã có.
+        rows.sort(key=lambda row: -_potential_total(row.scores))
+    hidden_rising = sum(
+        1
+        for check in all_verified
+        if check.is_rising and scores[check.repository_id].suspicion.is_hidden
+    )
     return DailyReport(
         run=run,
-        rising=rows,
-        unverified=list(
-            checks.exclude(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk")
-        ),
+        rising=[row for row in rows if not row.scores.suspicion.is_hidden],
+        hidden=[row for row in rows if row.scores.suspicion.is_hidden],
+        unverified=[
+            UnverifiedRow(check, _estimated_potential(scores[check.repository_id]))
+            for check in unverified
+        ],
         scans=list(run.scans.select_related("scan_run", "watch_query").order_by("position", "pk")),
-        verified_count=checks.filter(source=RisingCheck.Source.HISTORY).count(),
+        verified_count=len(all_verified),
+        hidden_rising_count=hidden_rising,
     )
 
 
@@ -1135,8 +1177,36 @@ def _reported_runs() -> QuerySet[DailyRun]:
     )
 
 
+def _growth_facts(check: RisingCheck) -> GrowthFacts:
+    """Số tăng của dòng xét để chấm Tiềm năng và tín hiệu "dồn một ngày"."""
+    verified = check.source == RisingCheck.Source.HISTORY
+    return GrowthFacts(
+        stars=check.stars,
+        gain_7d=check.gain_7d,
+        gain_30d=check.gain_30d if verified else None,
+        series=tuple(check.series) if verified else (),
+        estimated=not verified,
+    )
+
+
+def _potential_total(scores: scoring.RepoScores) -> int:
+    return scores.potential.total if scores.potential is not None else 0
+
+
+def _estimated_potential(scores: scoring.RepoScores) -> Score:
+    if scores.potential is None:
+        raise ValueError("Dòng chưa xác minh phải có điểm Tiềm năng (đã truyền số tăng ước lượng)")
+    return scores.potential
+
+
 def _rising_row(
-    check: RisingCheck, *, run: DailyRun, is_new_entry: bool, max_stars: int, min_gain: int
+    check: RisingCheck,
+    *,
+    run: DailyRun,
+    is_new_entry: bool,
+    max_stars: int,
+    min_gain: int,
+    scores: scoring.RepoScores,
 ) -> RisingRow:
     repository = check.repository
     # Tuổi tính tới ngày của lượt (không phải hôm nay): xem lại báo cáo cũ vẫn khớp cờ
@@ -1151,6 +1221,7 @@ def _rising_row(
         flag_labels=tuple(growth.FLAG_LABELS[growth.Flag(flag)] for flag in check.flags),
         sparkline=growth.sparkline_points(check.series),
         reason=_reason(check, max_stars=max_stars, min_gain=min_gain),
+        scores=scores,
     )
 
 

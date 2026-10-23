@@ -148,8 +148,13 @@ def make_run(
 
 
 def make_repo(
-    github_id: int, *, created: date = date(2025, 1, 1), description: str = "Một repo giả lập"
+    github_id: int,
+    *,
+    created: date = date(2025, 1, 1),
+    description: str = "Một repo giả lập",
+    **changes: Any,
 ) -> Repository:
+    """Một repo trong kho; `changes` đổi trường khác của repo GitHub (vd `stars`, `forks`)."""
     [outcome] = upsert_repositories(
         [
             make_github_repo(
@@ -158,6 +163,7 @@ def make_repo(
                 html_url=f"https://github.com/gia-lap/repo-{github_id}",
                 description=description,
                 created_at=datetime.combine(created, time(12), tzinfo=UTC),
+                **changes,
             )
         ],
         seen_at=timezone.now(),
