@@ -172,3 +172,46 @@ def _matches(item: dict[str, Any], query: str) -> bool:
     created = str(item["created_at"])[:10]
     found = _CREATED.search(query)
     return found is None or found.group(1) <= created <= found.group(2)
+
+
+_USER_PATH = re.compile(r"/users/([A-Za-z0-9-]+)$")
+
+
+def make_user(
+    login: str, *, created: date, followers: int = 10, public_repos: int = 30
+) -> dict[str, Any]:
+    """Hồ sơ tài khoản giả: bản sao của phản hồi THẬT `GET /users/octocat`, thay vài trường."""
+    user = copy.deepcopy(load_fixture("github/user.json"))
+    user.update(
+        login=login,
+        followers=followers,
+        public_repos=public_repos,
+        created_at=datetime.combine(created, clock_time(9, 0), tzinfo=UTC)
+        .isoformat()
+        .replace("+00:00", "Z"),
+    )
+    return user
+
+
+class FakeGitHubUsers:
+    """Dùng làm `side_effect` của respx cho GET /users/{login}; login không có thì trả 404."""
+
+    def __init__(self, users: dict[str, dict[str, Any]]) -> None:
+        self.users = {login.lower(): user for login, user in users.items()}
+        self.requested: list[str] = []
+        self.fail_when: Callable[[str], int | None] | None = None
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        found = _USER_PATH.search(request.url.path)
+        if found is None:
+            raise ValueError(f"không phải đường dẫn hồ sơ tài khoản: {request.url.path}")
+        login = found.group(1)
+        self.requested.append(login)
+
+        if self.fail_when is not None and (status := self.fail_when(login)) is not None:
+            return httpx.Response(status, json={"message": "lỗi giả lập"})
+        user = self.users.get(login.lower())
+        if user is None:
+            return httpx.Response(404, json={"message": "Not Found"})
+        headers = {"x-ratelimit-remaining": "59", "x-ratelimit-reset": str(int(time.time()) + 3600)}
+        return httpx.Response(200, json=user, headers=headers)

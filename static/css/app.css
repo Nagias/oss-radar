@@ -139,3 +139,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .reason { margin-top: 4px; }
 .spark { display: block; overflow: visible; color: var(--accent); }
 .nowrap { white-space: nowrap; }
+
+/* F-006: điểm có giải thích, nhãn nghi star giả */
+.score summary { cursor: pointer; white-space: nowrap; }
+.score-parts { margin: 6px 0 0; padding-left: 16px; font-size: 0.82rem; min-width: 260px; }
+.score-parts li { margin: 2px 0; }
+.badge-danger { background: var(--err-bg); color: var(--err); }
+.hidden-repos { margin-top: 14px; }
+.hidden-repos summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
