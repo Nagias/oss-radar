@@ -6,6 +6,7 @@ Dữ liệu trong tests/fixtures/github/ là phản hồi THẬT của GitHub (r
 import copy
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
+from email.utils import format_datetime
 from typing import Any
 
 import httpx
@@ -475,3 +476,94 @@ def test_star_history_accepts_what_the_fake_serves(
 def test_star_history_rejects_weeks_out_of_range(client: GitHubClient, weeks: int) -> None:
     with pytest.raises(ValueError, match="weeks"):
         client.star_history(42976210, weeks=weeks)
+
+
+# --- Nợ D-008: ngân sách không bị trừ khi chưa gọi; giờ chờ theo đồng hồ GitHub ------------------
+
+
+class _StopPressedError(Exception):
+    """Giả lập người dùng bấm Dừng đúng lúc client đang chờ giãn nhịp."""
+
+
+def _pacing_client(fake_time: FakeTime, *, sleep: Any, budget: CallBudget) -> GitHubClient:
+    pacer = RequestPacer(
+        min_interval=2.1,
+        sleep=sleep,
+        clock=fake_time.monotonic,
+        wall_clock=fake_time.time,
+        jitter=lambda: 0.0,
+    )
+    return GitHubClient(
+        token="test-token", api_url=API_URL, timeout_seconds=5.0, pacer=pacer, budget=budget
+    )
+
+
+def test_stop_while_waiting_to_call_does_not_spend_budget(
+    http_mock: respx.MockRouter, fake_time: FakeTime
+) -> None:
+    def stop_on_wait(seconds: float) -> None:
+        raise _StopPressedError
+
+    budget = CallBudget(5)
+    http_mock.get(SEARCH_URL).respond(json=load_fixture("search_repositories.json"))
+    with _pacing_client(fake_time, sleep=stop_on_wait, budget=budget) as github:
+        github.search_repositories("topic:ai-agent")  # lượt đầu không phải chờ
+        with pytest.raises(_StopPressedError):
+            github.search_repositories("topic:ai-agent")  # phải chờ 2,1 giây → bị Dừng
+
+    assert budget.used == 1  # lượt bị Dừng chưa gọi thì không bị tính
+
+
+def test_exhausted_budget_refuses_without_waiting(
+    http_mock: respx.MockRouter, fake_time: FakeTime
+) -> None:
+    budget = CallBudget(1)
+    http_mock.get(SEARCH_URL).respond(json=load_fixture("search_repositories.json"))
+    with _pacing_client(fake_time, sleep=fake_time.sleep, budget=budget) as github:
+        github.search_repositories("topic:ai-agent")
+        with pytest.raises(CallBudgetExhaustedError):
+            github.search_repositories("topic:ai-agent")
+
+    assert fake_time.sleeps == []  # hết ngân sách thì từ chối ngay, không chờ giãn nhịp vô ích
+
+
+def test_rate_limit_wait_follows_github_date_header_not_local_clock(
+    client: GitHubClient, http_mock: respx.MockRouter, fake_time: FakeTime
+) -> None:
+    github_now = int(fake_time.time()) - 600  # đồng hồ máy nhanh hơn GitHub 10 phút
+    limited = httpx.Response(
+        403,
+        headers={
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-reset": str(github_now + 30),
+            "date": format_datetime(datetime.fromtimestamp(github_now, tz=UTC), usegmt=True),
+        },
+        json={"message": "API rate limit exceeded"},
+    )
+    ok = httpx.Response(200, json=load_fixture("search_repositories.json"))
+    http_mock.get(SEARCH_URL).mock(side_effect=[limited, ok])
+
+    client.search_repositories("topic:ai-agent")
+
+    assert fake_time.sleeps == [pytest.approx(31, abs=1)]
+
+
+def test_unreadable_date_header_is_ignored(
+    client: GitHubClient, http_mock: respx.MockRouter, fake_time: FakeTime
+) -> None:
+    reset_epoch = int(fake_time.time()) + 30
+    limited = httpx.Response(
+        403,
+        headers={
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-reset": str(reset_epoch),
+            "date": "not-a-date",
+        },
+        json={"message": "API rate limit exceeded"},
+    )
+    ok = httpx.Response(200, json=load_fixture("search_repositories.json"))
+    http_mock.get(SEARCH_URL).mock(side_effect=[limited, ok])
+
+    client.search_repositories("topic:ai-agent")
+
+    assert fake_time.sleeps == [pytest.approx(31, abs=1)]

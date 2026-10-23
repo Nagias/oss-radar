@@ -4,6 +4,7 @@ import functools
 import ssl
 import time
 from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from types import TracebackType
 from typing import Any, Self
 
@@ -109,9 +110,12 @@ class GitHubClient:
         rate_limit_waits = 0
         while True:
             if self._budget is not None:
-                # DEBT(D-008): bấm Dừng lúc đang chờ giãn nhịp thì lượt đã trừ mà không gọi.
-                self._budget.take()
+                self._budget.ensure_available()
+            # Chờ giãn nhịp xong mới trừ ngân sách: bấm Dừng giữa lúc chờ thì lượt chưa gọi không
+            # bị tính.
             self._pacer.before_request()
+            if self._budget is not None:
+                self._budget.take()
             try:
                 response = self._http.get(path, params=params)
             except httpx.RequestError as exc:
@@ -120,6 +124,7 @@ class GitHubClient:
                     raise GitHubUnavailableError(f"Không gọi được GitHub: {exc!r}") from exc
                 self._pacer.backoff(transient_failures)
                 continue
+            self._pacer.observe_server_time(_header_epoch(response, "date"))
             if response.status_code >= 500 and transient_failures < MAX_TRANSIENT_RETRIES:
                 transient_failures += 1
                 self._pacer.backoff(transient_failures)
@@ -204,6 +209,21 @@ def _rate_limit_reset(response: httpx.Response) -> datetime | None:
 def _header_int(response: httpx.Response, name: str) -> int | None:
     raw = response.headers.get(name, "")
     return int(raw) if raw.isdigit() else None
+
+
+def _header_epoch(response: httpx.Response, name: str) -> float | None:
+    """Header ngày giờ kiểu HTTP (vd `Date`) → giờ epoch; thiếu hoặc sai định dạng thì `None`."""
+    raw = response.headers.get(name)
+    if raw is None:
+        return None
+    try:
+        parsed = parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return None
+    epoch: float = parsed.timestamp()
+    return epoch
 
 
 def _header_float(response: httpx.Response, name: str) -> float | None:

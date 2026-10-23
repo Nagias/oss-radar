@@ -49,9 +49,21 @@
 - [x] Chạy thật trên CSDL thật (2026-10-23, không token): lượt tự chạy lúc 10:23 khi mở app; app khởi động lại
       giữa chừng → 10:30 tự nối tiếp; máy cạn bộ nhớ → lượt Lỗi (MemoryError) → `manage.py daily` chạy tiếp
       từ truy vấn 9, xong 16/16: 596 lượt Search, 50/50 lượt xác minh, 47 rising star; `poe test-live` 3/3
-- [ ] PR F-005, CI xanh, chủ dự án duyệt → squash-merge
+- [x] PR Nagias/oss-radar#3, CI xanh, chủ dự án duyệt → squash-merge vào `main` (commit `9553d54`, 2026-10-23)
 
 ## Tiếp theo (sau F-005)
 
 - [ ] Chủ dự án điền `GITHUB_TOKEN` (xác minh 300 repo/ngày thay vì 50, quét nhanh gấp ~3 lần)
-- [ ] PR `fix/` trả D-008 (5 điểm nhỏ của F-002)
+- [x] PR `fix/d008-diem-nho-f002` trả D-008 (5 điểm nhỏ của F-002) — xem mục dưới
+- [ ] Chủ dự án chọn tính năng kế tiếp trong lộ trình FEATURE_MAP (F-003 làm giàu, F-004 ưu tiên Trung Quốc,
+      F-006 chấm điểm + lọc star giả…) → thiết kế → duyệt → kế hoạch → TDD
+
+## Trả nợ D-008 (2026-10-23, nhánh `fix/d008-diem-nho-f002`)
+
+- [x] Test đỏ trước cho 5 điểm (11 test mới), rồi sửa cho xanh
+- [x] Ngân sách chỉ trừ khi thật sự gọi; giờ chờ theo đồng hồ GitHub (header `Date`); lệnh `scan` in "?";
+      mọi lát lỗi → "Lỗi" nhưng vẫn Tiếp tục được; migration đóng dòng `queued` cũ
+- [x] Sổ sách: DEBT (D-008 đã trả), FEATURE_MAP
+- [x] `poe check` xanh (526 test, độ phủ 99,06%); `poe test-live` 3/3; migrate CSDL thật (0 dòng `queued`);
+      quét thật `topic:indie-hacker` mức Nhanh: 29/29 repo, đúng 1/1 lượt gọi
+- [ ] PR, CI xanh, chủ dự án duyệt → squash-merge

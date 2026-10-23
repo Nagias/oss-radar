@@ -72,11 +72,11 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
     def _print_summary(self, scan: ScanRun) -> None:
-        # DEBT(D-008): GitHub chưa trả tổng (total_count None) thì dòng tóm tắt in "0/None".
         coverage = "—" if scan.coverage_percent is None else f"{scan.coverage_percent}%"
+        total = "?" if scan.total_count is None else scan.total_count  # GitHub chưa kịp báo tổng
         self.stdout.write(
             f"Lần quét #{scan.pk} — {scan.get_status_display()}: lấy {scan.fetched_count}/"
-            f"{scan.total_count} repo GitHub báo có (độ phủ {coverage}); mới {scan.created_count}, "
+            f"{total} repo GitHub báo có (độ phủ {coverage}); mới {scan.created_count}, "
             f"đã có {scan.updated_count}; dùng {scan.api_calls_used}/{scan.budget} lượt gọi."
         )
         if scan.stop_reason:

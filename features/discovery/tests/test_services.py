@@ -319,7 +319,10 @@ def test_unreadable_github_data_fails_only_that_slice(http_mock: respx.MockRoute
     root = scan.slices.get(stack_order=1)
     assert root.status == ScanSlice.Status.FAILED
     assert "không đọc được" in root.error_message
-    assert scan.status == ScanRun.Status.SUCCEEDED_PARTIAL
+    # Lát duy nhất lỗi, không lấy được repo nào → "Lỗi" (không phải "còn sót"), vẫn Tiếp tục được.
+    assert scan.status == ScanRun.Status.FAILED
+    assert scan.error_kind == ScanRun.ErrorKind.UNAVAILABLE
+    assert scan.can_resume
 
 
 def test_unexpected_not_found_from_search_fails_only_that_slice(
@@ -330,7 +333,8 @@ def test_unexpected_not_found_from_search_fails_only_that_slice(
     scan = run_scan_now()
 
     assert scan.slices.get(stack_order=1).status == ScanSlice.Status.FAILED
-    assert scan.status == ScanRun.Status.SUCCEEDED_PARTIAL
+    assert scan.status == ScanRun.Status.FAILED
+    assert scan.error_kind == ScanRun.ErrorKind.UNAVAILABLE
 
 
 # --- Luồng nền vừa bị việc khác chiếm --------------------------------------------------------

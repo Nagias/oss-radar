@@ -91,3 +91,17 @@ def test_scan_command_cannot_resume_finished_scan(github_search: respx.Route) ->
 
     with pytest.raises(CommandError, match="không ở trạng thái"):
         call_command("scan", "--resume", str(scan.pk), stdout=StringIO())
+
+
+def test_summary_shows_question_mark_when_github_total_is_unknown() -> None:
+    # Bấm Dừng trước lượt gọi đầu: GitHub chưa kịp báo tổng → không in "0/None".
+    from features.discovery.management.commands.scan import Command
+
+    scan = ScanRun.objects.create(query="topic:ai-agent", status=ScanRun.Status.PAUSED, budget=1)
+    out = StringIO()
+
+    Command(stdout=out)._print_summary(scan)
+
+    text = out.getvalue()
+    assert "None" not in text
+    assert "lấy 0/? repo" in text
