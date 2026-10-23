@@ -66,4 +66,12 @@
 - [x] Sổ sách: DEBT (D-008 đã trả), FEATURE_MAP
 - [x] `poe check` xanh (526 test, độ phủ 99,06%); `poe test-live` 3/3; migrate CSDL thật (0 dòng `queued`);
       quét thật `topic:indie-hacker` mức Nhanh: 29/29 repo, đúng 1/1 lượt gọi
-- [ ] PR, CI xanh, chủ dự án duyệt → squash-merge
+- [x] PR Nagias/oss-radar#4, CI xanh, chủ dự án duyệt → squash-merge vào `main` (commit `0d59a9a`, 2026-10-23)
+
+## F-006 Chấm điểm Chất lượng / Tiềm năng, lọc star giả (2026-10-23, nhánh `feat/f006-cham-diem`)
+
+- [x] Đo thật: tỉ lệ fork/star toàn kho, 47 rising star, hồ sơ chủ repo, hiệu chỉnh ngưỡng nghi star giả
+- [x] Chủ dự án chọn: ẩn mặc định repo nghi star giả (có nút hiện); lấy hồ sơ chủ chỉ cho rising star
+- [x] Thiết kế `docs/designs/2026-10-23-f006-cham-diem.md` — tự rà soát với vai người làm theo, chốt 7 điểm
+- [ ] Chủ dự án duyệt thiết kế
+- [ ] Kế hoạch, code theo TDD, sổ sách, chạy thật, PR
