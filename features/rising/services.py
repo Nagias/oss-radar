@@ -13,7 +13,7 @@ thái hôm nay (`today_status`), danh sách theo dõi (`watch_overview`), ước
 View và lệnh dòng lệnh chỉ gọi các hàm ở đây; không chứa logic riêng.
 """
 
-# DEBT(D-009): file ~1.100 dòng (QĐ R11 giữ một services.py); tách khi thêm bước mới.
+# DEBT(D-009): file ~1.400 dòng (QĐ R11 giữ một services.py); tách ở PR fix/ ngay sau F-006.
 
 import logging
 import math

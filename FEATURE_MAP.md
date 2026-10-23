@@ -16,17 +16,50 @@ test ở đâu, đang nợ gì.
 | F-001 | Quét GitHub theo truy vấn → lưu không trùng → xem sắp theo star | Đã gộp vào F-002 (= mức Nhanh) | `features/discovery/` | như F-002 | `features/discovery/tests/` | — |
 | F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py`, `test_auto_resume.py` | D-007 |
 | F-005 | Rising star + lượt quét hằng ngày: ảnh chụp star, lọc thô, xác minh bằng lịch sử star chính thức, lịch chạy trong app, chạy bù, tự chạy tiếp | Chạy thật | `features/rising/` | Web `/rising/`, `/rising/watch/`, nút Chạy ngay/Chạy tiếp/Dừng; lệnh `manage.py daily`; tự chạy sau 7:00 khi app mở | `features/rising/tests/test_daily_run.py`, `test_verify.py`, `test_e2e.py` | D-009 |
-| F-006 | Chấm điểm Chất lượng / Tiềm năng có giải thích, lọc star giả (ẩn "Nghi cao", có nút hiện), hồ sơ chủ repo cho rising star | Đang làm | `features/scoring/` | Cột điểm ở `/rising/` và `/scans/<id>/`; bước "Lấy hồ sơ chủ repo" của lượt hằng ngày | `features/scoring/tests/` | — |
+| F-006 | Chấm điểm Chất lượng / Tiềm năng có giải thích, lọc star giả (ẩn "Nghi cao", có nút hiện), hồ sơ chủ repo cho rising star | Chạy thật | `features/scoring/` | Cột điểm ở `/rising/` và `/scans/<id>/`; bước "Lấy hồ sơ chủ repo" của lượt hằng ngày | `features/scoring/tests/`, `features/rising/tests/test_owners.py` | — |
 
 ## Mô-đun lõi và cửa ra ngoài
 
 | Mô-đun | Vai trò | Ai được dùng | Test |
 |---|---|---|---|
-| `features/catalog/` | Lõi "kho repo": bảng `Repository` (khoá chống trùng `github_id`), hàm `upsert_repositories` (ghi kèm ảnh chụp star `StarSnapshot` theo ngày); `baseline_snapshots`, `prune_snapshots`. Nơi DUY NHẤT ghi hai bảng này | Mọi tính năng, qua `features.catalog.services` | `features/catalog/tests/` |
-| `integrations/github/` | Cửa ra GitHub REST API: `GitHubClient.search_repositories`, `GitHubClient.star_history` (lịch sử star theo `github_id`), dataclass `GitHubRepo`/`RepoSearchPage`/`StarHistory`, lỗi có tên (`GitHubRateLimitError`, `GitHubAuthError`…); `pacing.py`: giãn nhịp, chờ hồi lượt, gọi lại khi lỗi tạm thời, `CallBudget` | Service của các tính năng, qua `get_github_client(sleep=, budget=)` | `integrations/github/tests/` |
+| `features/catalog/` | Lõi "kho repo": bảng `Repository` (khoá chống trùng `github_id`; có `open_issues` từ F-006), hàm `upsert_repositories` (ghi kèm ảnh chụp star `StarSnapshot` theo ngày); `baseline_snapshots`, `prune_snapshots`; hồ sơ chủ repo `OwnerProfile` (`save_owner_profile`, `mark_owner_missing`, `owner_profiles_for`, `logins_needing_profile`). Nơi DUY NHẤT ghi ba bảng này | Mọi tính năng, qua `features.catalog.services` | `features/catalog/tests/` |
+| `integrations/github/` | Cửa ra GitHub REST API: `GitHubClient.search_repositories`, `GitHubClient.star_history` (lịch sử star theo `github_id`), `GitHubClient.get_user` (hồ sơ tài khoản), dataclass `GitHubRepo`/`RepoSearchPage`/`StarHistory`/`GitHubUser`, lỗi có tên (`GitHubRateLimitError`, `GitHubAuthError`…); `pacing.py`: giãn nhịp, chờ hồi lượt, gọi lại khi lỗi tạm thời, `CallBudget` | Service của các tính năng, qua `get_github_client(sleep=, budget=)` | `integrations/github/tests/` |
 | `core/` | Hạ tầng dùng chung, không phải tính năng: `core.background` chạy việc nền trên MỘT luồng trong tiến trình web (`submit`, `submit_if_idle`, `busy_label`, `relabel` — QĐ-14); `core.scheduler` bộ nhịp gọi `settings.SCHEDULED_JOBS` (QĐ-15); lệnh `runserver` của dự án bật bộ nhịp. Chỉ hai file này được tạo luồng | View và lệnh của các tính năng | `core/tests/` |
 
 ## Chi tiết từng tính năng
+
+### F-006 — Chấm điểm Chất lượng / Tiềm năng, lọc star giả
+- **Phục vụ vế nào của mục tiêu:** không rác (lọc star giả), tìm đúng (xếp theo chất lượng/tiềm năng thay vì
+  chỉ theo star); nguyên tắc 6 — mọi điểm mở ra xem được từng thành phần.
+- **Người dùng làm gì → thấy gì:** mở `/rising/` → bảng rising star có 3 cột **Tiềm năng**, **Chất lượng**,
+  **Nghi star giả**; bấm vào điểm thì thấy từng thành phần ("Phổ biến 20/30 — 1.000 star"…). Mặc định sắp
+  theo Tiềm năng, ô **Sắp theo** đổi về "Tăng 7 ngày". Repo "Nghi cao" (≥ 60) không nằm ở bảng chính: dòng
+  **"Đã ẩn N repo nghi star giả — Hiện"** mở ra danh sách kèm lý do; repo "Cần xem" (30–59) có nhãn vàng.
+  Đầu trang: "47 rising star (đã ẩn 2 nghi star giả)". Mục chưa xác minh có Tiềm năng "(ước lượng)". Trang
+  `/scans/<id>/` có cột Chất lượng và Nghi star giả, cũng ẩn "Nghi cao" (không có Tiềm năng).
+- **Luồng chạy:** trang gọi `rising.services.daily_report` / `discovery.services.scored_results` →
+  `scoring.services.score_repositories` (đọc `OwnerProfile` một lần cho cả lô) → `scoring.rules`
+  (`quality_score`, `potential_score`, `suspicion_score`). Lượt hằng ngày thêm bước 4 "Lấy hồ sơ chủ repo"
+  (`DailyRun.Step.OWNERS`, số 5): chủ của rising star chưa có hồ sơ hoặc hồ sơ quá 30 ngày →
+  `scoring.services.fetch_owner_profiles` → `GitHubClient.get_user` → `catalog.services.save_owner_profile`.
+- **Thành phần:**
+  - hàm thuần: `features/scoring/rules.py` (hằng số trọng số, ngưỡng "Cần xem" 30 / "Nghi cao" 60)
+  - service: `score_repositories`, `repo_facts`, `owners_to_fetch`, `fetch_owner_profiles`
+  - template con: `scoring/_score.html`, `scoring/_suspicion.html` (dùng ở `rising/report.html`,
+    `discovery/scan_detail.html`)
+  - model (ở `catalog`): `OwnerProfile`, trường `Repository.open_issues`; (ở `rising`): `DailyRun.owner_budget`,
+    `owner_calls_used`, bước `OWNERS`
+  - form: ô `sort` của `ReportFilterForm`
+- **Phụ thuộc:** `catalog.services` (hồ sơ chủ, repo), `integrations.github` (`get_user`). `rising` và
+  `discovery` gọi vào `scoring`; `scoring` không gọi ngược lại.
+- **Kiểm chứng tự động:** `features/scoring/tests/test_rules.py` (mọi mốc biên, 3 ví dụ thật của thiết kế),
+  `test_services.py` (hồ sơ chủ, GitHub giả, template con); `features/rising/tests/test_owners.py` (bước hồ
+  sơ chủ: mỗi chủ một lần, hết ngân sách, sập rồi chạy tiếp không gọi lại, 404, chặn, token sai, Dừng);
+  `test_report.py`, `test_views.py` (sắp, ẩn sau bộ lọc); `features/discovery/tests/test_views.py`. Gọi
+  GitHub thật: `uv run poe test-live` (thêm 1 lượt `get_user`).
+- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/rising/`, bấm vào điểm, bấm "Hiện" ở dòng
+  đã ẩn; mở một lần quét bất kỳ.
+- **Nợ liên quan:** không có nợ mới. D-007 (trang lần quét 500 repo) vẫn giữ; D-009 xem sổ nợ.
 
 ### F-005 — Rising star + lượt quét hằng ngày
 - **Phục vụ vế nào của mục tiêu:** tiềm năng (repo dưới 1.000 star tăng nhanh), tìm đủ (mỗi ngày quét lại
@@ -44,7 +77,8 @@ test ở đâu, đang nợ gì.
   `execute_daily_run`: bước 1 quét lại từng `WatchQuery` bằng `discovery.services.start_scan/execute_scan`
   (nguồn "hằng ngày") → bước 2 lọc thô bằng `catalog.services.baseline_snapshots` + `growth.estimate_gain_7d`
   → bước 3 xác minh bằng `GitHubClient.star_history` (ngân sách 300 lượt có token / 50 không token) →
-  bước 4 đếm, dọn ảnh chụp và kết quả quét hằng ngày cũ hơn 35 ngày.
+  bước 4 lấy hồ sơ chủ repo của rising star (F-006) → bước 5 đếm, dọn ảnh chụp và kết quả quét hằng
+  ngày cũ hơn 35 ngày.
 - **Thành phần:**
   - model: `WatchQuery` (16 truy vấn gợi ý tạo sẵn), `DailyRun` (bước, trạng thái, nhịp sống, ngân sách,
     số đếm, `problems`), `DailyRunScan` (truy vấn ↔ lần quét), `RisingCheck` (số tăng, chuỗi 30 ngày, nguồn,
@@ -129,7 +163,6 @@ test ở đâu, đang nợ gì.
 |---|---|---|
 | F-003 | Làm giàu: số contributor, tổ chức đứng sau, xác minh tổ chức, quốc gia | tìm đúng |
 | F-004 | Ưu tiên repo Trung Quốc: tín hiệu location, README, danh sách tổ chức | tìm đúng |
-| F-006 | Chấm điểm Chất lượng/Tiềm năng có giải thích | không rác |
 | F-007 | Hồ sơ nhu cầu người dùng + AI chấm mức liên quan (Gemini qua 9router) | tìm đúng |
 | F-008 | Nguồn khám phá phụ Exa, Tavily | tìm đủ |
 | F-009 | Thông báo rising star hằng ngày | rising star |

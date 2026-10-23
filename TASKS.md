@@ -74,8 +74,8 @@
 - [x] Chủ dự án chọn: ẩn mặc định repo nghi star giả (có nút hiện); lấy hồ sơ chủ chỉ cho rising star
 - [x] Thiết kế `docs/designs/2026-10-23-f006-cham-diem.md` — tự rà soát với vai người làm theo, chốt 7 điểm
 - [x] Chủ dự án duyệt thiết kế (2026-10-23)
-- [ ] Kế hoạch `docs/plans/2026-10-23-f006-cham-diem.md` (10 task)
-- [ ] Code theo TDD (task 1–9)
-- [ ] Sổ sách: ARCHITECTURE (QĐ-17), FEATURE_MAP (F-006), DEBT
+- [x] Kế hoạch `docs/plans/2026-10-23-f006-cham-diem.md` (10 task)
+- [x] Code theo TDD (task 1–9): `poe check` xanh — 673 test, độ phủ 99,07%
+- [x] Sổ sách: ARCHITECTURE (QĐ-17), FEATURE_MAP (F-006), DEBT (D-009 dời sang PR `fix/` sau F-006)
 - [ ] `poe check` xanh, `poe test-live`, chạy thật trên CSDL thật
 - [ ] Agent độc lập rà soát cả nhánh, PR
