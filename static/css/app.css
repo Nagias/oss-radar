@@ -142,7 +142,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* F-006: điểm có giải thích, nhãn nghi star giả */
 .score summary { cursor: pointer; white-space: nowrap; }
-.score-parts { margin: 6px 0 0; padding-left: 16px; font-size: 0.82rem; min-width: 260px; }
+/* Ô điểm nằm trong cột số (căn phải, không xuống dòng): phần giải thích phải căn trái, được xuống dòng. */
+.score-parts { margin: 6px 0 0; padding-left: 16px; font-size: 0.82rem; min-width: 260px; text-align: left; white-space: normal; }
 .score-parts li { margin: 2px 0; }
 .badge-danger { background: var(--err-bg); color: var(--err); }
 .hidden-repos { margin-top: 14px; }
