@@ -132,6 +132,21 @@ def test_owner_budget_exhausted_notes_owners_left_and_run_finishes(
     assert run.step == Step.REPORT
 
 
+def test_owners_of_suspicious_repos_are_fetched_first(
+    watch_list: list[WatchQuery], use_fake: UseFake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Ngân sách ít (không token): hồ sơ chủ chỉ đổi được kết luận ở repo đang bị nghi → lấy trước.
+    monkeypatch.setattr(services, "OWNER_BUDGET_ANONYMOUS", 1)
+    fake = four_repos(use_fake)
+    fast = next(entry for entry in fake.search.items if entry["id"] == FAST)
+    fast.update(forks_count=0, pushed_at=fast["created_at"])  # 0 fork, không commit sau ngày tạo
+
+    run = run_daily_now()
+
+    assert fake.users.requested == ["Alice"]  # FAST tăng ít hơn OTHER nhưng đang bị nghi
+    assert run.owner_calls_used == 1
+
+
 def test_deleted_owner_account_is_recorded_and_run_continues(
     watch_list: list[WatchQuery], use_fake: UseFake
 ) -> None:

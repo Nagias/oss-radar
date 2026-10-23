@@ -37,7 +37,7 @@ from features.discovery.models import ScanRun
 from features.rising import growth
 from features.rising.models import DailyRun, DailyRunScan, RisingCheck, WatchQuery
 from features.scoring import services as scoring
-from features.scoring.rules import GrowthFacts, Score
+from features.scoring.rules import REVIEW_FROM, GrowthFacts, Score
 from integrations.github.client import GitHubClient, get_github_client
 from integrations.github.errors import (
     GitHubAuthError,
@@ -738,18 +738,27 @@ class _DailyRunner:
     def _owners(self) -> bool:
         """Lấy hồ sơ chủ của rising star chưa có hồ sơ (hoặc hồ sơ quá 30 ngày). `False` = dừng.
 
-        Chủ của repo tăng nhiều được lấy trước. Hồ sơ lưu ngay sau mỗi lượt gọi nên chạy tiếp không
-        gọi lại; hết ngân sách chỉ ghi chú, không phải lỗi.
+        Chủ của repo đang bị nghi star giả (từ "Cần xem") được lấy trước: chỉ ở đó hồ sơ chủ mới đổi
+        được kết luận, mà không token thì mỗi ngày chỉ lấy được 10 hồ sơ. Trong mỗi nhóm, repo tăng
+        nhiều trước. Hồ sơ lưu ngay sau mỗi lượt gọi nên chạy tiếp không gọi lại; hết ngân sách chỉ
+        ghi chú, không phải lỗi.
         """
         run = self._check_in()
         if run.owner_budget == 0:
             # Chốt ngân sách một lần lúc bắt đầu bước: chạy tiếp vẫn giữ ngân sách ban đầu.
             run = self._check_in(owner_budget=_owner_budget())
-        logins = list(
+        checks = list(
             RisingCheck.objects.filter(daily_run_id=self.run_id, is_rising=True)
+            .select_related("repository")
             .order_by("-gain_7d", "pk")
-            .values_list("repository__owner_login", flat=True)
         )
+        scores = scoring.score_repositories(
+            [check.repository for check in checks],
+            growth={check.repository_id: _growth_facts(check) for check in checks},
+        )
+        # Sắp ổn định: nhóm đang bị nghi lên trước, trong nhóm giữ thứ tự tăng nhiều trước.
+        checks.sort(key=lambda check: scores[check.repository_id].suspicion.points < REVIEW_FROM)
+        logins = [check.repository.owner_login for check in checks]
         pending = scoring.owners_to_fetch(logins, now=timezone.now())
         if pending and not self._fetch_owners(run, pending):
             return False

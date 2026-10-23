@@ -40,7 +40,8 @@ test ở đâu, đang nợ gì.
 - **Luồng chạy:** trang gọi `rising.services.daily_report` / `discovery.services.scored_results` →
   `scoring.services.score_repositories` (đọc `OwnerProfile` một lần cho cả lô) → `scoring.rules`
   (`quality_score`, `potential_score`, `suspicion_score`). Lượt hằng ngày thêm bước 4 "Lấy hồ sơ chủ repo"
-  (`DailyRun.Step.OWNERS`, số 5): chủ của rising star chưa có hồ sơ hoặc hồ sơ quá 30 ngày →
+  (`DailyRun.Step.OWNERS`, số 5): chủ của rising star chưa có hồ sơ hoặc hồ sơ quá 30 ngày (repo đang bị
+  nghi từ 30 điểm lấy trước — chỉ ở đó hồ sơ chủ đổi được kết luận) →
   `scoring.services.fetch_owner_profiles` → `GitHubClient.get_user` → `catalog.services.save_owner_profile`.
 - **Thành phần:**
   - hàm thuần: `features/scoring/rules.py` (hằng số trọng số, ngưỡng "Cần xem" 30 / "Nghi cao" 60)
