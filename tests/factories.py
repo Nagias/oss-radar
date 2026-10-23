@@ -39,3 +39,9 @@ def load_fixture(relative_path: str) -> dict[str, Any]:
     """Đọc phản hồi THẬT đã lưu của dịch vụ ngoài, ví dụ "github/search_repositories.json"."""
     data: dict[str, Any] = json.loads((FIXTURES_DIR / relative_path).read_text(encoding="utf-8"))
     return data
+
+
+def load_fixture_list(relative_path: str) -> list[Any]:
+    """Như `load_fixture` nhưng cho phản hồi dạng mảng JSON (vd lịch sử star)."""
+    data: list[Any] = json.loads((FIXTURES_DIR / relative_path).read_text(encoding="utf-8"))
+    return data

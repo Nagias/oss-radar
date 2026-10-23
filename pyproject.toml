@@ -122,8 +122,9 @@ ban-relative-imports = "all"
 "manage.py" = ["TID251"]
 # Cửa ra ngoài duy nhất được dùng httpx.
 "integrations/**/*.py" = ["TID251"]
-# Nơi duy nhất được tạo luồng chạy nền.
+# Nơi duy nhất được tạo luồng chạy nền, và luồng hẹn giờ của bộ nhịp (QĐ-15, không đụng CSDL).
 "core/background.py" = ["TID251"]
+"core/scheduler.py" = ["TID251"]
 # class Meta của Django dùng list (ordering, constraints) đúng như tài liệu Django → không ép đổi.
 "**/models.py" = ["RUF012"]
 # Test được dùng assert, dữ liệu giả có chữ "token", và httpx để dựng phản hồi giả.

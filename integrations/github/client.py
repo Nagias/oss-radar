@@ -13,18 +13,22 @@ from django.conf import settings
 
 from integrations.github.errors import (
     GitHubAuthError,
+    GitHubNotFoundError,
     GitHubQueryError,
     GitHubRateLimitError,
     GitHubResponseError,
     GitHubUnavailableError,
 )
 from integrations.github.pacing import CallBudget, RequestPacer, Sleep, select_min_interval
-from integrations.github.schemas import GitHubRepo, RepoSearchPage
+from integrations.github.schemas import GitHubRepo, RepoSearchPage, StarHistory, StarWeek
 
 API_VERSION = "2022-11-28"
 MAX_PER_PAGE = 100  # Giới hạn của GitHub Search API cho một trang.
 MAX_TRANSIENT_RETRIES = 3  # lỗi tạm thời (mất mạng, quá giờ, 5xx): gọi lại tối đa 3 lần
 MAX_RATE_LIMIT_WAITS = 3  # bị từ chối vì hết lượt: chờ rồi gọi lại tối đa 3 lần
+HISTORY_WEEKS = 6  # số tuần lịch sử star lấy mặc định
+MAX_HISTORY_WEEKS = 30  # GitHub chỉ trả tối đa 30 tuần cho một lượt gọi
+_SUNDAY = 6  # datetime.weekday(): thứ Hai = 0 ... Chủ nhật = 6
 
 
 class GitHubClient:
@@ -88,11 +92,24 @@ class GitHubClient:
         }
         return _parse_search_page(self._get_json("/search/repositories", params=params))
 
+    def star_history(self, github_id: int, *, weeks: int = HISTORY_WEEKS) -> StarHistory:
+        """Star mới mỗi ngày của `weeks` tuần gần nhất, tra theo id repo (tuần mới nhất trước).
+
+        Tra theo id chứ không theo tên để repo đổi tên hay chuyển chủ vẫn không mất dấu.
+        """
+        if not 1 <= weeks <= MAX_HISTORY_WEEKS:
+            raise ValueError(f"weeks phải trong khoảng 1..{MAX_HISTORY_WEEKS}, đang là {weeks}")
+        payload = self._get_json(
+            f"/repositories/{github_id}/stargazers/history", params={"per_page": weeks}
+        )
+        return _parse_star_history(payload)
+
     def _get_json(self, path: str, *, params: dict[str, str | int]) -> object:
         transient_failures = 0
         rate_limit_waits = 0
         while True:
             if self._budget is not None:
+                # DEBT(D-008): bấm Dừng lúc đang chờ giãn nhịp thì lượt đã trừ mà không gọi.
                 self._budget.take()
             self._pacer.before_request()
             try:
@@ -160,6 +177,8 @@ def _raise_for_status(response: httpx.Response) -> None:
         raise GitHubRateLimitError(message, reset_at=_rate_limit_reset(response))
     if status in (401, 403):
         raise GitHubAuthError(message)
+    if status == 404:
+        raise GitHubNotFoundError(message)
     if status == 422:
         raise GitHubQueryError(message)
     if status >= 500:
@@ -243,6 +262,35 @@ def _parse_repo(raw: object) -> GitHubRepo:
         created_at=_as_datetime(data["created_at"]),
         pushed_at=None if pushed_at is None else _as_datetime(pushed_at),
     )
+
+
+def _parse_star_history(payload: object) -> StarHistory:
+    try:
+        return StarHistory(weeks=tuple(_parse_star_week(item) for item in _as_list(payload)))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise GitHubResponseError(f"Lịch sử star của GitHub sai định dạng: {exc!r}") from exc
+
+
+def _parse_star_week(raw: object) -> StarWeek:
+    data = _as_dict(raw)
+    week = _as_int(data["week"])
+    try:
+        start = datetime.fromtimestamp(week, tz=UTC)
+    except (OverflowError, OSError) as exc:  # mốc thời gian vượt khả năng biểu diễn
+        raise ValueError(f"mốc tuần ngoài phạm vi: {week!r}") from exc
+    if start.weekday() != _SUNDAY or start != start.replace(hour=0, minute=0, second=0):
+        raise ValueError(f"tuần phải bắt đầu Chủ nhật 00:00 UTC, nhận mốc {week!r}")
+    values = [_as_int(day) for day in _as_list(data["days"])]
+    if len(values) != 7:
+        raise ValueError(f"mỗi tuần cần đúng 7 ngày, nhận {len(values)}")
+    if min(values) < 0:
+        raise ValueError(f"số star mới trong ngày không thể âm: {values!r}")
+    # Đã đo 2026-10-22: total luôn bằng tổng 7 ngày. GitHub đổi nghĩa thì phải báo lỗi chứ
+    # không được tính sai.
+    if _as_int(data["total"]) != sum(values):
+        raise ValueError(f"total {data['total']!r} khác tổng các ngày {sum(values)}")
+    sun, mon, tue, wed, thu, fri, sat = values
+    return StarWeek(start=start.date(), days=(sun, mon, tue, wed, thu, fri, sat))
 
 
 def _as_dict(value: object) -> dict[str, Any]:

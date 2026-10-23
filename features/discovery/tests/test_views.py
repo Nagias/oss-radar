@@ -1,6 +1,7 @@
 """Trang web của tính năng Quét — lớp mỏng: nhận yêu cầu → gọi services → hiển thị."""
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -87,8 +88,22 @@ def test_running_scan_page_auto_refreshes(client: Client) -> None:
 
     page = client.get(detail_url(live)).text
 
-    assert 'http-equiv="refresh"' in page
+    assert f'content="3; url={detail_url(live)}"' in page
     assert "Dừng" in page
+
+
+def test_refused_resume_of_live_scan_refreshes_to_detail_page(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Bấm đúp "Tiếp tục": lần bấm thứ hai bị từ chối (409) trong khi lần quét đã chạy. Trang 409
+    # nằm ở địa chỉ /resume/ (chỉ nhận POST) — tự tải lại vào đó sẽ ra trang trắng 405.
+    live = services.start_scan(DEFAULT_REQUEST)
+    monkeypatch.setattr("core.background.busy_label", lambda: f"Lần quét #{live.pk}")
+
+    response = client.post(reverse("discovery:scan_resume", args=[live.pk]), {"extra_budget": "50"})
+
+    assert response.status_code == 409
+    assert f'content="3; url={detail_url(live)}"' in response.text
 
 
 def test_finished_scan_page_does_not_refresh(client: Client, github_search: respx.Route) -> None:
@@ -234,6 +249,131 @@ def test_resume_with_invalid_budget_shows_error(client: Client, github_search: r
     assert response.status_code == 409
     partial.refresh_from_db()
     assert partial.status == ScanRun.Status.SUCCEEDED_PARTIAL
+
+
+BUSY = "Lượt quét hằng ngày 22/10"
+BUSY_MESSAGE = f"App đang chạy việc nền: {BUSY} — chờ xong, hoặc dừng việc đó rồi thử lại."
+
+
+@pytest.fixture
+def background_busy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("core.background.busy_label", lambda: BUSY)
+
+
+@pytest.fixture
+def background_taken_meanwhile(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Vừa kiểm thấy rảnh thì bộ nhịp đã kịp chiếm luồng nền: `submit_if_idle` không xếp gì."""
+    monkeypatch.setattr("core.background.submit_if_idle", lambda *args, **kwargs: None)
+
+
+@pytest.mark.usefixtures("background_busy")
+def test_home_refuses_new_scan_while_background_busy(client: Client) -> None:
+    response = client.post(reverse("discovery:home"), FORM)
+
+    assert response.status_code == 200
+    assert BUSY_MESSAGE in response.text
+    assert ScanRun.objects.count() == 0
+
+
+@pytest.mark.usefixtures("background_busy")
+def test_home_locks_scan_button_and_shows_label_while_background_busy(client: Client) -> None:
+    page = client.get(reverse("discovery:home")).text
+
+    assert "disabled" in page
+    assert BUSY in page
+
+
+def test_home_scan_button_open_when_idle(client: Client) -> None:
+    assert "disabled" not in client.get(reverse("discovery:home")).text
+
+
+def test_home_shows_live_daily_scan(client: Client) -> None:
+    daily = services.start_scan(replace(DEFAULT_REQUEST, origin=ScanRun.Origin.DAILY))
+
+    page = client.get(reverse("discovery:home")).text
+
+    assert detail_url(daily) in page
+    assert "disabled" in page
+
+
+def test_resume_refused_with_409_while_background_busy(
+    client: Client, github_search: respx.Route, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    partial = run_scan_now()
+    monkeypatch.setattr("core.background.busy_label", lambda: BUSY)
+
+    response = client.post(
+        reverse("discovery:scan_resume", args=[partial.pk]), {"extra_budget": "50"}
+    )
+
+    assert response.status_code == 409
+    assert BUSY_MESSAGE in response.text
+    partial.refresh_from_db()
+    assert (partial.status, partial.budget) == (ScanRun.Status.SUCCEEDED_PARTIAL, 1)
+
+
+def test_resume_button_locked_with_label_while_background_busy(
+    client: Client, github_search: respx.Route, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    partial = run_scan_now()
+    monkeypatch.setattr("core.background.busy_label", lambda: BUSY)
+
+    page = client.get(detail_url(partial)).text
+
+    assert "disabled" in page
+    assert BUSY in page
+
+
+@pytest.mark.usefixtures("background_taken_meanwhile")
+def test_new_scan_released_when_background_taken_meanwhile(client: Client) -> None:
+    response = client.post(reverse("discovery:home"), FORM)
+
+    scan = ScanRun.objects.get()
+    assert response["Location"] == detail_url(scan)
+    assert scan.status == ScanRun.Status.PAUSED
+    assert services.REASON_BUSY in client.get(detail_url(scan)).text
+
+
+def test_resume_released_when_background_taken_meanwhile(
+    client: Client, github_search: respx.Route, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    partial = run_scan_now()
+    monkeypatch.setattr("core.background.submit_if_idle", lambda *args, **kwargs: None)
+
+    response = client.post(
+        reverse("discovery:scan_resume", args=[partial.pk]), {"extra_budget": "50"}
+    )
+
+    partial.refresh_from_db()
+    assert response["Location"] == detail_url(partial)
+    assert (partial.status, partial.stop_reason) == (ScanRun.Status.PAUSED, services.REASON_BUSY)
+    assert partial.budget == 1  # chưa chạy được thì trả lại phần ngân sách vừa thêm
+
+
+def test_scan_detail_shows_auto_resume_and_pruned_notes(
+    client: Client, github_search: respx.Route
+) -> None:
+    scan = run_scan_now(origin=ScanRun.Origin.DAILY)
+    resumed_at = timezone.now()
+    ScanRun.objects.filter(pk=scan.pk).update(
+        auto_resume_count=2, last_auto_resume_at=resumed_at, results_pruned=True
+    )
+
+    page = client.get(detail_url(scan)).text
+
+    assert "Hằng ngày" in page
+    assert f"Tự chạy tiếp lần 2 lúc {timezone.localtime(resumed_at):%H:%M}" in page
+    assert "Danh sách repo đã dọn sau 35 ngày" in page
+
+
+def test_manual_scan_detail_has_no_daily_or_auto_resume_notes(
+    client: Client, github_search: respx.Route
+) -> None:
+    page = client.get(detail_url(run_scan_now())).text
+
+    assert "Hằng ngày" not in page
+    assert "Tự chạy tiếp lần" not in page
+    assert "đã dọn" not in page
 
 
 def test_resume_finished_scan_is_refused(client: Client, github_search: respx.Route) -> None:

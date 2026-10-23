@@ -9,24 +9,12 @@ from typing import Any
 from django import forms
 from django.utils import timezone
 
-from features.discovery.services import ScanRequest
-from features.discovery.slicing import EARLIEST_DATE, find_forbidden_qualifier
+from features.discovery.services import BUDGET_CHOICES, ScanRequest, forbidden_qualifier_hint
+from features.discovery.slicing import EARLIEST_DATE
 
 QUERY_MAX_LENGTH = 256  # Giới hạn độ dài truy vấn của GitHub Search.
 DEFAULT_MIN_STARS = 10  # chủ dự án chốt 2026-10-22 (lọc ≥10 star bỏ ~88% repo gần như rỗng)
 DEFAULT_BUDGET = 50
-# Ước lượng tối đa theo khoảng cách 2,1 giây/lượt (có token) và 6,1 giây/lượt (không token).
-BUDGET_CHOICES = [
-    (1, "Nhanh — 1 lượt gọi (100 repo nhiều star nhất)"),
-    (50, "Vừa — 50 lượt (≤ 2 phút có token, ≤ 5 phút không token)"),
-    (300, "Sâu — 300 lượt (≤ 11 phút có token, ≤ 31 phút không token)"),
-    (1000, "Hết cỡ — 1.000 lượt (≤ 35 phút có token, ≤ 1 giờ 42 phút không token)"),
-]
-_QUALIFIER_HINTS = {
-    "stars:": "Không tự ghi `stars:` trong truy vấn — dùng ô Star tối thiểu / Star tối đa.",
-    "created:": "Không tự ghi `created:` trong truy vấn — dùng ô Tạo từ ngày / đến ngày.",
-    "sort:": "Không tự ghi `sort:` trong truy vấn — app luôn sắp theo star.",
-}
 _DATE_WIDGET = forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
 
 
@@ -54,9 +42,9 @@ class ScanForm(forms.Form):
 
     def clean_query(self) -> str:
         query: str = self.cleaned_data["query"]
-        forbidden = find_forbidden_qualifier(query)
-        if forbidden is not None:
-            raise forms.ValidationError(_QUALIFIER_HINTS[forbidden])
+        hint = forbidden_qualifier_hint(query)
+        if hint is not None:
+            raise forms.ValidationError(hint)
         return query
 
     def clean_created_from(self) -> date | None:

@@ -3,8 +3,9 @@
 Dữ liệu trong tests/fixtures/github/ là phản hồi THẬT của GitHub (rút gọn trường), không tự bịa.
 """
 
+import copy
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -15,6 +16,7 @@ from pytest_django.fixtures import Settings
 from integrations.github.client import GitHubClient, get_github_client
 from integrations.github.errors import (
     GitHubAuthError,
+    GitHubNotFoundError,
     GitHubQueryError,
     GitHubRateLimitError,
     GitHubResponseError,
@@ -22,14 +24,20 @@ from integrations.github.errors import (
 )
 from integrations.github.pacing import CallBudget, CallBudgetExhaustedError, RequestPacer
 from tests.factories import load_fixture as _load
-from tests.fakes import FakeTime
+from tests.factories import load_fixture_list as _load_list
+from tests.fakes import FakeStarHistory, FakeTime, make_star_history
 
 API_URL = "https://api.github.com"
 SEARCH_URL = f"{API_URL}/search/repositories"
+HISTORY_URL = f"{API_URL}/repositories/42976210/stargazers/history"
 
 
 def load_fixture(name: str) -> dict[str, Any]:
     return _load(f"github/{name}")
+
+
+def load_fixture_list(name: str) -> list[Any]:
+    return _load_list(f"github/{name}")
 
 
 def make_client(
@@ -328,9 +336,9 @@ def test_search_rejects_page_before_first(client: GitHubClient) -> None:
 def test_unexpected_status_raises_response_error(
     client: GitHubClient, http_mock: respx.MockRouter
 ) -> None:
-    http_mock.get(SEARCH_URL).respond(404, json={"message": "Not Found"})
+    http_mock.get(SEARCH_URL).respond(410, json={"message": "Gone"})
 
-    with pytest.raises(GitHubResponseError, match="404"):
+    with pytest.raises(GitHubResponseError, match="410"):
         client.search_repositories("topic:ai-agent")
 
 
@@ -341,3 +349,129 @@ def test_error_body_without_message_falls_back_to_http_reason(
 
     with pytest.raises(GitHubUnavailableError, match="Internal Server Error"):
         client.search_repositories("topic:ai-agent")
+
+
+# --- Lịch sử star theo id repo -----------------------------------------------------------------
+
+
+def test_star_history_parses_real_response(
+    client: GitHubClient, http_mock: respx.MockRouter
+) -> None:
+    http_mock.get(HISTORY_URL).respond(json=load_fixture_list("star_history_old.json"))
+
+    history = client.star_history(42976210)
+
+    assert len(history.weeks) == 6
+    assert history.weeks[0].start.weekday() == 6  # Chủ nhật
+    assert all(len(week.days) == 7 for week in history.weeks)
+    for newer, older in zip(history.weeks, history.weeks[1:], strict=False):
+        assert newer.start - older.start == timedelta(days=7)
+    assert history.weeks[0].start == datetime.fromtimestamp(1792281600, tz=UTC).date()
+    assert history.weeks[0].days == (7, 6, 4, 7, 2, 0, 0)
+
+
+def test_star_history_of_young_repo_has_fewer_weeks_than_asked(
+    client: GitHubClient, http_mock: respx.MockRouter
+) -> None:
+    # Repo mới tạo: dù xin 6 tuần GitHub chỉ trả những tuần đã có sao.
+    young_url = f"{API_URL}/repositories/1416766144/stargazers/history"
+    http_mock.get(young_url).respond(json=load_fixture_list("star_history_recent.json"))
+
+    history = client.star_history(1416766144)
+
+    assert [week.days for week in history.weeks] == [
+        (4, 8, 6, 6, 2, 0, 0),
+        (0, 0, 0, 690, 139, 49, 36),
+    ]
+    assert history.weeks[0].start - history.weeks[1].start == timedelta(days=7)
+
+
+def test_star_history_requests_by_github_id_with_per_page(
+    client: GitHubClient, http_mock: respx.MockRouter
+) -> None:
+    route = http_mock.get(HISTORY_URL).respond(json=load_fixture_list("star_history_old.json"))
+
+    client.star_history(42976210)
+    assert route.calls.last.request.url.params["per_page"] == "6"
+
+    client.star_history(42976210, weeks=2)
+    assert route.calls.last.request.url.params["per_page"] == "2"
+
+
+def _with_first_week(**changes: Any) -> list[Any]:
+    weeks = copy.deepcopy(load_fixture_list("star_history_old.json"))
+    weeks[0].update(changes)
+    return weeks
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param(_with_first_week(days=[7, 6, 4, 7, 2, 0], total=26), id="6-so-trong-tuan"),
+        pytest.param(
+            _with_first_week(days=[8, 6, 4, 7, 2, 0, 0, 1], total=28), id="8-so-trong-tuan"
+        ),
+        pytest.param(_with_first_week(days=[-1, 5, 0, 0, 0, 0, 0], total=4), id="so-am"),
+        pytest.param(_with_first_week(days=[True, 6, 4, 7, 2, 0, 0], total=20), id="true-la-so"),
+        pytest.param(_with_first_week(days=["7", 6, 4, 7, 2, 0, 0], total=26), id="chuoi-la-so"),
+        pytest.param(_with_first_week(total=27), id="total-khac-tong"),
+        pytest.param(_with_first_week(week=1792281600 + 86400), id="tuan-bat-dau-thu-hai"),
+        pytest.param(_with_first_week(week=1792281600 + 3600), id="tuan-bat-dau-1-gio-sang"),
+        pytest.param(_with_first_week(week="1792281600"), id="week-la-chuoi"),
+        pytest.param(_with_first_week(week=1792281600.5), id="week-la-so-thuc"),
+        pytest.param(_with_first_week(week=-1), id="week-am"),
+        pytest.param(_with_first_week(week=10**20), id="week-vuot-pham-vi"),
+        pytest.param([{"week": 1792281600, "total": 26}], id="thieu-days"),
+        pytest.param(["không phải object"], id="phan-tu-khong-phai-object"),
+        pytest.param({"message": "không phải mảng"}, id="khong-phai-mang"),
+    ],
+)
+def test_star_history_rejects_malformed_weeks(
+    client: GitHubClient, http_mock: respx.MockRouter, body: object
+) -> None:
+    http_mock.get(HISTORY_URL).respond(json=body)
+
+    with pytest.raises(GitHubResponseError):
+        client.star_history(42976210)
+
+
+def test_star_history_not_found_raises_named_error(
+    client: GitHubClient, http_mock: respx.MockRouter
+) -> None:
+    http_mock.get(HISTORY_URL).respond(404, json={"message": "Not Found"})
+
+    with pytest.raises(GitHubNotFoundError, match="Not Found"):
+        client.star_history(42976210)
+
+
+def test_star_history_counts_against_budget(
+    http_mock: respx.MockRouter, fake_time: FakeTime
+) -> None:
+    route = http_mock.get(HISTORY_URL).respond(json=load_fixture_list("star_history_old.json"))
+
+    with make_client(fake_time, budget=CallBudget(1)) as github:
+        github.star_history(42976210)
+        with pytest.raises(CallBudgetExhaustedError):
+            github.star_history(42976210)
+
+    assert route.call_count == 1
+
+
+def test_star_history_accepts_what_the_fake_serves(
+    client: GitHubClient, http_mock: respx.MockRouter
+) -> None:
+    today = date(2026, 10, 22)
+    fake = FakeStarHistory({42976210: make_star_history({today: 9}, today=today)})
+    http_mock.get(HISTORY_URL).mock(side_effect=fake)
+
+    history = client.star_history(42976210)
+
+    assert len(history.weeks) == 6
+    assert sum(sum(week.days) for week in history.weeks) == 9
+    assert fake.requested == [42976210]
+
+
+@pytest.mark.parametrize("weeks", [0, 31])
+def test_star_history_rejects_weeks_out_of_range(client: GitHubClient, weeks: int) -> None:
+    with pytest.raises(ValueError, match="weeks"):
+        client.star_history(42976210, weeks=weeks)

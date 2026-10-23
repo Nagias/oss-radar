@@ -1,7 +1,7 @@
 """Dữ liệu GitHub đã kiểm kiểu. Phần còn lại của app chỉ thấy các dataclass này, không thấy JSON."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,3 +32,18 @@ class RepoSearchPage:
     total_count: int
     incomplete_results: bool
     items: tuple[GitHubRepo, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class StarWeek:
+    """Star mới của một tuần. `start` là Chủ nhật (UTC); `days` đi từ Chủ nhật tới thứ Bảy."""
+
+    start: date
+    days: tuple[int, int, int, int, int, int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class StarHistory:
+    """Lịch sử star theo tuần, tuần mới nhất đứng trước — đúng thứ tự GitHub trả."""
+
+    weeks: tuple[StarWeek, ...]

@@ -40,15 +40,20 @@ def _no_real_sleeping(monkeypatch: pytest.MonkeyPatch, fake_time: FakeTime) -> N
 
 @pytest.fixture(autouse=True)
 def _inline_background(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Việc nền chạy ngay tại chỗ để test thấy kết quả liền; lỗi bất ngờ nổ thẳng ra test."""
+    """Việc nền chạy ngay tại chỗ để test thấy kết quả liền; lỗi bất ngờ nổ thẳng ra test.
 
-    def run_now(job: Callable[[int], None], arg: int) -> Future[None]:
+    Luồng nền mặc định rảnh; test cần "đang bận" thì tự monkeypatch `core.background.busy_label`.
+    """
+
+    def run_now(job: Callable[[int], None], arg: int, *, label: str = "") -> Future[None]:
         job(arg)
         done: Future[None] = Future()
         done.set_result(None)
         return done
 
     monkeypatch.setattr("core.background.submit", run_now)
+    monkeypatch.setattr("core.background.submit_if_idle", run_now)
+    monkeypatch.setattr("core.background.busy_label", lambda: None)
 
 
 @pytest.fixture

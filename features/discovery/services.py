@@ -6,20 +6,27 @@ View và lệnh dòng lệnh chỉ gọi các hàm ở đây; không chứa logi
 import logging
 import time
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from django.db import transaction
-from django.db.models import Max, Q, QuerySet
+from django.db.models import Case, F, Max, Q, QuerySet, Value, When
 from django.utils import timezone
 
+from core import background
+from features.catalog.models import Repository
 from features.catalog.services import upsert_repositories
-from features.discovery.models import LIVE_HEARTBEAT_WINDOW, ScanResult, ScanRun, ScanSlice
+
+# Tính năng khác đọc cửa sổ nhịp sống qua services (mypy strict chỉ cho dùng tên được xuất rõ).
+from features.discovery.models import LIVE_HEARTBEAT_WINDOW as LIVE_HEARTBEAT_WINDOW
+from features.discovery.models import ScanResult, ScanRun, ScanSlice
 from features.discovery.slicing import (
     MAX_RESULTS_PER_QUERY,
     PER_PAGE,
     SliceRange,
     build_query,
+    find_forbidden_qualifier,
     pages_needed,
     resolve_root_range,
     split,
@@ -41,11 +48,30 @@ logger = logging.getLogger(__name__)
 HEARTBEAT_CHUNK_SECONDS = 10.0  # ngủ từng khúc ≤ 10 giây, sau mỗi khúc ghi nhịp sống
 SHOW_WAIT_AFTER_SECONDS = 5.0  # chờ lâu hơn thì hiện "Đang chờ GitHub tới …" trên trang
 MAX_CONSECUTIVE_FAILED_SLICES = 3
+# Tự chạy tiếp lần quét bị gián đoạn: chỉ trong 24 giờ và tối đa 3 lần — chính lần quét làm sập app
+# thì không lặp mãi.
+MAX_AUTO_RESUMES = 3
+AUTO_RESUME_WINDOW = timedelta(hours=24)
+
+# Mức quét dùng chung cho form của trang web, lệnh dòng lệnh và tính năng khác.
+# Ước lượng tối đa theo khoảng cách 2,1 giây/lượt (có token) và 6,1 giây/lượt (không token).
+BUDGET_CHOICES = [
+    (1, "Nhanh — 1 lượt gọi (100 repo nhiều star nhất)"),
+    (50, "Vừa — 50 lượt (≤ 2 phút có token, ≤ 5 phút không token)"),
+    (300, "Sâu — 300 lượt (≤ 11 phút có token, ≤ 31 phút không token)"),
+    (1000, "Hết cỡ — 1.000 lượt (≤ 35 phút có token, ≤ 1 giờ 42 phút không token)"),
+]
+_QUALIFIER_HINTS = {
+    "stars:": "Không tự ghi `stars:` trong truy vấn — dùng ô Star tối thiểu / Star tối đa.",
+    "created:": "Không tự ghi `created:` trong truy vấn — dùng ô Tạo từ ngày / đến ngày.",
+    "sort:": "Không tự ghi `sort:` trong truy vấn — app luôn sắp theo star.",
+}
 
 REASON_BUDGET = "Hết ngân sách lượt gọi — bấm Tiếp tục để quét nốt phần còn lại."
 REASON_STOPPED = "Bạn đã bấm Dừng — bấm Tiếp tục để quét tiếp."
 REASON_INTERRUPTED = "Bị gián đoạn (app tắt hoặc khởi động lại giữa chừng) — bấm Tiếp tục."
 REASON_CTRL_C = "Lệnh quét bị ngắt (Ctrl+C) — bấm Tiếp tục để quét tiếp."
+REASON_BUSY = "App đang bận việc nền khác — bấm Tiếp tục khi app rảnh."
 REASON_WAIT_TOO_LONG = "GitHub báo hết lượt gọi và bắt chờ quá lâu — bấm Tiếp tục sau ít phút."
 REASON_CONNECTION = (
     "Mất kết nối GitHub liên tục ({count} lát lỗi liền nhau) — kiểm tra mạng rồi bấm Tiếp tục."
@@ -79,6 +105,7 @@ class ScanRequest:
     created_from: date | None
     created_to: date | None
     budget: int
+    origin: str = ScanRun.Origin.MANUAL
 
 
 class ScanAlreadyRunningError(Exception):
@@ -115,6 +142,7 @@ def start_scan(request: ScanRequest) -> ScanRun:
             created_from=request.created_from,
             created_to=request.created_to,
             budget=request.budget,
+            origin=request.origin,
             status=ScanRun.Status.RUNNING,
             started_at=now,
             heartbeat_at=now,
@@ -178,22 +206,114 @@ def live_scan() -> ScanRun | None:
 
 
 def pause_stale_scans() -> int:
-    """Lần quét "đang chạy" mà nhịp sống đã cũ → bị gián đoạn → chuyển sang Tạm dừng."""
-    # DEBT(D-006): chỉ chuyển sang Tạm dừng; chưa tự chạy tiếp khi mở lại app (làm ở F-005).
+    """Lần quét "đang chạy" mà nhịp sống đã cũ → bị gián đoạn → chuyển sang Tạm dừng.
+
+    Người dùng đã bấm Dừng nhưng app tắt trước khi luồng quét kịp thấy → ghi là "đã bấm Dừng",
+    không phải "bị gián đoạn", để không bị tự chạy tiếp tốn lượt gọi người dùng đã từ chối.
+    Giữ nguyên `heartbeat_at`: nó là lúc bị gián đoạn, `resume_interrupted_scan` dựa vào đó.
+    """
     threshold = timezone.now() - LIVE_HEARTBEAT_WINDOW
+    reason = Case(
+        When(stop_requested=True, then=Value(REASON_STOPPED)),
+        default=Value(REASON_INTERRUPTED),
+    )
     return (
         ScanRun.objects.filter(status=ScanRun.Status.RUNNING)
         .filter(Q(heartbeat_at__lt=threshold) | Q(heartbeat_at__isnull=True))
-        .update(status=ScanRun.Status.PAUSED, stop_reason=REASON_INTERRUPTED, waiting_until=None)
+        .update(status=ScanRun.Status.PAUSED, stop_reason=reason, waiting_until=None)
     )
+
+
+def resume_interrupted_scan(*, now: datetime | None = None) -> ScanRun | None:
+    """Việc định kỳ: tự chạy tiếp lần quét tay bị gián đoạn gần nhất, chạy tại chỗ tới khi dừng.
+
+    Chỉ lần quét bị gián đoạn (không phải bấm Dừng, Ctrl+C hay hết ngân sách), trong 24 giờ, tối
+    đa 3 lần. Lần quét hằng ngày do chính lượt hằng ngày nối lại. Có lần quét đang chạy thì chờ
+    nhịp sau. Trả lần quét đã chạy tiếp, hoặc `None` nếu không có gì để làm.
+    """
+    pause_stale_scans()
+    if live_scan() is not None:
+        return None
+    moment = now if now is not None else timezone.now()
+    scan = ScanRun.objects.filter(
+        status=ScanRun.Status.PAUSED,
+        stop_reason=REASON_INTERRUPTED,
+        stop_requested=False,
+        origin=ScanRun.Origin.MANUAL,
+        auto_resume_count__lt=MAX_AUTO_RESUMES,
+        heartbeat_at__gte=moment - AUTO_RESUME_WINDOW,
+    ).first()
+    if scan is None:
+        return None
+    try:
+        # Đếm cùng transaction với lúc nối lại, TRƯỚC khi chạy: lần quét làm sập app vẫn bị đếm.
+        with transaction.atomic():
+            resume_scan(scan, extra_budget=0)
+            ScanRun.objects.filter(pk=scan.pk).update(
+                auto_resume_count=F("auto_resume_count") + 1, last_auto_resume_at=moment
+            )
+    except ScanAlreadyRunningError as exc:
+        # Tiến trình khác (vd lệnh `scan`) vừa bắt đầu quét sau lần kiểm ở trên: chờ nhịp sau.
+        logger.info("Chưa tự chạy tiếp lần quét #%s: %s", scan.pk, exc)
+        return None
+    logger.info("Tự chạy tiếp lần quét #%s bị gián đoạn", scan.pk)
+    background.relabel(f"Lần quét #{scan.pk} (tự chạy tiếp)")
+    execute_scan(scan.pk)
+    scan.refresh_from_db()
+    return scan
+
+
+def release_unstarted_scan(scan: ScanRun, *, refund_budget: int = 0) -> None:
+    """Lần quét vừa giữ chỗ nhưng luồng nền đã bị việc khác chiếm → Tạm dừng, chờ bấm Tiếp tục.
+
+    Không để nó "đang chạy" nằm chờ sau một việc dài (vd lượt hằng ngày): nhịp sống sẽ cũ đi và nó
+    bị coi là gián đoạn. Lý do dừng khác "bị gián đoạn" nên cũng không bị tự chạy tiếp.
+    `refund_budget`: phần ngân sách lượt Tiếp tục vừa thêm — chưa chạy được thì trả lại, để lần bấm
+    Tiếp tục sau không phải thêm một mức nữa.
+    """
+    ScanRun.objects.filter(pk=scan.pk, status=ScanRun.Status.RUNNING).update(
+        status=ScanRun.Status.PAUSED,
+        stop_reason=REASON_BUSY,
+        budget=F("budget") - refund_budget,
+        heartbeat_at=None,
+        runner_token="",
+        waiting_until=None,
+    )
+    scan.refresh_from_db()
 
 
 # --- Đọc dữ liệu cho trang web và lệnh -------------------------------------------------------
 
 
 def recent_scans(limit: int = 10) -> QuerySet[ScanRun]:
-    """Các lần quét mới nhất trước."""
-    return ScanRun.objects.all()[:limit]
+    """Các lần quét tay mới nhất trước (lần quét hằng ngày xem ở báo cáo hằng ngày)."""
+    return ScanRun.objects.filter(origin=ScanRun.Origin.MANUAL)[:limit]
+
+
+def repositories_seen_in(scan_ids: Collection[int]) -> QuerySet[Repository]:
+    """Các repo (không lặp) có mặt trong kết quả của các lần quét này."""
+    return Repository.objects.filter(scan_results__scan_run_id__in=list(scan_ids)).distinct()
+
+
+def prune_daily_results(*, before: datetime) -> int:
+    """Xoá danh sách repo của lần quét hằng ngày tạo trước `before`; trả số dòng đã xoá.
+
+    Phần tóm tắt của lần quét giữ nguyên; chỉ lần quét thật sự bị xoá dòng mới được đánh dấu "đã
+    dọn" (lần quét không có repo nào thì không có gì để dọn). Lần quét tay không bị dọn.
+    """
+    old_daily = ScanRun.objects.filter(origin=ScanRun.Origin.DAILY, created_at__lt=before)
+    old_results = ScanResult.objects.filter(scan_run__in=old_daily)
+    with transaction.atomic():
+        # Đánh dấu trước khi xoá: sau khi xoá thì không còn biết lần quét nào từng có dòng.
+        ScanRun.objects.filter(pk__in=old_results.values("scan_run_id")).update(results_pruned=True)
+        deleted, _ = old_results.delete()
+    return deleted
+
+
+def forbidden_qualifier_hint(query: str) -> str | None:
+    """Lời nhắc khi truy vấn tự ghi điều kiện app tự thêm (`stars:`, `created:`, `sort:`)."""
+    forbidden = find_forbidden_qualifier(query)
+    return None if forbidden is None else _QUALIFIER_HINTS[forbidden]
 
 
 def scan_results(scan: ScanRun) -> QuerySet[ScanResult]:
@@ -299,7 +419,11 @@ def execute_scan(scan_id: int) -> None:
         raise
     except Exception:
         logger.exception("Lần quét #%s gặp lỗi không mong đợi", scan.pk)
-        runner.finish(ScanRun.Status.FAILED, error=_UNEXPECTED_REASON)
+        runner.finish(
+            ScanRun.Status.FAILED,
+            error=_UNEXPECTED_REASON,
+            error_kind=ScanRun.ErrorKind.UNEXPECTED,
+        )
         raise
 
 
@@ -347,7 +471,16 @@ class _ScanRunner:
             self.finish(ScanRun.Status.PAUSED, reason=REASON_WAIT_TOO_LONG)
         except (GitHubAuthError, GitHubQueryError) as exc:
             logger.warning("Lần quét #%s lỗi từ GitHub: %r", self.scan.pk, exc)
-            self.finish(ScanRun.Status.FAILED, error=f"{_reason_for(exc)} (Chi tiết: {exc})")
+            kind = (
+                ScanRun.ErrorKind.AUTH
+                if isinstance(exc, GitHubAuthError)
+                else ScanRun.ErrorKind.QUERY
+            )
+            self.finish(
+                ScanRun.Status.FAILED,
+                error=f"{_reason_for(exc)} (Chi tiết: {exc})",
+                error_kind=kind,
+            )
 
     def _process(self, github: GitHubClient, slice_: ScanSlice) -> None:
         query = build_query(self.scan.query, slice_.range)
@@ -465,6 +598,7 @@ class _ScanRunner:
         slice_.save()
 
     def _finish_all_slices(self) -> None:
+        # DEBT(D-008): lát gốc lỗi mà 0 repo vẫn ra "Xong nhưng còn sót" thay vì "Lỗi".
         problems = problem_slices(self.scan)
         if not problems.exists():
             self.finish(ScanRun.Status.SUCCEEDED)
@@ -477,12 +611,20 @@ class _ScanRunner:
         )
         self.finish(ScanRun.Status.SUCCEEDED_PARTIAL, reason=reason)
 
-    def finish(self, status: ScanRun.Status, *, reason: str = "", error: str = "") -> None:
+    def finish(
+        self,
+        status: ScanRun.Status,
+        *,
+        reason: str = "",
+        error: str = "",
+        error_kind: str = "",
+    ) -> None:
         self._save_calls()
         self._update(
             status=status,
             stop_reason=reason,
             error_message=error,
+            error_kind=error_kind,
             finished_at=timezone.now(),
             waiting_until=None,
             stop_requested=False,

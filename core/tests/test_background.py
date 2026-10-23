@@ -1,10 +1,13 @@
 """Chạy nền: việc chạy trên luồng riêng, lỗi ghi log không bị nuốt, luồng vẫn sống cho việc sau."""
 
 import logging
+import queue
 import subprocess
 import sys
 import threading
 import time
+from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -35,6 +38,7 @@ def test_failing_job_is_logged_and_next_job_still_runs(caplog: pytest.LogCapture
             failed.result(timeout=5)
 
     assert "hỏng giả lập 1" in caplog.text
+    assert background.busy_label() is None
     done: list[int] = []
     background.submit(done.append, 2).result(timeout=5)
     assert done == [2]
@@ -47,6 +51,25 @@ def test_database_connections_closed_after_job(monkeypatch: pytest.MonkeyPatch) 
     background.submit(lambda arg: None, 1).result(timeout=5)
 
     assert closed == [True]
+
+
+def test_connection_cleanup_failure_settles_future_and_worker_goes_idle(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def broken_close_all() -> None:
+        raise RuntimeError("đóng kết nối hỏng giả lập")
+
+    with monkeypatch.context() as patch, caplog.at_level(logging.ERROR, logger="core.background"):
+        patch.setattr("core.background.connections.close_all", broken_close_all)
+        failed = background.submit(lambda arg: None, 1, label="Lượt quét hằng ngày 22/10")
+        with pytest.raises(RuntimeError, match="đóng kết nối hỏng"):
+            failed.result(timeout=5)
+
+    assert "đóng kết nối hỏng giả lập" in caplog.text
+    assert background.busy_label() is None  # không kẹt "bận" → nút Quét và bộ nhịp vẫn chạy được
+    done: list[int] = []
+    background.submit(done.append, 2).result(timeout=5)
+    assert done == [2]
 
 
 _EXIT_PROBE = """
@@ -94,3 +117,122 @@ def test_cancelled_job_is_skipped_and_worker_moves_on() -> None:
     background.submit(ran.append, 2).result(timeout=5)
 
     assert ran == [2]
+    assert background.busy_label() is None
+
+
+def _holding_job(started: threading.Event, release: threading.Event) -> Callable[[int], None]:
+    """Việc giữ luồng nền tới khi test cho đi (tối đa 5 giây để test hỏng không treo luồng)."""
+
+    def hold(_: int) -> None:
+        started.set()
+        release.wait(5)
+
+    return hold
+
+
+def test_busy_label_reports_running_job_and_none_when_idle() -> None:
+    first_started, release_first = threading.Event(), threading.Event()
+    second_started, release_second = threading.Event(), threading.Event()
+    assert background.busy_label() is None
+
+    first = background.submit(
+        _holding_job(first_started, release_first), 0, label="Lượt quét hằng ngày 22/10"
+    )
+    second = background.submit(_holding_job(second_started, release_second), 0)
+    try:
+        assert first_started.wait(5)
+        assert background.busy_label() == "Lượt quét hằng ngày 22/10"
+        release_first.set()
+        assert second_started.wait(5)
+        assert background.busy_label() == "việc nền"  # việc không có nhãn
+    finally:
+        release_first.set()
+        release_second.set()
+    first.result(timeout=5)
+    second.result(timeout=5)
+
+    assert background.busy_label() is None
+
+
+def test_relabel_changes_label_of_running_job() -> None:
+    started, release = threading.Event(), threading.Event()
+    seen: list[str | None] = []
+
+    def daily_check(_: int) -> None:
+        seen.append(background.busy_label())
+        background.relabel("Lượt quét hằng ngày 22/10")
+        started.set()
+        release.wait(5)
+
+    future = background.submit(daily_check, 0, label="Kiểm tra lịch")
+    try:
+        assert started.wait(5)
+        assert background.busy_label() == "Lượt quét hằng ngày 22/10"
+    finally:
+        release.set()
+    future.result(timeout=5)
+
+    assert seen == ["Kiểm tra lịch"]
+    assert background.busy_label() is None
+
+
+def test_relabel_outside_background_job_changes_nothing() -> None:
+    # Hàm việc định kỳ gọi thẳng (test, lệnh dòng lệnh) không được làm luồng nền "bận" giả.
+    background.relabel("Lượt quét hằng ngày 22/10")
+
+    assert background.busy_label() is None
+
+
+def test_relabel_with_empty_label_falls_back_to_default() -> None:
+    seen: list[str | None] = []
+
+    def job(_: int) -> None:
+        background.relabel("")
+        seen.append(background.busy_label())
+
+    background.submit(job, 0, label="Kiểm tra lịch").result(timeout=5)
+
+    assert seen == ["việc nền"]
+
+
+def test_submit_if_idle_enqueues_only_when_idle() -> None:
+    started, release = threading.Event(), threading.Event()
+    ran: list[int] = []
+    holder = background.submit(_holding_job(started, release), 0, label="Lượt quét hằng ngày 22/10")
+    try:
+        assert started.wait(5)
+        assert background.submit_if_idle(ran.append, 1, label="Kiểm tra lịch") is None
+    finally:
+        release.set()
+    holder.result(timeout=5)
+
+    future = background.submit_if_idle(ran.append, 2, label="Kiểm tra lịch")
+    assert future is not None
+    future.result(timeout=5)
+
+    assert ran == [2]  # việc 1 không hề được xếp vào hàng chờ
+    assert background.busy_label() is None
+
+
+def test_submit_if_idle_revives_dead_worker_so_queue_drains(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Luồng nền đã chết mà hàng chờ còn việc. Hàng chờ riêng cho test để luồng nền thật (dùng cho
+    # các test khác) không lấy mất việc.
+    dead = threading.Thread(target=lambda: None)
+    dead.start()
+    dead.join()
+    monkeypatch.setattr(background, "_worker", dead)
+    monkeypatch.setattr(background, "_jobs", queue.Queue())
+    monkeypatch.setattr(background, "_queued_labels", deque())
+    ran: list[int] = []
+    with monkeypatch.context() as patch:
+        patch.setattr(background, "_ensure_worker", lambda: None)
+        stranded = background.submit(ran.append, 1, label="Lượt quét hằng ngày 22/10")
+    assert background.busy_label() == "Lượt quét hằng ngày 22/10"
+
+    assert background.submit_if_idle(ran.append, 2) is None  # vẫn bận: không xếp thêm
+    stranded.result(timeout=5)  # nhưng luồng nền được dựng lại và chạy hết hàng chờ
+
+    assert ran == [1]
+    assert background.busy_label() is None

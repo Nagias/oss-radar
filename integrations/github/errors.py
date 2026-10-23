@@ -29,3 +29,11 @@ class GitHubUnavailableError(GitHubError):
 
 class GitHubResponseError(GitHubError):
     """GitHub trả về dữ liệu không đúng định dạng mong đợi."""
+
+
+class GitHubNotFoundError(GitHubResponseError):
+    """GitHub báo không có thứ cần tìm (404): repo đã bị xoá hoặc chuyển sang riêng tư.
+
+    Là một kiểu "phản hồi không mong đợi": nơi nào chưa xử lý riêng 404 (vd tìm kiếm) vẫn coi nó
+    như mọi phản hồi lạ khác, không phải lỗi bất ngờ làm sập cả lần quét.
+    """

@@ -15,13 +15,26 @@ class ScanRun(models.Model):
     """Một lần quét GitHub: truy vấn, phạm vi, ngân sách, trạng thái, số liệu, lý do dừng/lỗi."""
 
     class Status(models.TextChoices):
+        # DEBT(D-008): dòng cũ thời F-001 còn trạng thái "queued" không có trong danh sách này.
         RUNNING = "running", "Đang quét"
         PAUSED = "paused", "Tạm dừng"
         SUCCEEDED = "succeeded", "Xong"
         SUCCEEDED_PARTIAL = "succeeded_partial", "Xong nhưng còn sót"
         FAILED = "failed", "Lỗi"
 
+    class Origin(models.TextChoices):
+        MANUAL = "manual", "Quét tay"
+        DAILY = "daily", "Hằng ngày"
+
+    class ErrorKind(models.TextChoices):
+        QUERY = "query", "Truy vấn sai"
+        AUTH = "auth", "Token sai"
+        UNEXPECTED = "unexpected", "Lỗi bất ngờ"
+
     query = models.CharField("Truy vấn", max_length=256)
+    origin = models.CharField(
+        "Nguồn chạy", max_length=10, choices=Origin.choices, default=Origin.MANUAL
+    )
     min_stars = models.PositiveIntegerField("Star tối thiểu", default=0)
     max_stars = models.PositiveIntegerField("Star tối đa", null=True, blank=True)
     created_from = models.DateField("Tạo từ ngày", null=True, blank=True)
@@ -46,6 +59,12 @@ class ScanRun(models.Model):
     created_count = models.PositiveIntegerField("Repo mới", default=0)
     updated_count = models.PositiveIntegerField("Repo đã có", default=0)
     error_message = models.TextField("Lý do lỗi", blank=True, default="")
+    error_kind = models.CharField(
+        "Loại lỗi", max_length=12, blank=True, default="", choices=ErrorKind.choices
+    )
+    auto_resume_count = models.PositiveSmallIntegerField("Số lần tự chạy tiếp", default=0)
+    last_auto_resume_at = models.DateTimeField("Tự chạy tiếp gần nhất", null=True, blank=True)
+    results_pruned = models.BooleanField("Đã dọn danh sách repo", default=False)
 
     class Meta:
         ordering = ["-created_at", "-id"]

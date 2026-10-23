@@ -30,4 +30,28 @@
 - [x] Sổ sách: CLAUDE.md, ARCHITECTURE (QĐ-14), FEATURE_MAP (F-002), DEBT (trả D-003/4/5, thêm D-006/7)
 - [x] Chạy thật: lệnh (ai-video 404/404; ai-agent 4.616/4.618, 68 lượt), trình duyệt (Dừng/Tiếp tục, tắt app giữa chừng), `poe test-live` 2/2
 - [x] Agent độc lập rà soát cả nhánh (0 nghiêm trọng, 3 quan trọng) — đã sửa và kiểm lại
-- [ ] Mở PR, CI xanh, chủ dự án duyệt → squash-merge
+- [x] PR Nagias/oss-radar#2, CI xanh, chủ dự án duyệt → squash-merge vào `main` (commit `76730c9`, 2026-10-22)
+
+## Tiếp theo (sau F-002)
+
+- [x] Chủ dự án chọn tính năng kế tiếp: F-005 rising star + quét hằng ngày (2026-10-22)
+
+## F-005 Rising star + quét hằng ngày (2026-10-22, nhánh `feat/f005-rising-star`)
+
+- [x] Đo thật: độ tươi số star của Search, endpoint lịch sử star mới, phân bố tăng star, 16 chủ đề gợi ý
+- [x] Chủ dự án chọn lịch chạy trong app, chạy bù khi mở app
+- [x] Thiết kế `docs/designs/2026-10-22-f005-rising-star.md` — agent độc lập rà soát, đã chốt 7 điểm
+- [x] Chủ dự án duyệt thiết kế (2026-10-22)
+- [x] Kế hoạch `docs/plans/2026-10-22-f005-rising-star.md` (9 task)
+- [x] Code theo TDD: 8 task (client lịch sử star, ảnh chụp star, bộ nhịp, tự chạy tiếp D-006, hàm tính tăng star,
+      lượt hằng ngày, lọc thô/xác minh/báo cáo, trang + lệnh `daily`) — mỗi task có agent độc lập rà soát
+- [x] Sổ sách: CLAUDE.md, ARCHITECTURE (QĐ-15, QĐ-16), FEATURE_MAP (F-005), DEBT (trả D-006; thêm D-008, D-009)
+- [x] Chạy thật trên CSDL thật (2026-10-23, không token): lượt tự chạy lúc 10:23 khi mở app; app khởi động lại
+      giữa chừng → 10:30 tự nối tiếp; máy cạn bộ nhớ → lượt Lỗi (MemoryError) → `manage.py daily` chạy tiếp
+      từ truy vấn 9, xong 16/16: 596 lượt Search, 50/50 lượt xác minh, 47 rising star; `poe test-live` 3/3
+- [ ] PR F-005, CI xanh, chủ dự án duyệt → squash-merge
+
+## Tiếp theo (sau F-005)
+
+- [ ] Chủ dự án điền `GITHUB_TOKEN` (xác minh 300 repo/ngày thay vì 50, quét nhanh gấp ~3 lần)
+- [ ] PR `fix/` trả D-008 (5 điểm nhỏ của F-002)

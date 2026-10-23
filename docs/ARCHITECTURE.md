@@ -1,8 +1,8 @@
 # Kiến trúc OSS Radar
 
 > **Trạng thái: ĐÃ DUYỆT** — nền QĐ-01…QĐ-13 do chủ dự án duyệt qua PR #1 (2026-10-21); QĐ-14 duyệt cùng
-> thiết kế F-002 (2026-10-22). Quyết định mới được thêm vào cuối bảng, không xoá dòng cũ (đổi trạng thái
-> thành "Thay bởi QĐ-xx").
+> thiết kế F-002 (2026-10-22); QĐ-15, QĐ-16 duyệt cùng thiết kế F-005 (2026-10-22). Quyết định mới được
+> thêm vào cuối bảng, không xoá dòng cũ (đổi trạng thái thành "Thay bởi QĐ-xx").
 
 Mục tiêu của tài liệu: giải thích **vì sao** chọn từng thứ, theo hệ quả vận hành (được gì, tốn gì,
 rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đường nào") nằm ở `CLAUDE.md`.
@@ -26,7 +26,9 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 | QĐ-11 | Việc nền & lịch hằng ngày | Huey + SqliteHuey | Thay bởi QĐ-14 (2026-10-22) |
 | QĐ-12 | AI | Gemini qua 9router (chuẩn OpenAI), AI chỉ phân loại/đánh giá | Dự kiến — chưa cài |
 | QĐ-13 | Nguồn khám phá phụ | Exa, Tavily | Dự kiến — chưa cài |
-| QĐ-14 | Việc nền | Một luồng trong tiến trình web (`core/background.py`), trạng thái + nhịp sống trong CSDL | Đã duyệt 2026-10-22, đã dùng (F-002) |
+| QĐ-14 | Việc nền | Một luồng trong tiến trình web (`core/background.py`), trạng thái + nhịp sống trong CSDL | Đã duyệt 2026-10-22, đã dùng (F-002); câu "nơi duy nhất tạo luồng" sửa bởi QĐ-15 |
+| QĐ-15 | Lịch hằng ngày, chạy bù | Bộ nhịp trong tiến trình web (`core/scheduler.py`) + `settings.SCHEDULED_JOBS`; mỗi lúc một việc | Đã duyệt 2026-10-22, đã dùng (F-005) |
+| QĐ-16 | Nguồn số liệu star tăng | Lịch sử star chính thức của GitHub; ảnh chụp star chỉ làm radar, giữ 35 ngày | Đã duyệt 2026-10-22, đã dùng (F-005) |
 
 ---
 
@@ -161,6 +163,42 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
   (SQLite `IMMEDIATE` giữ khoá ghi) dựa trên nhịp sống.
 - Ruff cấm `threading`/`concurrent.futures` ngoài `core/background.py`.
 
+
+### QĐ-15 — Lịch hằng ngày chạy trong app, chạy bù khi mở (sửa một câu của QĐ-14)
+- **Chủ dự án chốt 2026-10-22** khi duyệt thiết kế F-005 (`docs/designs/2026-10-22-f005-rising-star.md`).
+- **Bộ nhịp** `core/scheduler.py`: một luồng hẹn giờ nhỏ, **không đụng CSDL**. Cứ 5 phút (và ngay khi
+  khởi động), nếu luồng nền rảnh thì đẩy một việc "đến lượt chưa" vào `core.background`; đang bận thì bỏ
+  qua nhịp đó. Việc "đến lượt chưa" gọi lần lượt các hàm khai trong `settings.SCHEDULED_JOBS` (đường dẫn
+  hàm, giống `MIDDLEWARE`): hiện có tự chạy tiếp lần quét bị gián đoạn và lượt quét hằng ngày.
+- **Chỉ bật ở tiến trình phục vụ web:** lệnh `runserver` của dự án (`core/management/commands/runserver.py`,
+  vẫn gõ `uv run poe dev`) bật bộ nhịp trong `on_bind`, tức sau khi kiểm tra hệ thống và đã giữ được cổng.
+  Tiến trình theo dõi file, `migrate`, test, `manage.py scan`/`daily` không bật. Không dùng
+  `AppConfig.ready()` hay signal.
+- **Mỗi lúc một việc:** view gửi việc bằng `background.submit_if_idle` (kiểm rảnh và xếp hàng trong một lần
+  giữ khoá); luồng nền đang bận thì nút Quét/Tiếp tục/Chạy ngay bị khoá kèm nhãn việc đang chạy, không xếp
+  hàng chờ (nằm chờ lâu thì nhịp sống cũ, bị coi là gián đoạn). Giữa các tiến trình vẫn dựa trên nhịp sống
+  trong CSDL như QĐ-14.
+- **Sửa QĐ-14:** nơi được tạo luồng là `core/background.py` **và** `core/scheduler.py`.
+- **Được:** không thêm thư viện, không thêm chương trình; lịch nằm trong code, test được bằng đồng hồ giả.
+- **Tốn / rủi ro:** chỉ quét khi app đang mở; mở app muộn thì quét bù ngay (báo cáo của ngày có sau
+  khoảng 30 phút). Server phát triển tự khởi động lại khi sửa code thì lượt bị ngắt rồi tự nối lại (tối đa 3
+  lần/ngày). Muốn chạy đúng giờ kể cả khi không mở app thì sau này gắn Task Scheduler của Windows vào lệnh
+  `manage.py daily`.
+- **Đã loại:** Task Scheduler của Windows (lịch nằm ngoài app, phải đăng ký bằng tay; chủ dự án chọn trong
+  app); Huey (QĐ-11 cũ).
+
+### QĐ-16 — Số star tăng lấy từ lịch sử star chính thức; ảnh chụp chỉ làm radar
+- Từ 7/2026 GitHub khoá danh sách người bấm star; từ 2026-09-04 có endpoint lịch sử star
+  (`/repositories/{id}/stargazers/history`): 1 lượt gọi cho số star từng ngày của vài tuần, gọi được cả khi
+  không có token (hạn mức "core": 60 lượt/giờ không token, 5.000 có token).
+- **Ảnh chụp star** (`features/catalog`, mỗi repo một dòng mỗi ngày, ghi khi lưu repo vào kho) chỉ dùng làm
+  **radar rẻ** để chọn ứng viên; con số hiển thị cho người dùng luôn từ lịch sử chính thức, hoặc ghi rõ
+  "ước lượng từ ảnh chụp, chưa xác minh".
+- **Giữ 35 ngày** cho ảnh chụp và danh sách repo của lần quét hằng ngày: giữ mãi tốn ~1,4 GB/năm, giữ 35
+  ngày ổn định ~130 MB; lịch sử dài hạn đã có ở GitHub.
+- **Rủi ro:** endpoint còn mới, có thể đổi; khi hỏng, lượt vẫn quét và ghi ảnh chụp, ứng viên rơi vào mục
+  "chưa xác minh".
+
 ---
 
 ## 3. Cấu trúc thư mục theo tính năng
@@ -180,8 +218,11 @@ features/
     tests/               Test của riêng tính năng
 integrations/
   github/                Client GitHub (+ pacing.py: giãn nhịp, gọi lại, ngân sách). Không biết Django model.
+  rising/                F-005 Rising star + quét hằng ngày (growth.py: hàm thuần tính star tăng)
 core/
-  background.py          Chạy việc nền một luồng (QĐ-14) — nơi duy nhất được tạo luồng.
+  background.py          Chạy việc nền một luồng (QĐ-14).
+  scheduler.py           Bộ nhịp gọi việc định kỳ trong settings.SCHEDULED_JOBS (QĐ-15).
+  management/commands/   Lệnh runserver của dự án: bật bộ nhịp khi đã giữ cổng.
 templates/base.html      Khung trang chung
 static/css/app.css       CSS chung
 tests/                   Test toàn dự án (lính gác quy tắc: sổ nợ, bản đồ tính năng…)
@@ -230,6 +271,9 @@ flowchart LR
 
 Đã làm (F-001 + F-002): **GitHub Search chia lát (đủ, vượt trần 1.000) → chuẩn hoá → kho repo không
 trùng → hiển thị sắp theo star, kèm độ phủ.**
+
+Đã làm (F-005): **ảnh chụp star hằng ngày → lọc thô ứng viên → xác minh bằng lịch sử star chính thức →
+báo rising star; lượt quét hằng ngày tự chạy trong app.**
 
 ---
 

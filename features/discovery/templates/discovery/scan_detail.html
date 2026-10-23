@@ -3,13 +3,16 @@
 
 {% block title %}Lần quét #{{ scan.pk }}{% endblock %}
 
-{% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="3; url={% url 'discovery:scan_detail' scan.pk %}">{% endif %}{% endblock %}
 
 {% block content %}
 <p><a href="{% url 'discovery:home' %}">← Quét truy vấn khác</a></p>
 
 <section class="card">
-  <h1>Lần quét #{{ scan.pk }} <span class="status status-{{ scan.status }}">{{ scan.get_status_display }}</span></h1>
+  <h1>
+    Lần quét #{{ scan.pk }} <span class="status status-{{ scan.status }}">{{ scan.get_status_display }}</span>
+    {% if scan.origin == "daily" %}<span class="badge badge-known">{{ scan.get_origin_display }}</span>{% endif %}
+  </h1>
   <p>
     Truy vấn: <code>{{ scan.query }}</code> · star ≥ {{ scan.min_stars }}{% if scan.max_stars is not None %}, ≤ {{ scan.max_stars }}{% endif %}
     · tạo {% if scan.created_from %}từ {{ scan.created_from|date:"d/m/Y" }}{% else %}từ 2008{% endif %}
@@ -32,6 +35,13 @@
   {% elif scan.stop_reason %}
     <p class="notice">{{ scan.stop_reason }}</p>
   {% endif %}
+  {% if scan.auto_resume_count %}
+    <p class="muted">Tự chạy tiếp lần {{ scan.auto_resume_count }} lúc {{ scan.last_auto_resume_at|date:"H:i d/m/Y" }} (sau khi app bị tắt giữa chừng).</p>
+  {% endif %}
+  {% if scan.results_pruned %}
+    {# DEBT(D-009): "35 ngày" viết cứng; hằng RETENTION_DAYS ở rising, discovery không được import. #}
+    <p class="muted">Danh sách repo đã dọn sau 35 ngày — phần tóm tắt bên trên vẫn giữ.</p>
+  {% endif %}
 
   {% if scan.is_live %}
     <form method="post" action="{% url 'discovery:scan_stop' scan.pk %}" class="inline-form">
@@ -47,7 +57,10 @@
       {% if resume_form.non_field_errors %}<p class="error" role="alert">{{ resume_form.non_field_errors|join:" " }}</p>{% endif %}
       <label for="{{ resume_form.extra_budget.id_for_label }}">{{ resume_form.extra_budget.label }}</label>
       {{ resume_form.extra_budget }}
-      <button type="submit">Tiếp tục</button>
+      <button type="submit" {% if busy_label %}disabled{% endif %}>Tiếp tục</button>
+      {% if busy_label %}
+        <span class="muted small">Tạm khoá: app đang chạy việc nền <strong>{{ busy_label }}</strong> — chờ xong rồi bấm Tiếp tục.</span>
+      {% endif %}
     </form>
   {% endif %}
 </section>
