@@ -22,7 +22,7 @@ nhận, khi nào trả, quên trả thì sao.
 | D-005 | Gọi GitHub một lần, lỗi là dừng — chưa thử lại, chưa giãn nhịp, chưa có ngân sách gọi API | Đã trả (2026-10-22) | F-002: `integrations/github/pacing.py` |
 | D-006 | Tắt app giữa chừng thì lần quét chỉ chuyển sang Tạm dừng; phải bấm Tiếp tục bằng tay | Đã trả (2026-10-23) | F-005: bộ nhịp tự chạy tiếp lần quét bị gián đoạn |
 | D-007 | Trang kết quả lần quét chỉ hiện 500 repo nhiều star nhất | Mở | Khi làm trang duyệt kho (lọc, phân trang) |
-| D-008 | 5 điểm nhỏ còn lại từ rà soát F-002 (tính dư lượt khi Dừng lúc chờ, lệch đồng hồ, lệnh in "0/None", lát gốc lỗi báo "còn sót", trạng thái `queued` cũ) | Mở | Một PR `fix/` riêng sau F-005 |
+| D-008 | 5 điểm nhỏ còn lại từ rà soát F-002 (tính dư lượt khi Dừng lúc chờ, lệch đồng hồ, lệnh in "0/None", lát gốc lỗi báo "còn sót", trạng thái `queued` cũ) | Đã trả (2026-10-23) | PR `fix/d008-diem-nho-f002` |
 | D-009 | 4 điểm để sau của F-005 (services.py rising ~1.100 dòng, ngày của bước lọc thô, nhãn "Mới vào danh sách" theo ngưỡng mặc định, "35 ngày" viết cứng) | Mở | Khi làm F-006 hoặc khi sửa rising lần tới |
 
 ## Chi tiết
@@ -133,6 +133,13 @@ nhận, khi nào trả, quên trả thì sao.
 - **Vị trí:** `integrations/github/client.py` (`_get_json`), `integrations/github/pacing.py`
   (`wait_for_rate_limit`), `features/discovery/management/commands/scan.py` (`_print_summary`),
   `features/discovery/services.py` (`_finish_all_slices`), `features/discovery/models.py` (`ScanRun.Status`).
+- **Đã trả (2026-10-23, PR `fix/d008-diem-nho-f002`):**
+  1. client chờ giãn nhịp xong mới trừ ngân sách (hết ngân sách thì báo ngay, không chờ);
+  2. bộ giãn nhịp đọc giờ GitHub từ header `Date` và tính giờ chờ theo giờ đó;
+  3. lệnh `scan` in "?" khi chưa có tổng;
+  4. mọi lát đều lỗi, không lấy được repo nào → lần quét "Lỗi" với loại lỗi mới "GitHub lỗi hoặc mất kết
+     nối" — vẫn bấm Tiếp tục được (token sai, truy vấn sai thì không);
+  5. migration `discovery/0005` đóng các dòng `queued` cũ thành "Lỗi" kèm lý do.
 
 ### D-009 — 4 điểm để sau của F-005
 - **Nợ gì:**

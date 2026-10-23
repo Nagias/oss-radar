@@ -15,7 +15,6 @@ class ScanRun(models.Model):
     """Một lần quét GitHub: truy vấn, phạm vi, ngân sách, trạng thái, số liệu, lý do dừng/lỗi."""
 
     class Status(models.TextChoices):
-        # DEBT(D-008): dòng cũ thời F-001 còn trạng thái "queued" không có trong danh sách này.
         RUNNING = "running", "Đang quét"
         PAUSED = "paused", "Tạm dừng"
         SUCCEEDED = "succeeded", "Xong"
@@ -30,6 +29,7 @@ class ScanRun(models.Model):
         QUERY = "query", "Truy vấn sai"
         AUTH = "auth", "Token sai"
         UNEXPECTED = "unexpected", "Lỗi bất ngờ"
+        UNAVAILABLE = "unavailable", "GitHub lỗi hoặc mất kết nối"
 
     query = models.CharField("Truy vấn", max_length=256)
     origin = models.CharField(
@@ -83,7 +83,13 @@ class ScanRun(models.Model):
 
     @property
     def can_resume(self) -> bool:
-        return self.status in (self.Status.PAUSED, self.Status.SUCCEEDED_PARTIAL)
+        # Lỗi vì GitHub/mạng thì tự khỏi được → cho Tiếp tục; token sai, truy vấn sai thì không.
+        retryable_failure = (
+            self.status == self.Status.FAILED and self.error_kind == self.ErrorKind.UNAVAILABLE
+        )
+        return self.status in (self.Status.PAUSED, self.Status.SUCCEEDED_PARTIAL) or (
+            retryable_failure
+        )
 
     @property
     def coverage_percent(self) -> float | None:

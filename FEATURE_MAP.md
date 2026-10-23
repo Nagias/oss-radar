@@ -14,7 +14,7 @@ test ở đâu, đang nợ gì.
 | Mã | Tính năng | Trạng thái | Thư mục | Lối vào | Test chính | Nợ |
 |---|---|---|---|---|---|---|
 | F-001 | Quét GitHub theo truy vấn → lưu không trùng → xem sắp theo star | Đã gộp vào F-002 (= mức Nhanh) | `features/discovery/` | như F-002 | `features/discovery/tests/` | — |
-| F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py`, `test_auto_resume.py` | D-007, D-008 |
+| F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py`, `test_auto_resume.py` | D-007 |
 | F-005 | Rising star + lượt quét hằng ngày: ảnh chụp star, lọc thô, xác minh bằng lịch sử star chính thức, lịch chạy trong app, chạy bù, tự chạy tiếp | Chạy thật | `features/rising/` | Web `/rising/`, `/rising/watch/`, nút Chạy ngay/Chạy tiếp/Dừng; lệnh `manage.py daily`; tự chạy sau 7:00 khi app mở | `features/rising/tests/test_daily_run.py`, `test_verify.py`, `test_e2e.py` | D-009 |
 
 ## Mô-đun lõi và cửa ra ngoài
@@ -103,7 +103,7 @@ test ở đâu, đang nợ gì.
   Quét mức Sâu trên 1.500 repo → độ phủ 100%, quét lại không trùng. Gọi GitHub thật: `uv run poe test-live`.
 - **Kiểm chứng tay:** `uv run python manage.py scan "topic:ai-video" --budget 300`; hoặc mở trình duyệt,
   quét mức Vừa, bấm Dừng rồi Tiếp tục.
-- **Nợ liên quan:** D-007 (trang chỉ hiện 500 repo đầu), D-008 (5 điểm nhỏ còn lại). D-006 đã trả ở F-005
+- **Nợ liên quan:** D-007 (trang chỉ hiện 500 repo đầu). D-008 đã trả (2026-10-23). D-006 đã trả ở F-005
   (lần quét bị gián đoạn tự chạy tiếp).
 
 ### F-001 — Quét GitHub theo truy vấn (bộ khung đi được)

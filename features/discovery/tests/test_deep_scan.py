@@ -375,3 +375,47 @@ def test_progress_is_logged_for_every_slice(
     progress = [r.getMessage() for r in caplog.records if "lát" in r.getMessage()]
     assert len(progress) == scan.slices.count()
     assert all(f"Lần quét #{scan.pk}" in line for line in progress)
+
+
+# --- Nợ D-008: không lấy được repo nào vì mọi lát đều lỗi → "Lỗi", vẫn bấm Tiếp tục được ---
+
+
+def test_scan_where_every_slice_failed_is_failed_but_resumable(use_fake: UseFake) -> None:
+    fake = use_fake(many_repos(300))
+    fake.fail_when = lambda q: 503  # GitHub lỗi máy chủ suốt lần quét
+
+    scan = deep(budget=50)
+
+    assert scan.status == ScanRun.Status.FAILED
+    assert scan.error_kind == ScanRun.ErrorKind.UNAVAILABLE
+    assert scan.fetched_count == 0
+    assert "Không lấy được repo nào" in scan.error_message
+    assert scan.can_resume  # GitHub hết lỗi thì bấm Tiếp tục để quét lại
+
+    fake.fail_when = None
+    services.resume_scan(scan, extra_budget=50)
+    services.execute_scan(scan.pk)
+    scan.refresh_from_db()
+
+    assert scan.status == ScanRun.Status.SUCCEEDED
+    assert scan.fetched_count == 300
+
+
+def test_scan_with_some_repos_and_a_failed_slice_stays_partial(use_fake: UseFake) -> None:
+    fake = use_fake(many_repos(300))
+    fake.fail_when = lambda q: 503 if "page" not in q and len(fake.queries) > 2 else None
+
+    scan = deep(budget=50)
+
+    assert scan.fetched_count > 0
+    assert scan.status == ScanRun.Status.SUCCEEDED_PARTIAL
+
+
+def test_auth_or_query_failure_is_not_resumable(use_fake: UseFake) -> None:
+    fake = use_fake(many_repos(10))
+    fake.fail_when = lambda q: 401
+
+    scan = deep(budget=5)
+
+    assert scan.status == ScanRun.Status.FAILED
+    assert not scan.can_resume  # token sai không tự khỏi; sửa token rồi quét lần mới

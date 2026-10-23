@@ -384,3 +384,32 @@ def test_resume_finished_scan_is_refused(client: Client, github_search: respx.Ro
 
     assert response.status_code == 409
     assert "không ở trạng thái tiếp tục được" in response.text
+
+
+def test_scan_failed_because_github_was_down_offers_resume(client: Client) -> None:
+    scan = ScanRun.objects.create(
+        query="topic:ai-agent",
+        status=ScanRun.Status.FAILED,
+        error_kind=ScanRun.ErrorKind.UNAVAILABLE,
+        error_message=services.REASON_NOTHING_FETCHED,
+        budget=50,
+    )
+
+    page = client.get(detail_url(scan)).text
+
+    assert services.REASON_NOTHING_FETCHED in page
+    assert reverse("discovery:scan_resume", args=[scan.pk]) in page
+
+
+def test_scan_failed_on_token_offers_no_resume(client: Client) -> None:
+    scan = ScanRun.objects.create(
+        query="topic:ai-agent",
+        status=ScanRun.Status.FAILED,
+        error_kind=ScanRun.ErrorKind.AUTH,
+        error_message="GitHub từ chối token.",
+        budget=50,
+    )
+
+    page = client.get(detail_url(scan)).text
+
+    assert reverse("discovery:scan_resume", args=[scan.pk]) not in page

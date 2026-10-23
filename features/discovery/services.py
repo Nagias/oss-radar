@@ -77,6 +77,9 @@ REASON_CONNECTION = (
     "Mất kết nối GitHub liên tục ({count} lát lỗi liền nhau) — kiểm tra mạng rồi bấm Tiếp tục."
 )
 _UNEXPECTED_REASON = "Lỗi không mong đợi trong lúc quét — xem log của máy chủ."
+REASON_NOTHING_FETCHED = (
+    "Không lấy được repo nào: mọi lát đều lỗi. Khi GitHub hết lỗi, bấm Tiếp tục để quét lại."
+)
 
 # Lời giải thích cho người dùng theo từng loại lỗi GitHub; chi tiết kỹ thuật được nối thêm phía sau.
 _FAILURE_REASONS: tuple[tuple[type[GitHubError], str], ...] = (
@@ -598,10 +601,20 @@ class _ScanRunner:
         slice_.save()
 
     def _finish_all_slices(self) -> None:
-        # DEBT(D-008): lát gốc lỗi mà 0 repo vẫn ra "Xong nhưng còn sót" thay vì "Lỗi".
         problems = problem_slices(self.scan)
         if not problems.exists():
             self.finish(ScanRun.Status.SUCCEEDED)
+            return
+        if self.scan.fetched_count == 0 and not self._any_leaf_answered():
+            # Không lấy được gì vì mọi lát đều lỗi: đây là "Lỗi" chứ không phải "còn sót"; vẫn cho
+            # bấm Tiếp tục (loại lỗi UNAVAILABLE) để thử lại khi GitHub hết lỗi.
+            first = problems.filter(status=ScanSlice.Status.FAILED).first()
+            detail = first.error_message if first is not None else ""
+            self.finish(
+                ScanRun.Status.FAILED,
+                error=f"{REASON_NOTHING_FETCHED} {detail}".strip(),
+                error_kind=ScanRun.ErrorKind.UNAVAILABLE,
+            )
             return
         counts = {status: problems.filter(status=status).count() for status in _PROBLEM_STATUSES}
         reason = (
@@ -610,6 +623,16 @@ class _ScanRunner:
             f"{counts[ScanSlice.Status.FAILED]} lỗi — xem danh sách bên dưới."
         )
         self.finish(ScanRun.Status.SUCCEEDED_PARTIAL, reason=reason)
+
+    def _any_leaf_answered(self) -> bool:
+        """Có lát lá nào GitHub đã trả lời được (xong, bị cắt, chưa chắc đủ) — tức không lỗi hết."""
+        return self.scan.slices.filter(
+            status__in=[
+                ScanSlice.Status.DONE,
+                ScanSlice.Status.TRUNCATED,
+                ScanSlice.Status.INCOMPLETE,
+            ]
+        ).exists()
 
     def finish(
         self,

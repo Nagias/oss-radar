@@ -119,3 +119,40 @@ def test_min_interval_depends_on_token() -> None:
 def test_negative_budget_is_rejected() -> None:
     with pytest.raises(ValueError, match="âm"):
         CallBudget(-1)
+
+
+# --- Đồng hồ máy lệch: chờ theo giờ của GitHub (đọc từ header Date), không theo giờ máy ---------
+
+
+@pytest.mark.parametrize("skew", [600.0, -600.0], ids=["may-nhanh-10-phut", "may-cham-10-phut"])
+def test_rate_limit_wait_follows_github_clock_when_local_clock_is_off(
+    fake_time: FakeTime, skew: float
+) -> None:
+    pacer = make_pacer(fake_time)
+    github_now = fake_time.time() - skew
+    pacer.observe_server_time(github_now)
+
+    pacer.wait_for_rate_limit(reset_epoch=int(github_now) + 30, retry_after=None)
+
+    assert fake_time.sleeps == [pytest.approx(31, abs=1)]
+
+
+def test_quota_wait_follows_github_clock_when_local_clock_is_off(fake_time: FakeTime) -> None:
+    pacer = make_pacer(fake_time)
+    github_now = fake_time.time() - 600  # máy nhanh 10 phút
+    pacer.before_request()
+    pacer.observe_server_time(github_now)
+    pacer.record_response(remaining=0, reset_epoch=int(github_now) + 30)
+
+    pacer.before_request()
+
+    assert fake_time.sleeps == [pytest.approx(31, abs=1)]
+
+
+def test_missing_server_time_keeps_local_clock(fake_time: FakeTime) -> None:
+    pacer = make_pacer(fake_time)
+    pacer.observe_server_time(None)
+
+    pacer.wait_for_rate_limit(reset_epoch=int(fake_time.time()) + 30, retry_after=None)
+
+    assert fake_time.sleeps == [pytest.approx(31, abs=1)]
