@@ -1,7 +1,8 @@
 """Nghiệp vụ của Rising star: lượt quét hằng ngày theo danh sách theo dõi.
 
-Mỗi ngày (giờ Việt Nam) có tối đa một lượt, gồm 4 bước: quét lại danh sách theo dõi → lọc thô →
-xác minh → lập báo cáo. Bước đang làm lưu trong CSDL: bị gián đoạn thì lần sau làm tiếp từ bước dở.
+Mỗi ngày (giờ Việt Nam) có tối đa một lượt, gồm 5 bước: quét lại danh sách theo dõi → lọc thô →
+xác minh → lấy hồ sơ chủ của rising star (F-006) → lập báo cáo. Bước đang làm lưu trong CSDL: bị
+gián đoạn thì lần sau làm tiếp từ bước dở.
 Lượt tự bắt đầu sau 7:00 (`run_daily_if_due`, việc định kỳ của bộ nhịp), hoặc khi bấm "Chạy ngay" /
 lệnh `daily` (`prepare_daily_run` rồi `execute_daily_run`).
 
@@ -35,6 +36,7 @@ from features.discovery import services as discovery
 from features.discovery.models import ScanRun
 from features.rising import growth
 from features.rising.models import DailyRun, DailyRunScan, RisingCheck, WatchQuery
+from features.scoring import services as scoring
 from integrations.github.client import GitHubClient, get_github_client
 from integrations.github.errors import (
     GitHubAuthError,
@@ -66,6 +68,10 @@ _RETRY_MINUTES = int(RETRY_LATER_AFTER.total_seconds() // 60)
 # Xác minh: 1 lượt gọi lịch sử star cho mỗi ứng viên. Không token thì hạn mức core chỉ 60 lượt/giờ.
 VERIFY_BUDGET_WITH_TOKEN = 300
 VERIFY_BUDGET_ANONYMOUS = 50
+# Hồ sơ chủ repo (F-006): 1 lượt gọi mỗi chủ của rising star. Không token thì hạn mức core (60 lượt
+# /giờ) dùng chung với bước xác minh, nên chỉ lấy ít.
+OWNER_BUDGET_WITH_TOKEN = 100
+OWNER_BUDGET_ANONYMOUS = 10
 # Ảnh chụp star và danh sách repo của lần quét hằng ngày chỉ giữ chừng này ngày (thiết kế mục 8):
 # ảnh chụp chỉ làm radar cho 7 tới 30 ngày, lịch sử dài hạn đã có ở GitHub.
 RETENTION_DAYS = 35
@@ -98,6 +104,19 @@ UNREADABLE_HISTORY_NOTE = (
     "Không xác minh được {repo}: GitHub trả lịch sử star không đọc được — repo nằm ở mục chưa "
     "xác minh. (Chi tiết: {detail})"
 )
+REASON_OWNERS_BLOCKED = (
+    "GitHub hoặc mạng đang chặn lúc lấy hồ sơ chủ repo — app tự chạy tiếp sau ít nhất {minutes} "
+    "phút."
+)
+REASON_OWNERS_AUTH = (
+    "Lấy hồ sơ chủ repo: GitHub từ chối token — kiểm tra lại GITHUB_TOKEN trong .env. "
+    "(Chi tiết: {detail})"
+)
+OWNER_BUDGET_NOTE = (
+    "Hết ngân sách hồ sơ chủ repo — {count} chủ repo chưa có hồ sơ (điểm nghi star giả của repo "
+    "đó chưa tính phần hồ sơ chủ)."
+)
+UNREADABLE_OWNER_NOTE = "Không đọc được hồ sơ chủ repo {login} — sẽ thử lại lượt sau. ({detail})"
 _UNEXPECTED_REASON = "Lỗi không mong đợi trong lượt quét hằng ngày — xem log của máy chủ."
 # Lý do "mất kết nối" của lần quét có điền số lát lỗi → nhận ra bằng phần đầu cố định của câu.
 _CONNECTION_PREFIX = discovery.REASON_CONNECTION.partition("{")[0]
@@ -367,7 +386,11 @@ class _DailyRunner:
         if run.step == DailyRun.Step.SCREEN:
             self._screen()
             run = self._load()
-        if run.step == DailyRun.Step.VERIFY and not self._verify():
+        if run.step == DailyRun.Step.VERIFY:
+            if not self._verify():
+                return
+            run = self._load()
+        if run.step == DailyRun.Step.OWNERS and not self._owners():
             return
         self._report()
 
@@ -586,7 +609,7 @@ class _DailyRunner:
         )
         if pending and not self._verify_rows(run, pending):
             return False
-        self._check_in(step=DailyRun.Step.REPORT)
+        self._check_in(step=DailyRun.Step.OWNERS)
         return True
 
     def _verify_rows(self, run: DailyRun, pending: list[int]) -> bool:
@@ -709,12 +732,78 @@ class _DailyRunner:
                 flags=[flag.value for flag in flags],
             )
 
+    # --- Bước 4: lấy hồ sơ chủ của rising star (F-006) ------------------------------------------
+
+    def _owners(self) -> bool:
+        """Lấy hồ sơ chủ của rising star chưa có hồ sơ (hoặc hồ sơ quá 30 ngày). `False` = dừng.
+
+        Chủ của repo tăng nhiều được lấy trước. Hồ sơ lưu ngay sau mỗi lượt gọi nên chạy tiếp không
+        gọi lại; hết ngân sách chỉ ghi chú, không phải lỗi.
+        """
+        run = self._check_in()
+        if run.owner_budget == 0:
+            # Chốt ngân sách một lần lúc bắt đầu bước: chạy tiếp vẫn giữ ngân sách ban đầu.
+            run = self._check_in(owner_budget=_owner_budget())
+        logins = list(
+            RisingCheck.objects.filter(daily_run_id=self.run_id, is_rising=True)
+            .order_by("-gain_7d", "pk")
+            .values_list("repository__owner_login", flat=True)
+        )
+        pending = scoring.owners_to_fetch(logins, now=timezone.now())
+        if pending and not self._fetch_owners(run, pending):
+            return False
+        self._check_in(step=DailyRun.Step.REPORT)
+        return True
+
+    def _fetch_owners(self, run: DailyRun, pending: list[str]) -> bool:
+        calls_before = run.owner_calls_used
+        budget = CallBudget(max(0, run.owner_budget - calls_before))
+
+        def record_calls() -> None:
+            # Ghi sau mỗi lượt gọi, kể cả khi lỗi hay app sập: lượt đã tiêu không được "hoàn".
+            self._owned().update(owner_calls_used=calls_before + budget.used)
+
+        try:
+            with get_github_client(sleep=_HeartbeatSleep(self._beat_or_stop), budget=budget) as gh:
+                outcome = scoring.fetch_owner_profiles(
+                    gh, pending, before_each=self._beat_or_stop, after_call=record_calls
+                )
+        except CallBudgetExhaustedError:
+            left = len(scoring.owners_to_fetch(pending, now=timezone.now()))
+            self._add_problem(OWNER_BUDGET_NOTE.format(count=left))
+            return True
+        except _DailyStopRequestedError:
+            self.pause(DailyRun.PauseKind.STOPPED, REASON_STOPPED)
+            return False
+        except (GitHubRateLimitError, GitHubUnavailableError) as exc:
+            logger.warning(
+                "Lượt hằng ngày #%s: GitHub chặn lúc lấy hồ sơ chủ: %r", self.run_id, exc
+            )
+            self.pause(
+                DailyRun.PauseKind.RETRY_LATER, REASON_OWNERS_BLOCKED.format(minutes=_RETRY_MINUTES)
+            )
+            return False
+        except GitHubAuthError as exc:
+            logger.warning("Lượt hằng ngày #%s: GitHub từ chối token: %r", self.run_id, exc)
+            self.fail(REASON_OWNERS_AUTH.format(detail=exc))
+            return False
+        for login, detail in outcome.unreadable:
+            self._add_problem(UNREADABLE_OWNER_NOTE.format(login=login, detail=detail))
+        logger.info(
+            "Lượt hằng ngày #%s: hồ sơ chủ repo — lấy %s, không còn tồn tại %s, lỗi %s",
+            self.run_id,
+            outcome.fetched,
+            outcome.missing,
+            len(outcome.unreadable),
+        )
+        return True
+
     def _beat_or_stop(self) -> None:
         """Ghi nhịp sống ở bước xác minh; người dùng đã bấm Dừng thì thôi, kể cả đang chờ GitHub."""
         if self._check_in().stop_requested:
             raise _DailyStopRequestedError
 
-    # --- Bước 4: lập báo cáo, dọn dữ liệu cũ -------------------------------------------------
+    # --- Bước 5: lập báo cáo, dọn dữ liệu cũ -------------------------------------------------
 
     def _report(self) -> None:
         """Ghi số rising / chưa xác minh, dọn dữ liệu quá hạn giữ, rồi kết thúc lượt.
@@ -923,6 +1012,10 @@ def _summary(problems: list[str]) -> str:
 
 def _verify_budget() -> int:
     return VERIFY_BUDGET_WITH_TOKEN if settings.GITHUB_TOKEN else VERIFY_BUDGET_ANONYMOUS
+
+
+def _owner_budget() -> int:
+    return OWNER_BUDGET_WITH_TOKEN if settings.GITHUB_TOKEN else OWNER_BUDGET_ANONYMOUS
 
 
 class _HeartbeatSleep:
@@ -1192,7 +1285,7 @@ def daily_estimate() -> DailyEstimate:
     latest = _reported_runs().order_by("-day").first()
     if latest is None:
         return DailyEstimate(None, None, None, has_token, seconds)
-    calls = latest.search_calls_used + latest.verify_calls_used
+    calls = latest.search_calls_used + latest.verify_calls_used + latest.owner_calls_used
     # Làm tròn giây trước khi chia: 800 lượt nhân 2,1 giây ra 1680,0000000000002 trong số thực.
     minutes = math.ceil(round(calls * seconds) / 60)
     return DailyEstimate(calls, minutes, latest.day, has_token, seconds)
@@ -1229,6 +1322,13 @@ def _running_headline(run: DailyRun) -> str:
             else ""
         )
         return f"Đang chạy: xác minh ứng viên bằng lịch sử star{used}."
+    if run.step == DailyRun.Step.OWNERS:
+        used = (
+            f" — đã dùng {run.owner_calls_used}/{run.owner_budget} lượt gọi"
+            if run.owner_budget
+            else ""
+        )
+        return f"Đang chạy: lấy hồ sơ chủ repo của rising star{used}."
     return "Đang chạy: lập báo cáo và dọn dữ liệu cũ."
 
 

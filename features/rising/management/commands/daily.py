@@ -31,8 +31,11 @@ class Command(BaseCommand):
 
     def _print_summary(self, run: DailyRun) -> None:
         self.stdout.write(f"Lượt hằng ngày {run.day:%d/%m/%Y} — {run.get_status_display()}.")
-        budget = f"{run.verify_calls_used}/{run.verify_budget}"
-        self.stdout.write(f"Lượt gọi: Search {run.search_calls_used}, xác minh {budget}.")
+        verify = f"{run.verify_calls_used}/{run.verify_budget}"
+        owners = f"{run.owner_calls_used}/{run.owner_budget}"
+        self.stdout.write(
+            f"Lượt gọi: Search {run.search_calls_used}, xác minh {verify}, hồ sơ chủ {owners}."
+        )
         for note in run.stop_reason.splitlines():
             self.stdout.write(f"Ghi chú: {note}")
         if run.status == DailyRun.Status.PAUSED:

@@ -345,6 +345,7 @@ def test_watch_page_lists_queries_estimate_history_and_buttons(
     DailyRun.objects.filter(pk=yesterday.pk).update(
         search_calls_used=500,
         verify_calls_used=300,
+        owner_calls_used=37,
         rising_count=14,
         stop_reason="Truy vấn «topic:x» lỗi.\nHết ngân sách xác minh.",
     )
@@ -361,7 +362,9 @@ def test_watch_page_lists_queries_estimate_history_and_buttons(
     assert "9 lượt gọi" in page  # kết quả lần quét gần nhất
     assert "250 repo" in page
     assert "Tắt" in page
-    assert "800 lượt gọi" in page  # ước lượng: 500 + 300 lượt gọi của lần chạy gần nhất
+    assert "837 lượt gọi" in page  # ước lượng: 500 + 300 + 37 lượt gọi của lần chạy gần nhất
+    assert "Lượt gọi hồ sơ chủ" in page
+    assert '<td class="num">37</td>' in page
     assert "Token sai rồi." in page
     assert ">Chạy tiếp</button>" in page  # hôm nay Lỗi → được chạy tiếp
     assert reverse("rising:stop", args=[failed.pk]) not in page
