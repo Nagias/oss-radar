@@ -222,3 +222,18 @@ def test_prune_snapshots_deletes_only_older_days() -> None:
         TODAY - timedelta(days=35),
         TODAY - timedelta(days=1),
     ]
+
+
+def test_upsert_stores_open_issue_count() -> None:
+    upsert_repositories([make_github_repo(github_id=3, open_issues=12)], seen_at=FIRST_SEEN)
+    upsert_repositories([make_github_repo(github_id=3, open_issues=0)], seen_at=LATER)
+
+    assert Repository.objects.get(github_id=3).open_issues == 0
+
+
+def test_repository_saved_without_issue_count_keeps_it_unknown() -> None:
+    # Repo lưu trước F-006 (chưa được quét lại) chưa biết số issue/PR đang mở: để trống, không là 0.
+    upsert_repositories([make_github_repo(github_id=4)], seen_at=FIRST_SEEN)
+    Repository.objects.filter(github_id=4).update(open_issues=None)
+
+    assert Repository.objects.get(github_id=4).open_issues is None

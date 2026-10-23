@@ -12,6 +12,8 @@ class Repository(models.Model):
     topics = models.JSONField("Chủ đề", default=list, blank=True)
     stars = models.PositiveIntegerField("Số star", db_index=True)
     forks = models.PositiveIntegerField("Số fork")
+    # Trống = chưa biết (repo lưu trước khi app ghi số này và chưa được quét lại).
+    open_issues = models.PositiveIntegerField("Issue/PR đang mở", null=True, blank=True)
     owner_login = models.CharField("Chủ sở hữu", max_length=100)
     owner_type = models.CharField("Loại chủ sở hữu", max_length=20)
     license_spdx = models.CharField("Giấy phép", max_length=100, blank=True, default="")
@@ -65,3 +67,27 @@ class StarSnapshot(models.Model):
 
     def __str__(self) -> str:
         return f"{self.repository_id} @ {self.day}: {self.stars}"
+
+
+class OwnerProfile(models.Model):
+    """Hồ sơ công khai của chủ repo (cá nhân hay tổ chức), lấy từ GitHub để xét star giả.
+
+    Khoá là `login` viết thường. Chủ đổi tên thì coi như chủ mới (hiếm, chấp nhận). Tài khoản đã
+    bị xoá (GitHub trả 404) vẫn có dòng, `is_missing` bật và không còn số liệu — để không gọi lại.
+    """
+
+    login = models.CharField("Tài khoản (viết thường)", max_length=39, unique=True)
+    github_id = models.BigIntegerField("ID GitHub", null=True, blank=True)
+    account_type = models.CharField("Loại tài khoản", max_length=20, blank=True, default="")
+    gh_created_at = models.DateTimeField("Ngày tạo tài khoản", null=True, blank=True)
+    followers = models.PositiveIntegerField("Người theo dõi", null=True, blank=True)
+    public_repos = models.PositiveIntegerField("Repo công khai", null=True, blank=True)
+    is_missing = models.BooleanField("Không còn tồn tại", default=False)
+    fetched_at = models.DateTimeField("Lấy lúc")
+
+    class Meta:
+        verbose_name = "hồ sơ chủ repo"
+        verbose_name_plural = "hồ sơ chủ repo"
+
+    def __str__(self) -> str:
+        return self.login

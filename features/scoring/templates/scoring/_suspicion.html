@@ -1,0 +1,8 @@
+{% comment %}Điểm nghi star giả: nhãn + điểm, bấm vào thì thấy từng tín hiệu và lý do. Biến: suspicion.{% endcomment %}
+{% if suspicion.level == "not_scored" %}<span class="muted" title="{{ suspicion.notes|join:' ' }}">—</span><span class="sr-only"> {{ suspicion.notes|join:" " }}</span>{% else %}<details class="score">
+  <summary>{% if suspicion.level == "high" %}<span class="badge badge-danger">{{ suspicion.label }}</span>{% elif suspicion.level == "review" %}<span class="badge badge-flag">{{ suspicion.label }}</span>{% else %}<span class="muted">{{ suspicion.label }}</span>{% endif %} {{ suspicion.points }}</summary>
+  <ul class="score-parts">
+    {% for signal in suspicion.signals %}<li>{% if signal.points > 0 %}+{% endif %}{{ signal.points }} — {{ signal.reason }}</li>{% empty %}<li>không có dấu hiệu đáng ngờ</li>{% endfor %}
+    {% for note in suspicion.notes %}<li class="muted">{{ note }}</li>{% endfor %}
+  </ul>
+</details>{% endif %}

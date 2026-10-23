@@ -1,7 +1,8 @@
 """Nghiệp vụ của Rising star: lượt quét hằng ngày theo danh sách theo dõi.
 
-Mỗi ngày (giờ Việt Nam) có tối đa một lượt, gồm 4 bước: quét lại danh sách theo dõi → lọc thô →
-xác minh → lập báo cáo. Bước đang làm lưu trong CSDL: bị gián đoạn thì lần sau làm tiếp từ bước dở.
+Mỗi ngày (giờ Việt Nam) có tối đa một lượt, gồm 5 bước: quét lại danh sách theo dõi → lọc thô →
+xác minh → lấy hồ sơ chủ của rising star (F-006) → lập báo cáo. Bước đang làm lưu trong CSDL: bị
+gián đoạn thì lần sau làm tiếp từ bước dở.
 Lượt tự bắt đầu sau 7:00 (`run_daily_if_due`, việc định kỳ của bộ nhịp), hoặc khi bấm "Chạy ngay" /
 lệnh `daily` (`prepare_daily_run` rồi `execute_daily_run`).
 
@@ -12,7 +13,7 @@ thái hôm nay (`today_status`), danh sách theo dõi (`watch_overview`), ước
 View và lệnh dòng lệnh chỉ gọi các hàm ở đây; không chứa logic riêng.
 """
 
-# DEBT(D-009): file ~1.100 dòng (QĐ R11 giữ một services.py); tách khi thêm bước mới.
+# DEBT(D-009): file ~1.400 dòng (QĐ R11 giữ một services.py); tách ở PR fix/ ngay sau F-006.
 
 import logging
 import math
@@ -35,6 +36,8 @@ from features.discovery import services as discovery
 from features.discovery.models import ScanRun
 from features.rising import growth
 from features.rising.models import DailyRun, DailyRunScan, RisingCheck, WatchQuery
+from features.scoring import services as scoring
+from features.scoring.services import REVIEW_FROM, GrowthFacts, Score
 from integrations.github.client import GitHubClient, get_github_client
 from integrations.github.errors import (
     GitHubAuthError,
@@ -66,6 +69,10 @@ _RETRY_MINUTES = int(RETRY_LATER_AFTER.total_seconds() // 60)
 # Xác minh: 1 lượt gọi lịch sử star cho mỗi ứng viên. Không token thì hạn mức core chỉ 60 lượt/giờ.
 VERIFY_BUDGET_WITH_TOKEN = 300
 VERIFY_BUDGET_ANONYMOUS = 50
+# Hồ sơ chủ repo (F-006): 1 lượt gọi mỗi chủ của rising star. Không token thì hạn mức core (60 lượt
+# /giờ) dùng chung với bước xác minh, nên chỉ lấy ít.
+OWNER_BUDGET_WITH_TOKEN = 100
+OWNER_BUDGET_ANONYMOUS = 10
 # Ảnh chụp star và danh sách repo của lần quét hằng ngày chỉ giữ chừng này ngày (thiết kế mục 8):
 # ảnh chụp chỉ làm radar cho 7 tới 30 ngày, lịch sử dài hạn đã có ở GitHub.
 RETENTION_DAYS = 35
@@ -98,6 +105,18 @@ UNREADABLE_HISTORY_NOTE = (
     "Không xác minh được {repo}: GitHub trả lịch sử star không đọc được — repo nằm ở mục chưa "
     "xác minh. (Chi tiết: {detail})"
 )
+OWNERS_BLOCKED_NOTE = (
+    "Lấy hồ sơ chủ repo bị ngắt ({detail}) — {count} chủ repo chưa có hồ sơ, lượt sau lấy tiếp "
+    "(điểm nghi star giả của repo đó chưa tính phần hồ sơ chủ)."
+)
+_OWNERS_STOPPED = "bạn bấm Dừng"
+_OWNERS_BLOCKED = "GitHub hoặc mạng đang chặn"
+_OWNERS_AUTH = "GitHub từ chối token — kiểm tra lại GITHUB_TOKEN trong .env"
+OWNER_BUDGET_NOTE = (
+    "Hết ngân sách hồ sơ chủ repo — {count} chủ repo chưa có hồ sơ (điểm nghi star giả của repo "
+    "đó chưa tính phần hồ sơ chủ)."
+)
+UNREADABLE_OWNER_NOTE = "Không đọc được hồ sơ chủ repo {login} — sẽ thử lại lượt sau. ({detail})"
 _UNEXPECTED_REASON = "Lỗi không mong đợi trong lượt quét hằng ngày — xem log của máy chủ."
 # Lý do "mất kết nối" của lần quét có điền số lát lỗi → nhận ra bằng phần đầu cố định của câu.
 _CONNECTION_PREFIX = discovery.REASON_CONNECTION.partition("{")[0]
@@ -367,7 +386,11 @@ class _DailyRunner:
         if run.step == DailyRun.Step.SCREEN:
             self._screen()
             run = self._load()
-        if run.step == DailyRun.Step.VERIFY and not self._verify():
+        if run.step == DailyRun.Step.VERIFY:
+            if not self._verify():
+                return
+            run = self._load()
+        if run.step == DailyRun.Step.OWNERS and not self._owners():
             return
         self._report()
 
@@ -586,7 +609,7 @@ class _DailyRunner:
         )
         if pending and not self._verify_rows(run, pending):
             return False
-        self._check_in(step=DailyRun.Step.REPORT)
+        self._check_in(step=DailyRun.Step.OWNERS)
         return True
 
     def _verify_rows(self, run: DailyRun, pending: list[int]) -> bool:
@@ -709,12 +732,94 @@ class _DailyRunner:
                 flags=[flag.value for flag in flags],
             )
 
+    # --- Bước 4: lấy hồ sơ chủ của rising star (F-006) ------------------------------------------
+
+    def _owners(self) -> bool:
+        """Lấy hồ sơ chủ của rising star chưa có hồ sơ (hoặc hồ sơ quá 30 ngày). `False` = dừng.
+
+        Chủ của repo đang bị nghi star giả (từ "Cần xem") được lấy trước: chỉ ở đó hồ sơ chủ mới đổi
+        được kết luận, mà không token thì mỗi ngày chỉ lấy được 10 hồ sơ. Trong mỗi nhóm, repo tăng
+        nhiều trước. Hồ sơ lưu ngay sau mỗi lượt gọi nên chạy tiếp không gọi lại; hết ngân sách chỉ
+        ghi chú, không phải lỗi.
+        """
+        run = self._check_in()
+        if run.owner_budget == 0:
+            # Chốt ngân sách một lần lúc bắt đầu bước: chạy tiếp vẫn giữ ngân sách ban đầu.
+            run = self._check_in(owner_budget=_owner_budget())
+        checks = list(
+            RisingCheck.objects.filter(daily_run_id=self.run_id, is_rising=True)
+            .select_related("repository")
+            .order_by("-gain_7d", "pk")
+        )
+        scores = scoring.score_repositories(
+            [check.repository for check in checks],
+            growth={check.repository_id: _growth_facts(check) for check in checks},
+        )
+        # Sắp ổn định: nhóm đang bị nghi lên trước, trong nhóm giữ thứ tự tăng nhiều trước.
+        checks.sort(key=lambda check: scores[check.repository_id].suspicion.points < REVIEW_FROM)
+        logins = [check.repository.owner_login for check in checks]
+        pending = scoring.owners_to_fetch(logins, now=timezone.now())
+        if pending:
+            self._fetch_owners(run, pending)
+        self._check_in(step=DailyRun.Step.REPORT)
+        return True
+
+    def _fetch_owners(self, run: DailyRun, pending: list[str]) -> None:
+        """Gọi GitHub lấy từng hồ sơ. Hỏng giữa chừng thì ghi chú rồi thôi — không chặn báo cáo.
+
+        Bước này chỉ làm giàu dữ liệu (nguyên tắc 8): bấm Dừng, GitHub chặn hay từ chối token thì
+        dừng gọi, ghi lại số chủ còn thiếu (lượt hôm sau lấy tiếp) và đi tiếp tới lập báo cáo —
+        bước đó chỉ đọc CSDL nên xong ngay. Không để lượt kẹt ở đây rồi mất báo cáo khi hết ngày.
+        """
+        calls_before = run.owner_calls_used
+        budget = CallBudget(max(0, run.owner_budget - calls_before))
+
+        def record_calls() -> None:
+            # Ghi sau mỗi lượt gọi, kể cả khi lỗi hay app sập: lượt đã tiêu không được "hoàn".
+            self._owned().update(owner_calls_used=calls_before + budget.used)
+
+        try:
+            with get_github_client(sleep=_HeartbeatSleep(self._beat_or_stop), budget=budget) as gh:
+                outcome = scoring.fetch_owner_profiles(
+                    gh, pending, before_each=self._beat_or_stop, after_call=record_calls
+                )
+        except CallBudgetExhaustedError:
+            left = len(scoring.owners_to_fetch(pending, now=timezone.now()))
+            self._add_problem(OWNER_BUDGET_NOTE.format(count=left))
+            return
+        except _DailyStopRequestedError:
+            self._note_owners_left(pending, _OWNERS_STOPPED)
+            return
+        except (GitHubRateLimitError, GitHubUnavailableError) as exc:
+            logger.warning(
+                "Lượt hằng ngày #%s: GitHub chặn lúc lấy hồ sơ chủ: %r", self.run_id, exc
+            )
+            self._note_owners_left(pending, _OWNERS_BLOCKED)
+            return
+        except GitHubAuthError as exc:
+            logger.warning("Lượt hằng ngày #%s: GitHub từ chối token: %r", self.run_id, exc)
+            self._note_owners_left(pending, _OWNERS_AUTH)
+            return
+        for login, detail in outcome.unreadable:
+            self._add_problem(UNREADABLE_OWNER_NOTE.format(login=login, detail=detail))
+        logger.info(
+            "Lượt hằng ngày #%s: hồ sơ chủ repo — lấy %s, không còn tồn tại %s, lỗi %s",
+            self.run_id,
+            outcome.fetched,
+            outcome.missing,
+            len(outcome.unreadable),
+        )
+
+    def _note_owners_left(self, pending: list[str], detail: str) -> None:
+        left = len(scoring.owners_to_fetch(pending, now=timezone.now()))
+        self._add_problem(OWNERS_BLOCKED_NOTE.format(count=left, detail=detail))
+
     def _beat_or_stop(self) -> None:
         """Ghi nhịp sống ở bước xác minh; người dùng đã bấm Dừng thì thôi, kể cả đang chờ GitHub."""
         if self._check_in().stop_requested:
             raise _DailyStopRequestedError
 
-    # --- Bước 4: lập báo cáo, dọn dữ liệu cũ -------------------------------------------------
+    # --- Bước 5: lập báo cáo, dọn dữ liệu cũ -------------------------------------------------
 
     def _report(self) -> None:
         """Ghi số rising / chưa xác minh, dọn dữ liệu quá hạn giữ, rồi kết thúc lượt.
@@ -925,6 +1030,10 @@ def _verify_budget() -> int:
     return VERIFY_BUDGET_WITH_TOKEN if settings.GITHUB_TOKEN else VERIFY_BUDGET_ANONYMOUS
 
 
+def _owner_budget() -> int:
+    return OWNER_BUDGET_WITH_TOKEN if settings.GITHUB_TOKEN else OWNER_BUDGET_ANONYMOUS
+
+
 class _HeartbeatSleep:
     """Hàm ngủ cho client GitHub ở bước xác minh: ngủ từng khúc ≤ 10 giây, sau mỗi khúc gọi `beat`.
 
@@ -950,6 +1059,11 @@ class _HeartbeatSleep:
 # --- Đọc báo cáo -----------------------------------------------------------------------------
 
 
+# Thứ tự bảng rising star: theo điểm Tiềm năng (mặc định, F-006) hoặc theo số tăng 7 ngày.
+SORT_POTENTIAL = "potential"
+SORT_GAIN = "gain"
+
+
 @dataclass(frozen=True, slots=True)
 class RisingRow:
     """Một dòng của bảng rising star, kèm sẵn mọi thứ trang cần hiện (không tính trong template)."""
@@ -962,16 +1076,29 @@ class RisingRow:
     flag_labels: tuple[str, ...]
     sparkline: str
     reason: str
+    scores: scoring.RepoScores
+
+
+@dataclass(frozen=True, slots=True)
+class UnverifiedRow:
+    """Ứng viên chưa xác minh: số tăng chỉ là ước lượng, điểm Tiềm năng cũng ghi "(ước lượng)"."""
+
+    check: RisingCheck
+    potential: Score
 
 
 @dataclass(frozen=True, slots=True)
 class DailyReport:
     run: DailyRun
     rising: list[RisingRow]
-    unverified: list[RisingCheck]
+    # Dòng qua bộ lọc nhưng "Nghi cao" star giả: ẩn khỏi bảng chính, có nút hiện (kèm lý do).
+    hidden: list[RisingRow]
+    unverified: list[UnverifiedRow]
     scans: list[DailyRunScan]
     # Số dòng đã xác minh bằng lịch sử chính thức, bất kể ngưỡng lọc của người xem.
     verified_count: int
+    # Số rising star của lượt (ngưỡng mặc định, như `run.rising_count`) bị ẩn vì "Nghi cao".
+    hidden_rising_count: int
 
 
 def daily_report(
@@ -979,18 +1106,29 @@ def daily_report(
     *,
     max_stars: int = growth.RISING_MAX_STARS,
     min_gain: int = growth.RISING_MIN_GAIN_7D,
+    sort: str = SORT_POTENTIAL,
 ) -> DailyReport:
     """Báo cáo của một lượt, lọc theo ngưỡng người dùng chọn. Chỉ đọc dữ liệu đã lưu, không gọi API.
 
     - Bảng rising: dòng đã xác minh bằng lịch sử chính thức, dưới `max_stars` star và tăng từ
-      `min_gain` trong 7 ngày, tăng nhiều trước.
+      `min_gain` trong 7 ngày; sắp theo điểm Tiềm năng (hoà thì tăng nhiều trước), hoặc theo số
+      tăng 7 ngày khi `sort="gain"`.
+    - Dòng "Nghi cao" star giả (sau bộ lọc) nằm ở `hidden`, không ở bảng chính.
     - "Mới vào danh sách": repo không là rising star trong báo cáo liền trước.
     - Mục chưa xác minh: dòng còn là ước lượng (hết ngân sách xác minh, hoặc GitHub trả lỗi).
+    - Điểm tính lúc xem (không lưu), từ số liệu repo và hồ sơ chủ đang có trong kho.
     """
     checks = RisingCheck.objects.filter(daily_run=run).select_related("repository")
-    verified = checks.filter(
-        source=RisingCheck.Source.HISTORY, stars__lt=max_stars, gain_7d__gte=min_gain
-    ).order_by("-gain_7d", "pk")
+    all_verified = list(checks.filter(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk"))
+    unverified = list(checks.exclude(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk"))
+    every = [*all_verified, *unverified]
+    scores = scoring.score_repositories(
+        [check.repository for check in every],
+        growth={check.repository_id: _growth_facts(check) for check in every},
+    )
+    verified = [
+        check for check in all_verified if check.stars < max_stars and check.gain_7d >= min_gain
+    ]
     # DEBT(D-009): "Mới vào danh sách" so với ngưỡng mặc định của lượt trước, không theo bộ lọc.
     previous = _reported_runs().filter(day__lt=run.day).order_by("-day").first()
     previous_rising: set[int] = set()
@@ -1005,17 +1143,29 @@ def daily_report(
             is_new_entry=check.repository_id not in previous_rising,
             max_stars=max_stars,
             min_gain=min_gain,
+            scores=scores[check.repository_id],
         )
         for check in verified
     ]
+    if sort != SORT_GAIN:
+        # Sắp ổn định: hoà điểm thì giữ thứ tự tăng nhiều trước đã có.
+        rows.sort(key=lambda row: -_potential_total(row.scores))
+    hidden_rising = sum(
+        1
+        for check in all_verified
+        if check.is_rising and scores[check.repository_id].suspicion.is_hidden
+    )
     return DailyReport(
         run=run,
-        rising=rows,
-        unverified=list(
-            checks.exclude(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk")
-        ),
+        rising=[row for row in rows if not row.scores.suspicion.is_hidden],
+        hidden=[row for row in rows if row.scores.suspicion.is_hidden],
+        unverified=[
+            UnverifiedRow(check, _estimated_potential(scores[check.repository_id]))
+            for check in unverified
+        ],
         scans=list(run.scans.select_related("scan_run", "watch_query").order_by("position", "pk")),
-        verified_count=checks.filter(source=RisingCheck.Source.HISTORY).count(),
+        verified_count=len(all_verified),
+        hidden_rising_count=hidden_rising,
     )
 
 
@@ -1042,8 +1192,36 @@ def _reported_runs() -> QuerySet[DailyRun]:
     )
 
 
+def _growth_facts(check: RisingCheck) -> GrowthFacts:
+    """Số tăng của dòng xét để chấm Tiềm năng và tín hiệu "dồn một ngày"."""
+    verified = check.source == RisingCheck.Source.HISTORY
+    return GrowthFacts(
+        stars=check.stars,
+        gain_7d=check.gain_7d,
+        gain_30d=check.gain_30d if verified else None,
+        series=tuple(check.series) if verified else (),
+        estimated=not verified,
+    )
+
+
+def _potential_total(scores: scoring.RepoScores) -> int:
+    return scores.potential.total if scores.potential is not None else 0
+
+
+def _estimated_potential(scores: scoring.RepoScores) -> Score:
+    if scores.potential is None:
+        raise ValueError("Dòng chưa xác minh phải có điểm Tiềm năng (đã truyền số tăng ước lượng)")
+    return scores.potential
+
+
 def _rising_row(
-    check: RisingCheck, *, run: DailyRun, is_new_entry: bool, max_stars: int, min_gain: int
+    check: RisingCheck,
+    *,
+    run: DailyRun,
+    is_new_entry: bool,
+    max_stars: int,
+    min_gain: int,
+    scores: scoring.RepoScores,
 ) -> RisingRow:
     repository = check.repository
     # Tuổi tính tới ngày của lượt (không phải hôm nay): xem lại báo cáo cũ vẫn khớp cờ
@@ -1058,6 +1236,7 @@ def _rising_row(
         flag_labels=tuple(growth.FLAG_LABELS[growth.Flag(flag)] for flag in check.flags),
         sparkline=growth.sparkline_points(check.series),
         reason=_reason(check, max_stars=max_stars, min_gain=min_gain),
+        scores=scores,
     )
 
 
@@ -1192,7 +1371,7 @@ def daily_estimate() -> DailyEstimate:
     latest = _reported_runs().order_by("-day").first()
     if latest is None:
         return DailyEstimate(None, None, None, has_token, seconds)
-    calls = latest.search_calls_used + latest.verify_calls_used
+    calls = latest.search_calls_used + latest.verify_calls_used + latest.owner_calls_used
     # Làm tròn giây trước khi chia: 800 lượt nhân 2,1 giây ra 1680,0000000000002 trong số thực.
     minutes = math.ceil(round(calls * seconds) / 60)
     return DailyEstimate(calls, minutes, latest.day, has_token, seconds)
@@ -1229,6 +1408,13 @@ def _running_headline(run: DailyRun) -> str:
             else ""
         )
         return f"Đang chạy: xác minh ứng viên bằng lịch sử star{used}."
+    if run.step == DailyRun.Step.OWNERS:
+        used = (
+            f" — đã dùng {run.owner_calls_used}/{run.owner_budget} lượt gọi"
+            if run.owner_budget
+            else ""
+        )
+        return f"Đang chạy: lấy hồ sơ chủ repo của rising star{used}."
     return "Đang chạy: lập báo cáo và dọn dữ liệu cũ."
 
 

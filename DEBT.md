@@ -23,7 +23,7 @@ nhận, khi nào trả, quên trả thì sao.
 | D-006 | Tắt app giữa chừng thì lần quét chỉ chuyển sang Tạm dừng; phải bấm Tiếp tục bằng tay | Đã trả (2026-10-23) | F-005: bộ nhịp tự chạy tiếp lần quét bị gián đoạn |
 | D-007 | Trang kết quả lần quét chỉ hiện 500 repo nhiều star nhất | Mở | Khi làm trang duyệt kho (lọc, phân trang) |
 | D-008 | 5 điểm nhỏ còn lại từ rà soát F-002 (tính dư lượt khi Dừng lúc chờ, lệch đồng hồ, lệnh in "0/None", lát gốc lỗi báo "còn sót", trạng thái `queued` cũ) | Đã trả (2026-10-23) | PR `fix/d008-diem-nho-f002` |
-| D-009 | 4 điểm để sau của F-005 (services.py rising ~1.100 dòng, ngày của bước lọc thô, nhãn "Mới vào danh sách" theo ngưỡng mặc định, "35 ngày" viết cứng) | Mở | Khi làm F-006 hoặc khi sửa rising lần tới |
+| D-009 | 4 điểm để sau của F-005 (services.py rising ~1.400 dòng, ngày của bước lọc thô, nhãn "Mới vào danh sách" theo ngưỡng mặc định, "35 ngày" viết cứng) | Mở | PR `fix/` riêng ngay sau F-006 |
 
 ## Chi tiết
 
@@ -153,7 +153,9 @@ nhận, khi nào trả, quên trả thì sao.
      mà `discovery` không được import `rising`).
 - **Vì sao chấp nhận:** không làm sai số liệu chính (số star tăng luôn lấy từ lịch sử chính thức). Điểm 2 chỉ
   xảy ra khi lượt vắt qua nửa đêm; điểm 3 chỉ ảnh hưởng nhãn khi bạn đổi bộ lọc; điểm 1 là chuyện dễ đọc.
-- **Khi nào trả:** khi làm F-006 (chấm điểm, cũng đụng tới rising) hoặc lần sửa rising kế tiếp.
+- **Khi nào trả:** một PR `fix/` riêng ngay sau F-006. (F-006 không trả: thiết kế đã duyệt giữ phạm vi
+  chấm điểm; phần lấy hồ sơ chủ nằm ở `features/scoring` nên `rising/services.py` chỉ dài thêm bước gọi và
+  phần đọc báo cáo có điểm — khoảng 1.400 dòng.)
 - **Quên trả thì sao:** file khó đọc dần; thỉnh thoảng một repo mới bị lỡ khỏi danh sách ứng viên trong
   một ngày (ngày sau vẫn được xét); nhãn "Mới" hơi lệch khi lọc.
 - **Vị trí:** `features/rising/services.py` (đầu file, `_screen`, `daily_report`),

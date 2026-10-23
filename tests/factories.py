@@ -17,6 +17,7 @@ _BASE_REPO = GitHubRepo(
     topics=("agent", "claude-code"),
     stars=78952,
     forks=12625,
+    open_issues=37,
     owner_login="shareAI-lab",
     owner_type="Organization",
     license_spdx="MIT",

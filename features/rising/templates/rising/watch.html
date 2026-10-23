@@ -91,7 +91,8 @@
         <thead>
           <tr>
             <th>Ngày</th><th>Trạng thái</th><th class="num">Lượt gọi Search</th>
-            <th class="num">Lượt gọi xác minh</th><th class="num">Rising star</th><th>Ghi chú</th>
+            <th class="num">Lượt gọi xác minh</th><th class="num">Lượt gọi hồ sơ chủ</th>
+            <th class="num">Rising star</th><th>Ghi chú</th>
           </tr>
         </thead>
         <tbody>
@@ -101,6 +102,7 @@
               <td><span class="status status-{{ run.status }}">{{ run.get_status_display }}</span></td>
               <td class="num">{{ run.search_calls_used|intcomma }}</td>
               <td class="num">{{ run.verify_calls_used|intcomma }}</td>
+              <td class="num">{{ run.owner_calls_used|intcomma }}</td>
               <td class="num">{{ run.rising_count }}</td>
               <td class="small">{{ run.error_message|default:run.stop_reason|linebreaksbr }}</td>
             </tr>

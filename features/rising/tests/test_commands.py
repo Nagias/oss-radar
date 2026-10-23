@@ -59,7 +59,7 @@ def test_daily_command_runs_and_prints_summary(world: FakeGitHub) -> None:
     run = DailyRun.objects.get()
     assert run.status == DailyRun.Status.SUCCEEDED
     assert f"Lượt hằng ngày {timezone.localdate():%d/%m/%Y} — Xong." in text
-    assert f"Lượt gọi: Search {run.search_calls_used}, xác minh 1/300." in text
+    assert f"Lượt gọi: Search {run.search_calls_used}, xác minh 1/300, hồ sơ chủ 1/100." in text
     assert "Rising star: 1" in text
     assert "+70 sao/7 ngày  gia-lap/repo-301 (160 sao)" in text
     assert world.history.requested == [RISER]  # STEADY tăng 1 star: không đáng một lượt gọi

@@ -1,6 +1,6 @@
 """Đọc báo cáo rising star từ dữ liệu đã lưu: lọc theo ngưỡng, "mới vào", lý do, chưa xác minh."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import pytest
 
@@ -8,6 +8,7 @@ from features.rising import services
 from features.rising.growth import FLAG_LABELS, Flag, sparkline_points
 from features.rising.models import DailyRun, RisingCheck
 from features.rising.tests.conftest import DAY, make_check, make_repo, make_run
+from features.scoring.rules import SuspicionLevel
 
 pytestmark = pytest.mark.django_db
 
@@ -16,7 +17,7 @@ Step = DailyRun.Step
 Source = RisingCheck.Source
 
 
-def test_daily_report_filters_by_thresholds_and_sorts_by_gain() -> None:
+def test_daily_report_filters_by_thresholds() -> None:
     run = make_run()
     make_check(run, 1, stars=340, gain_7d=120, is_rising=True)
     make_check(run, 2, stars=999, gain_7d=50, is_rising=True)
@@ -30,7 +31,7 @@ def test_daily_report_filters_by_thresholds_and_sorts_by_gain() -> None:
     assert [row.repository.github_id for row in report.rising] == [1, 2]
     assert [row.check.gain_7d for row in report.rising] == [120, 50]
 
-    wider = services.daily_report(run, max_stars=2000, min_gain=40)
+    wider = services.daily_report(run, max_stars=2000, min_gain=40, sort="gain")
 
     assert [row.repository.github_id for row in wider.rising] == [3, 1, 2, 4]
 
@@ -100,8 +101,8 @@ def test_unverified_section_lists_snapshot_and_age_rows() -> None:
 
     report = services.daily_report(run)
 
-    assert report.unverified == [age_row, snapshot_row]
-    assert report.unverified[1].baseline_day == DAY - timedelta(days=3)
+    assert [row.check for row in report.unverified] == [age_row, snapshot_row]
+    assert report.unverified[1].check.baseline_day == DAY - timedelta(days=3)
     assert [row.repository.github_id for row in report.rising] == [3]
     assert report.scans == []
 
@@ -135,3 +136,84 @@ def test_report_counts_every_verified_row_whatever_the_thresholds() -> None:
 
     assert report.verified_count == 2
     assert len(report.rising) == 1
+
+
+# --- Điểm, sắp xếp, ẩn repo nghi star giả (F-006) ----------------------------------------------
+
+
+def suspicious_repo(github_id: int) -> None:
+    """Repo "Nghi cao": 2 fork trên 613 star, không commit nào sau ngày tạo (45 + 20 = 65)."""
+    created = DAY - timedelta(days=30)
+    make_repo(
+        github_id,
+        created=created,
+        stars=613,
+        forks=2,
+        pushed_at=datetime.combine(created, time(18), tzinfo=UTC),
+    )
+
+
+def review_repo(github_id: int) -> None:
+    """Repo "Cần xem": 4 fork trên 1.000 star (45), có commit sau ngày tạo."""
+    make_repo(github_id, stars=1000, forks=4)
+
+
+def test_default_order_is_potential_and_gain_order_on_request() -> None:
+    run = make_run()
+    make_check(run, 1, stars=340, gain_7d=120, is_rising=True)  # 22 + 12 + 20 + 20 = 74
+    make_check(run, 2, stars=999, gain_7d=50, is_rising=True)  # 14 + 0 + 20 + 20 = 54
+    make_check(run, 3, stars=1000, gain_7d=200)  # 26 + 6 + 10 + 20 = 62
+    make_check(run, 4, stars=200, gain_7d=49)  # 14 + 12 + 20 + 20 = 66
+
+    by_potential = services.daily_report(run, max_stars=2000, min_gain=40)
+    by_gain = services.daily_report(run, max_stars=2000, min_gain=40, sort="gain")
+
+    assert [row.repository.github_id for row in by_potential.rising] == [1, 4, 3, 2]
+    totals = [row.scores.potential.total for row in by_potential.rising if row.scores.potential]
+    assert totals == [74, 66, 62, 54]
+    assert [row.repository.github_id for row in by_gain.rising] == [3, 1, 2, 4]
+
+
+def test_rows_carry_quality_potential_and_suspicion() -> None:
+    run = make_run()
+    make_check(run, 1, stars=340, gain_7d=120, is_rising=True)
+
+    [row] = services.daily_report(run).rising
+
+    assert row.scores.quality.total > 0
+    assert row.scores.potential is not None
+    assert row.scores.potential.estimated is False
+    assert row.scores.suspicion.level == SuspicionLevel.CLEAR
+
+
+def test_high_suspicion_rows_are_hidden_after_filters_review_rows_stay() -> None:
+    run = make_run()
+    suspicious_repo(1)
+    make_check(run, 1, stars=613, gain_7d=300, is_rising=True)
+    review_repo(2)
+    make_check(run, 2, stars=900, gain_7d=60, is_rising=True)
+    make_check(run, 3, stars=300, gain_7d=100, is_rising=True)
+    suspicious_repo(4)
+    make_check(run, 4, stars=613, gain_7d=10)  # không qua bộ lọc mặc định
+
+    report = services.daily_report(run)
+    wide = services.daily_report(run, min_gain=0)
+
+    assert [row.repository.github_id for row in report.rising] == [3, 2]
+    assert [row.repository.github_id for row in report.hidden] == [1]
+    assert report.rising[1].scores.suspicion.level == SuspicionLevel.REVIEW
+    assert report.hidden[0].scores.suspicion.points == 65
+    assert report.hidden_rising_count == 1
+    assert [row.repository.github_id for row in wide.hidden] == [1, 4]
+    assert wide.hidden_rising_count == 1  # đếm trong rising star của lượt, không theo bộ lọc
+
+
+def test_unverified_rows_carry_estimated_potential() -> None:
+    run = make_run()
+    make_check(run, 1, stars=300, gain_7d=30, source=Source.SNAPSHOT)
+
+    [row] = services.daily_report(run).unverified
+
+    assert row.check.repository.github_id == 1
+    assert row.potential.estimated is True
+    assert row.potential.total == 36  # tốc độ 10 + tăng tương đối 6 + còn chỗ lớn 20 + đà bền 0

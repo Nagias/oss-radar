@@ -66,4 +66,22 @@
 - [x] Sổ sách: DEBT (D-008 đã trả), FEATURE_MAP
 - [x] `poe check` xanh (526 test, độ phủ 99,06%); `poe test-live` 3/3; migrate CSDL thật (0 dòng `queued`);
       quét thật `topic:indie-hacker` mức Nhanh: 29/29 repo, đúng 1/1 lượt gọi
-- [ ] PR, CI xanh, chủ dự án duyệt → squash-merge
+- [x] PR Nagias/oss-radar#4, CI xanh, chủ dự án duyệt → squash-merge vào `main` (commit `0d59a9a`, 2026-10-23)
+
+## F-006 Chấm điểm Chất lượng / Tiềm năng, lọc star giả (2026-10-23, nhánh `feat/f006-cham-diem`)
+
+- [x] Đo thật: tỉ lệ fork/star toàn kho, 47 rising star, hồ sơ chủ repo, hiệu chỉnh ngưỡng nghi star giả
+- [x] Chủ dự án chọn: ẩn mặc định repo nghi star giả (có nút hiện); lấy hồ sơ chủ chỉ cho rising star
+- [x] Thiết kế `docs/designs/2026-10-23-f006-cham-diem.md` — tự rà soát với vai người làm theo, chốt 7 điểm
+- [x] Chủ dự án duyệt thiết kế (2026-10-23)
+- [x] Kế hoạch `docs/plans/2026-10-23-f006-cham-diem.md` (10 task)
+- [x] Code theo TDD (task 1–9): `poe check` xanh — 673 test, độ phủ 99,07%
+- [x] Sổ sách: ARCHITECTURE (QĐ-17), FEATURE_MAP (F-006), DEBT (D-009 dời sang PR `fix/` sau F-006)
+- [x] `poe check` xanh (674 test, 99,07%); `poe test-live` 4/4; chạy thật trên CSDL thật (sao lưu
+      `data/backup-truoc-f006-2026-10-23.sqlite3`, migrate, 20 lượt gọi hồ sơ chủ không token): khớp 3 ví dụ
+      thiết kế — `genspark-claw` 75 Nghi cao (ẩn), `xop01` 50 Cần xem, `feder-cr/git-ai` không nghi; trang
+      `/rising/` 46 dòng + 1 ẩn, trang lần quét #7 có cột điểm. Chạy thật lộ ra 2 điểm đã sửa: ưu tiên hồ sơ
+      chủ của repo đang bị nghi; phần giải thích điểm tràn cột
+- [x] Agent độc lập rà soát cả nhánh: 0 nghiêm trọng, 1 quan trọng (kẹt ở bước hồ sơ chủ thì mất báo cáo
+      của ngày — đã sửa: bước này không còn chặn báo cáo), 7 nhỏ (sửa 4; còn lại ghi trong báo cáo)
+- [ ] Chủ dự án duyệt → push, PR, CI xanh, squash-merge

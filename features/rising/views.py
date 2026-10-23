@@ -86,18 +86,20 @@ def _report_context(
     status = services.today_status()
     form = ReportFilterForm(query or None)
     max_stars, min_gain, day = form.values()
+    sort = form.sort_order()
     run = services.report_run_for(day) if day is not None else services.latest_report_run()
     return {
         "status": status,
         "form": form,
         "report": None
         if run is None
-        else services.daily_report(run, max_stars=max_stars, min_gain=min_gain),
+        else services.daily_report(run, max_stars=max_stars, min_gain=min_gain, sort=sort),
         "days": services.report_days(),
         "selected_day": day,
         "missing_day": day if run is None else None,
         "max_stars": max_stars,
         "min_gain": min_gain,
+        "sort": sort,
         "candidate_min": growth.CANDIDATE_MIN_ESTIMATE_7D,
         "run_error": run_error,
         "refresh_url": refresh_url if status.is_live else None,

@@ -413,3 +413,62 @@ def test_scan_failed_on_token_offers_no_resume(client: Client) -> None:
     page = client.get(detail_url(scan)).text
 
     assert reverse("discovery:scan_resume", args=[scan.pk]) not in page
+
+
+# --- Điểm Chất lượng và repo nghi star giả (F-006) ---------------------------------------------
+
+
+def scored_items() -> list[dict[str, Any]]:
+    """repo-1 "Nghi cao" (2 fork / 613 star, không commit sau ngày tạo), repo-2 "Cần xem"
+    (4 fork / 1.000 star), repo-3 bình thường."""
+    items = make_search_items(3, start=FROM, end=TO, stars=lambda i: (613, 1000, 5000)[i])
+    items[0].update(forks_count=2, pushed_at=items[0]["created_at"])
+    items[1].update(forks_count=4)
+    items[2].update(forks_count=600)
+    return items
+
+
+def test_scan_detail_shows_quality_and_hides_high_suspicion(
+    client: Client, use_fake: UseFake
+) -> None:
+    use_fake(scored_items())
+    scan = run_scan_now()
+
+    page = client.get(detail_url(scan)).text
+
+    assert '<th class="num">Chất lượng</th>' in page
+    assert '<th class="num">Nghi star giả</th>' in page
+    assert "Tiềm năng" not in page  # số tăng star nằm ở tính năng rising, trang này không có
+    assert "Phổ biến <strong>" in page
+    main, hidden = page.split("Đã ẩn 1 repo nghi star giả — Hiện")
+    assert "gia-lap/repo-1" not in main
+    assert "gia-lap/repo-1" in hidden
+    assert "2 fork trên 613 star (dưới 0,5%)" in hidden
+    assert "Cần xem" in main
+    assert main.index("gia-lap/repo-3") < main.index("gia-lap/repo-2")  # vẫn sắp theo star
+
+
+def test_scan_detail_without_suspicious_repos_has_no_hidden_section(
+    client: Client, github_search: respx.Route
+) -> None:
+    scan = run_scan_now()
+
+    page = client.get(detail_url(scan)).text
+
+    assert "nghi star giả — Hiện" not in page
+
+
+def test_scored_results_split_hidden_and_keep_limit(use_fake: UseFake) -> None:
+    use_fake(scored_items())
+    scan = run_scan_now()
+
+    scored = services.scored_results(scan, limit=2)
+
+    assert [row.result.repository.full_name for row in scored.shown] == [
+        "gia-lap/repo-3",
+        "gia-lap/repo-2",
+    ]
+    assert scored.hidden == []  # repo-1 nằm ngoài 2 repo nhiều star nhất
+    everything = services.scored_results(scan, limit=500)
+    assert [row.result.repository.full_name for row in everything.hidden] == ["gia-lap/repo-1"]
+    assert everything.hidden[0].scores.suspicion.points == 65

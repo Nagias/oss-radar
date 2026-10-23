@@ -1,8 +1,8 @@
 """Test gọi GitHub THẬT qua Internet — chỉ chạy bằng `uv run poe test-live`, không chạy trong CI.
 
 Mục đích: phát hiện sớm khi GitHub đổi định dạng phản hồi hoặc cú pháp truy vấn, làm dữ liệu
-giả lập đã lưu không còn đúng. Mỗi lần chạy tốn tối đa 4 lượt tìm kiếm (giãn nhịp thật) và
-1 lượt lấy lịch sử star (tính vào hạn mức "core", không cần token).
+giả lập đã lưu không còn đúng. Mỗi lần chạy tốn tối đa 4 lượt tìm kiếm (giãn nhịp thật), 1 lượt
+lấy lịch sử star và 1 lượt lấy hồ sơ tài khoản (tính vào hạn mức "core", không cần token).
 """
 
 from datetime import timedelta
@@ -66,3 +66,15 @@ def test_live_deep_scan_within_small_budget_without_duplicates() -> None:
     assert scan.total_count is not None
     assert Repository.objects.count() == scan.fetched_count
     assert all(stars >= 10 for stars in Repository.objects.values_list("stars", flat=True))
+
+
+def test_live_get_user_profile() -> None:
+    # octocat là tài khoản mẫu của GitHub, tạo năm 2011; 1 lượt gọi hạn mức "core".
+    with get_github_client() as github:
+        user = github.get_user("octocat")
+
+    assert user.login == "octocat"
+    assert user.account_type == "User"
+    assert user.created_at.year == 2011
+    assert user.followers > 0
+    assert user.public_repos > 0

@@ -86,24 +86,25 @@
 </section>
 {% endif %}
 
-{% if results %}
+{% if scored.shown or scored.hidden %}
 <section>
   <h2>Kết quả, sắp theo star</h2>
   {% if scan.fetched_count > results_limit %}
     {# DEBT(D-007): chỉ hiện 500 repo nhiều star nhất; xem đủ cần trang duyệt kho. #}
-    <p class="muted">Đang hiện {{ results_limit }} repo nhiều star nhất trên {{ scan.fetched_count|intcomma }} repo đã lấy.</p>
+    <p class="muted">Đang xét {{ results_limit }} repo nhiều star nhất trên {{ scan.fetched_count|intcomma }} repo đã lấy{% if scored.hidden %} (trong đó {{ scored.hidden|length }} repo nghi star giả bị ẩn ở cuối bảng){% endif %}.</p>
   {% endif %}
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th class="num">#</th><th>Repo</th><th class="num">Star</th><th>Ngôn ngữ</th>
+          <th class="num">#</th><th>Repo</th><th class="num">Star</th>
+          <th class="num">Chất lượng</th><th class="num">Nghi star giả</th><th>Ngôn ngữ</th>
           <th>Chủ sở hữu</th><th>Đẩy code gần nhất</th><th>Trong kho</th>
         </tr>
       </thead>
       <tbody>
-        {% for result in results %}
-          {% with repo=result.repository %}
+        {% for row in scored.shown %}
+          {% with result=row.result repo=row.result.repository %}
           <tr>
             <td class="num">{{ forloop.counter }}</td>
             <td>
@@ -114,6 +115,8 @@
               {% endif %}
             </td>
             <td class="num">{{ repo.stars|intcomma }}</td>
+            <td class="num">{% include "scoring/_score.html" with score=row.scores.quality %}</td>
+            <td class="num">{% include "scoring/_suspicion.html" with suspicion=row.scores.suspicion %}</td>
             <td>{{ repo.language|default:"—" }}</td>
             <td>{{ repo.owner_login }}<div class="muted small">{% if repo.is_organization %}Tổ chức{% else %}Cá nhân{% endif %}</div></td>
             <td>{{ repo.gh_pushed_at|date:"d/m/Y"|default:"—" }}</td>
@@ -126,6 +129,43 @@
       </tbody>
     </table>
   </div>
+
+  {% if scored.hidden %}
+    <details class="hidden-repos">
+      <summary>Đã ẩn {{ scored.hidden|length }} repo nghi star giả — Hiện</summary>
+      <p class="muted small">
+        Các repo này có nhiều dấu hiệu star mua (cộng dồn từ 60 điểm trở lên). Chỉ bị ẩn khỏi bảng chính, vẫn nằm trong
+        kho; lý do ghi ngay bên dưới từng repo.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Repo</th><th class="num">Star</th><th class="num">Nghi star giả</th><th>Vì sao bị ẩn</th></tr>
+          </thead>
+          <tbody>
+            {% for row in scored.hidden %}
+              {% with repo=row.result.repository %}
+              <tr>
+                <td>
+                  <a href="{{ repo.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ repo.full_name }}</strong></a>
+                  {% if repo.description %}<div class="desc">{{ repo.description|truncatechars:180 }}</div>{% endif %}
+                </td>
+                <td class="num">{{ repo.stars|intcomma }}</td>
+                <td class="num"><span class="badge badge-danger">{{ row.scores.suspicion.label }}</span> {{ row.scores.suspicion.points }}</td>
+                <td class="small">
+                  <ul class="score-parts">
+                    {% for signal in row.scores.suspicion.signals %}<li>{% if signal.points > 0 %}+{% endif %}{{ signal.points }} — {{ signal.reason }}</li>{% endfor %}
+                    {% for note in row.scores.suspicion.notes %}<li class="muted">{{ note }}</li>{% endfor %}
+                  </ul>
+                </td>
+              </tr>
+              {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  {% endif %}
 </section>
 {% endif %}
 {% endblock %}

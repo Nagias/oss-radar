@@ -80,7 +80,7 @@ def _detail_context(scan: ScanRun, *, resume_form: ResumeForm | None = None) -> 
         resume_form = ResumeForm()
     return {
         "scan": scan,
-        "results": services.scan_results(scan)[:RESULTS_SHOWN_LIMIT],
+        "scored": services.scored_results(scan, limit=RESULTS_SHOWN_LIMIT),
         "results_limit": RESULTS_SHOWN_LIMIT,
         "problems": services.problem_slices(scan),
         "progress": services.slice_progress(scan),

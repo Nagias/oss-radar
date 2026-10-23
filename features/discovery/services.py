@@ -31,6 +31,7 @@ from features.discovery.slicing import (
     resolve_root_range,
     split,
 )
+from features.scoring import services as scoring
 from integrations.github.client import GitHubClient, get_github_client
 from integrations.github.errors import (
     GitHubAuthError,
@@ -323,6 +324,34 @@ def scan_results(scan: ScanRun) -> QuerySet[ScanResult]:
     """Kết quả của một lần quét, sắp theo star giảm dần."""
     return scan.results.select_related("repository").order_by(
         "-repository__stars", "repository__full_name"
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ScoredResult:
+    result: ScanResult
+    scores: scoring.RepoScores
+
+
+@dataclass(frozen=True, slots=True)
+class ScoredResults:
+    shown: list[ScoredResult]
+    # "Nghi cao" star giả: ẩn khỏi bảng chính, có nút hiện kèm lý do (F-006).
+    hidden: list[ScoredResult]
+
+
+def scored_results(scan: ScanRun, *, limit: int) -> ScoredResults:
+    """`limit` repo nhiều star nhất của lần quét, kèm điểm Chất lượng và nghi star giả.
+
+    Không có điểm Tiềm năng: số tăng star nằm ở tính năng rising, `discovery` không gọi sang đó.
+    Nghi star giả chỉ dùng tín hiệu không cần số tăng, cộng hồ sơ chủ nếu kho đã có (không gọi API).
+    """
+    results = list(scan_results(scan)[:limit])
+    scores = scoring.score_repositories([result.repository for result in results])
+    rows = [ScoredResult(result, scores[result.repository_id]) for result in results]
+    return ScoredResults(
+        shown=[row for row in rows if not row.scores.suspicion.is_hidden],
+        hidden=[row for row in rows if row.scores.suspicion.is_hidden],
     )
 
 

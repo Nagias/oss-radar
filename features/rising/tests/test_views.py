@@ -3,7 +3,7 @@
 import re
 from collections.abc import Callable
 from concurrent.futures import Future
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 from django.template.loader import render_to_string
@@ -345,6 +345,7 @@ def test_watch_page_lists_queries_estimate_history_and_buttons(
     DailyRun.objects.filter(pk=yesterday.pk).update(
         search_calls_used=500,
         verify_calls_used=300,
+        owner_calls_used=37,
         rising_count=14,
         stop_reason="Truy vấn «topic:x» lỗi.\nHết ngân sách xác minh.",
     )
@@ -361,7 +362,9 @@ def test_watch_page_lists_queries_estimate_history_and_buttons(
     assert "9 lượt gọi" in page  # kết quả lần quét gần nhất
     assert "250 repo" in page
     assert "Tắt" in page
-    assert "800 lượt gọi" in page  # ước lượng: 500 + 300 lượt gọi của lần chạy gần nhất
+    assert "837 lượt gọi" in page  # ước lượng: 500 + 300 + 37 lượt gọi của lần chạy gần nhất
+    assert "Lượt gọi hồ sơ chủ" in page
+    assert '<td class="num">37</td>' in page
     assert "Token sai rồi." in page
     assert ">Chạy tiếp</button>" in page  # hôm nay Lỗi → được chạy tiếp
     assert reverse("rising:stop", args=[failed.pk]) not in page
@@ -665,3 +668,71 @@ def test_repository_links_have_no_unsafe_markup(client: Client) -> None:
 
     assert "<i>Py</i>" not in page
     assert "&lt;i&gt;Py&lt;/i&gt;" in page
+
+
+# --- Điểm và repo nghi star giả trên trang Rising star (F-006) --------------------------------
+
+
+def test_report_page_shows_scores_and_hides_high_suspicion_with_reasons(client: Client) -> None:
+    run = make_run()
+    created = DAY - timedelta(days=30)
+    make_repo(
+        1,
+        created=created,
+        stars=613,
+        forks=2,
+        pushed_at=timezone.make_aware(datetime.combine(created, time(18))),
+    )
+    make_check(run, 1, stars=613, gain_7d=300, is_rising=True)
+    make_repo(2, stars=1000, forks=4)  # "Cần xem": 4 fork trên 1.000 star
+    make_check(run, 2, stars=900, gain_7d=60, is_rising=True)
+    make_check(run, 3, stars=300, gain_7d=100, is_rising=True)
+    DailyRun.objects.filter(pk=run.pk).update(rising_count=3)
+
+    page = client.get(REPORT_URL).text
+
+    for header in ("Tiềm năng", "Chất lượng", "Nghi star giả"):
+        assert f'<th class="num">{header}</th>' in page
+    assert "Phổ biến <strong>" in page  # bấm vào điểm thì thấy thành phần
+    assert "3</strong> rising star (đã ẩn 1 nghi star giả)" in page
+    main, hidden = page.split("Đã ẩn 1 repo nghi star giả — Hiện")
+    assert "gia-lap/repo-1" not in main
+    assert "gia-lap/repo-1" in hidden
+    assert "2 fork trên 613 star (dưới 0,5%)" in hidden
+    assert "không có commit nào sau ngày tạo" in hidden
+    assert "Cần xem" in main
+    assert "4 fork trên 1.000 star (dưới 0,5%)" in main
+
+
+def test_report_page_without_hidden_rows_has_no_hidden_section(client: Client) -> None:
+    run = make_run()
+    make_check(run, 3, stars=300, gain_7d=100, is_rising=True)
+
+    page = client.get(REPORT_URL).text
+
+    assert "nghi star giả — Hiện" not in page
+    assert "đã ẩn" not in page
+
+
+def test_report_sort_choice_switches_order_and_is_kept_in_form(client: Client) -> None:
+    run = make_run()
+    make_check(run, 1, stars=999, gain_7d=60, is_rising=True)  # Tiềm năng thấp, tăng nhiều
+    make_check(run, 2, stars=60, gain_7d=55, is_rising=True)  # Tiềm năng cao, tăng ít
+
+    default = client.get(REPORT_URL).text
+    by_gain = client.get(REPORT_URL, {"sort": "gain"}).text
+
+    assert default.index("gia-lap/repo-2") < default.index("gia-lap/repo-1")
+    assert by_gain.index("gia-lap/repo-1") < by_gain.index("gia-lap/repo-2")
+    assert '<option value="gain" selected>' in by_gain
+    assert '<option value="potential" selected>' in default
+
+
+def test_report_unverified_rows_show_estimated_potential(client: Client) -> None:
+    run = make_run()
+    make_check(run, 1, stars=300, gain_7d=30, source=Source.SNAPSHOT)
+
+    page = client.get(REPORT_URL).text
+
+    assert "Tiềm năng (ước lượng)" in page
+    assert "<strong>36</strong>" in page

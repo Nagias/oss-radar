@@ -1,0 +1,8 @@
+{% comment %}Một điểm (Chất lượng hoặc Tiềm năng): bấm vào số thì mở từng thành phần. Biến: score (None = "—").{% endcomment %}
+{% if score %}<details class="score">
+  <summary><strong>{{ score.total }}</strong>{% if score.estimated %} <span class="muted small">(ước lượng)</span>{% endif %}</summary>
+  <ul class="score-parts">
+    {% for part in score.components %}<li>{{ part.label }} <strong>{{ part.points }}/{{ part.max_points }}</strong> — {{ part.detail }}</li>{% endfor %}
+    {% for note in score.notes %}<li class="muted">{{ note }}</li>{% endfor %}
+  </ul>
+</details>{% else %}—{% endif %}

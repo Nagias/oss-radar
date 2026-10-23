@@ -18,6 +18,7 @@ from features.rising.models import DailyRun, RisingCheck, WatchQuery
 from tests.factories import make_github_repo
 from tests.fakes import (
     FakeGitHubSearch,
+    FakeGitHubUsers,
     FakeStarHistory,
     FakeTime,
     make_search_items,
@@ -27,6 +28,7 @@ from tests.fakes import (
 SEARCH_URL = "https://api.github.com/search/repositories"
 # Client gửi kèm `?per_page=…` → khớp cả phần truy vấn phía sau đường dẫn.
 HISTORY_URL_PATTERN = r"^https://api\.github\.com/repositories/\d+/stargazers/history(\?.*)?$"
+USERS_URL_PATTERN = r"^https://api\.github\.com/users/[^/?]+$"
 
 # Ba truy vấn theo dõi của test; không cái nào là phần đầu của cái khác → đếm được lượt gọi
 # theo từng truy vấn.
@@ -43,6 +45,7 @@ WINDOW_END = date(2026, 10, 21)
 class FakeGitHub:
     search: FakeGitHubSearch
     history: FakeStarHistory
+    users: FakeGitHubUsers
 
 
 UseFake = Callable[..., FakeGitHub]
@@ -74,14 +77,22 @@ def _inline_background(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def use_fake_github(http_mock: respx.MockRouter) -> UseFake:
-    """Gắn GitHub giả: Search hiểu truy vấn; lịch sử star theo id."""
+    """Gắn GitHub giả: Search hiểu truy vấn; lịch sử star theo id; hồ sơ tài khoản theo login.
+
+    Chủ repo không có trong `users` thì GitHub giả trả 404 (tài khoản không còn).
+    """
 
     def attach(
-        items: list[dict[str, Any]], histories: dict[int, list[dict[str, Any]]] | None = None
+        items: list[dict[str, Any]],
+        histories: dict[int, list[dict[str, Any]]] | None = None,
+        users: dict[str, dict[str, Any]] | None = None,
     ) -> FakeGitHub:
-        fake = FakeGitHub(FakeGitHubSearch(items), FakeStarHistory(histories or {}))
+        fake = FakeGitHub(
+            FakeGitHubSearch(items), FakeStarHistory(histories or {}), FakeGitHubUsers(users or {})
+        )
         http_mock.get(SEARCH_URL).mock(side_effect=fake.search)
         http_mock.get(url__regex=HISTORY_URL_PATTERN).mock(side_effect=fake.history)
+        http_mock.get(url__regex=USERS_URL_PATTERN).mock(side_effect=fake.users)
         return fake
 
     return attach
@@ -137,8 +148,13 @@ def make_run(
 
 
 def make_repo(
-    github_id: int, *, created: date = date(2025, 1, 1), description: str = "Một repo giả lập"
+    github_id: int,
+    *,
+    created: date = date(2025, 1, 1),
+    description: str = "Một repo giả lập",
+    **changes: Any,
 ) -> Repository:
+    """Một repo trong kho; `changes` đổi trường khác của repo GitHub (vd `stars`, `forks`)."""
     [outcome] = upsert_repositories(
         [
             make_github_repo(
@@ -147,6 +163,7 @@ def make_repo(
                 html_url=f"https://github.com/gia-lap/repo-{github_id}",
                 description=description,
                 created_at=datetime.combine(created, time(12), tzinfo=UTC),
+                **changes,
             )
         ],
         seen_at=timezone.now(),
@@ -195,12 +212,18 @@ def item(
     fork: bool = False,
     archived: bool = False,
     description: str | None = "Một repo giả lập",
+    owner: str | None = None,
 ) -> dict[str, Any]:
-    """Một repo trong kết quả Search giả; `created` là ngày tạo (giờ Việt Nam trùng ngày UTC)."""
+    """Một repo trong kết quả Search giả; `created` là ngày tạo (giờ Việt Nam trùng ngày UTC).
+
+    `owner` đổi tài khoản chủ repo (mặc định: chủ của repo thật làm mẫu).
+    """
     [entry] = make_search_items(
         1, start=created, end=created, stars=lambda _: stars, id_start=repo_id
     )
     entry.update(fork=fork, archived=archived, description=description)
+    if owner is not None:
+        entry["owner"] = {**entry["owner"], "login": owner}
     return entry
 
 

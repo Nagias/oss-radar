@@ -29,6 +29,7 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 | QĐ-14 | Việc nền | Một luồng trong tiến trình web (`core/background.py`), trạng thái + nhịp sống trong CSDL | Đã duyệt 2026-10-22, đã dùng (F-002); câu "nơi duy nhất tạo luồng" sửa bởi QĐ-15 |
 | QĐ-15 | Lịch hằng ngày, chạy bù | Bộ nhịp trong tiến trình web (`core/scheduler.py`) + `settings.SCHEDULED_JOBS`; mỗi lúc một việc | Đã duyệt 2026-10-22, đã dùng (F-005) |
 | QĐ-16 | Nguồn số liệu star tăng | Lịch sử star chính thức của GitHub; ảnh chụp star chỉ làm radar, giữ 35 ngày | Đã duyệt 2026-10-22, đã dùng (F-005) |
+| QĐ-17 | Chấm điểm, lọc star giả | Hàm thuần tính lúc hiển thị (không lưu điểm); "Nghi cao" ẩn chứ không xoá; hồ sơ chủ repo lưu ở kho, làm mới sau 30 ngày | Đã duyệt 2026-10-23 (thiết kế F-006), đã dùng (F-006) |
 
 ---
 
@@ -199,6 +200,24 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 - **Rủi ro:** endpoint còn mới, có thể đổi; khi hỏng, lượt vẫn quét và ghi ảnh chụp, ứng viên rơi vào mục
   "chưa xác minh".
 
+### QĐ-17 — Điểm là hàm thuần tính lúc hiển thị; repo nghi star giả bị ẩn chứ không xoá
+- **Công thức một chỗ:** `features/scoring/rules.py` — hàm thuần (không CSDL, không mạng), hằng số có tên.
+  Mỗi điểm trả kèm từng thành phần và lời giải thích (nguyên tắc 6). `features/scoring/services.py` gom dữ
+  kiện từ kho rồi gọi công thức.
+- **Không lưu điểm:** trang Rising star vài trăm dòng, trang lần quét tối đa 500 dòng → tính lúc xem chỉ
+  vài mili giây. Được: đổi trọng số có hiệu lực ngay, không migration, không có điểm "cũ" lệch công thức.
+  Tốn: không sắp/lọc toàn kho theo điểm bằng CSDL được — khi làm trang duyệt toàn kho (D-007) sẽ xét lại.
+- **Ẩn chứ không xoá:** repo "Nghi cao" (≥ 60 điểm cộng dồn) chỉ bị đưa khỏi bảng chính, có nút "Hiện" kèm
+  lý do từng tín hiệu; không tín hiệu đơn lẻ nào đủ 60. Ngưỡng là hằng số chỉnh được.
+- **Hồ sơ chủ repo:** bảng `OwnerProfile` ở `features/catalog` (một dòng mỗi chủ, khoá login viết thường),
+  chỉ lấy cho rising star trong bước "Lấy hồ sơ chủ repo" của lượt hằng ngày, ngân sách 100 lượt/ngày (có
+  token) hoặc 10 (không token), làm mới sau 30 ngày. Trang lần quét chỉ dùng hồ sơ đã có, không gọi thêm.
+- **Chiều phụ thuộc:** `rising` → `scoring` → `catalog`; `discovery` → `scoring`. `scoring` không import
+  `rising`/`discovery`; số tăng star do bên gọi truyền vào (`GrowthFacts`).
+- **Đã loại:** lưu điểm vào cột của `Repository` (phải tính lại mỗi khi đổi công thức); phân tích từng tài
+  khoản bấm star kiểu StarScout (GitHub đã khoá danh sách người bấm star từ 7/2026); AI chấm điểm (vi phạm
+  nguyên tắc 1 — số liệu chỉ từ API chính thức).
+
 ---
 
 ## 3. Cấu trúc thư mục theo tính năng
@@ -216,9 +235,10 @@ features/
     templates/discovery/ Giao diện
     management/commands/ Lệnh dòng lệnh (cho lịch chạy và cho agent tự kiểm chứng)
     tests/               Test của riêng tính năng
+  rising/                F-005 Rising star + quét hằng ngày (growth.py: hàm thuần tính star tăng)
+  scoring/               F-006 Chấm điểm (rules.py: hàm thuần; services.py: gom dữ kiện, lấy hồ sơ chủ)
 integrations/
   github/                Client GitHub (+ pacing.py: giãn nhịp, gọi lại, ngân sách). Không biết Django model.
-  rising/                F-005 Rising star + quét hằng ngày (growth.py: hàm thuần tính star tăng)
 core/
   background.py          Chạy việc nền một luồng (QĐ-14).
   scheduler.py           Bộ nhịp gọi việc định kỳ trong settings.SCHEDULED_JOBS (QĐ-15).
