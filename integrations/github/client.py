@@ -1,6 +1,7 @@
 """Client GitHub REST API: gọi, kiểm phản hồi, đổi JSON thành dataclass, đổi lỗi thành tên rõ."""
 
 import functools
+import re
 import ssl
 import time
 from datetime import UTC, datetime
@@ -21,7 +22,13 @@ from integrations.github.errors import (
     GitHubUnavailableError,
 )
 from integrations.github.pacing import CallBudget, RequestPacer, Sleep, select_min_interval
-from integrations.github.schemas import GitHubRepo, RepoSearchPage, StarHistory, StarWeek
+from integrations.github.schemas import (
+    GitHubRepo,
+    GitHubUser,
+    RepoSearchPage,
+    StarHistory,
+    StarWeek,
+)
 
 API_VERSION = "2022-11-28"
 MAX_PER_PAGE = 100  # Giới hạn của GitHub Search API cho một trang.
@@ -30,6 +37,8 @@ MAX_RATE_LIMIT_WAITS = 3  # bị từ chối vì hết lượt: chờ rồi gọ
 HISTORY_WEEKS = 6  # số tuần lịch sử star lấy mặc định
 MAX_HISTORY_WEEKS = 30  # GitHub chỉ trả tối đa 30 tuần cho một lượt gọi
 _SUNDAY = 6  # datetime.weekday(): thứ Hai = 0 ... Chủ nhật = 6
+# Tên tài khoản GitHub: chữ, số, gạch nối, tối đa 39 ký tự. Kiểm trước khi ghép vào đường dẫn.
+_LOGIN = re.compile(r"[A-Za-z0-9-]{1,39}")
 
 
 class GitHubClient:
@@ -104,6 +113,12 @@ class GitHubClient:
             f"/repositories/{github_id}/stargazers/history", params={"per_page": weeks}
         )
         return _parse_star_history(payload)
+
+    def get_user(self, login: str) -> GitHubUser:
+        """Hồ sơ công khai của tài khoản `login` (cá nhân hay tổ chức). Tính vào hạn mức "core"."""
+        if not _LOGIN.fullmatch(login):
+            raise ValueError(f"login GitHub không hợp lệ: {login!r}")
+        return _parse_user(self._get_json(f"/users/{login}", params={}))
 
     def _get_json(self, path: str, *, params: dict[str, str | int]) -> object:
         transient_failures = 0
@@ -272,6 +287,7 @@ def _parse_repo(raw: object) -> GitHubRepo:
         topics=tuple(_as_str(topic) for topic in _as_list(data.get("topics", []))),
         stars=_as_int(data["stargazers_count"]),
         forks=_as_int(data["forks_count"]),
+        open_issues=_as_int(data["open_issues_count"]),
         owner_login=_as_str(owner["login"]),
         owner_type=_as_str(owner["type"]),
         license_spdx=(
@@ -282,6 +298,21 @@ def _parse_repo(raw: object) -> GitHubRepo:
         created_at=_as_datetime(data["created_at"]),
         pushed_at=None if pushed_at is None else _as_datetime(pushed_at),
     )
+
+
+def _parse_user(payload: object) -> GitHubUser:
+    try:
+        data = _as_dict(payload)
+        return GitHubUser(
+            login=_as_str(data["login"]),
+            github_id=_as_int(data["id"]),
+            account_type=_as_str(data["type"]),
+            created_at=_as_datetime(data["created_at"]),
+            followers=_as_int(data["followers"]),
+            public_repos=_as_int(data["public_repos"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise GitHubResponseError(f"Hồ sơ tài khoản GitHub sai định dạng: {exc!r}") from exc
 
 
 def _parse_star_history(payload: object) -> StarHistory:

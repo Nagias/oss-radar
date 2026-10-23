@@ -16,6 +16,7 @@ class GitHubRepo:
     topics: tuple[str, ...]
     stars: int
     forks: int
+    open_issues: int  # GitHub gộp số issue và pull request đang mở
     owner_login: str
     owner_type: str
     license_spdx: str
@@ -32,6 +33,18 @@ class RepoSearchPage:
     total_count: int
     incomplete_results: bool
     items: tuple[GitHubRepo, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class GitHubUser:
+    """Hồ sơ công khai của một tài khoản (cá nhân hay tổ chức) — dùng để xét chủ repo."""
+
+    login: str
+    github_id: int
+    account_type: str
+    created_at: datetime
+    followers: int
+    public_repos: int
 
 
 @dataclass(frozen=True, slots=True)

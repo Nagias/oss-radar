@@ -567,3 +567,96 @@ def test_unreadable_date_header_is_ignored(
     client.search_repositories("topic:ai-agent")
 
     assert fake_time.sleeps == [pytest.approx(31, abs=1)]
+
+
+# --- Số issue/PR đang mở (F-006) --------------------------------------------------------------
+
+
+def test_search_reads_open_issue_count(client: GitHubClient, http_mock: respx.MockRouter) -> None:
+    http_mock.get(SEARCH_URL).respond(json=load_fixture("search_repositories.json"))
+
+    page = client.search_repositories("topic:ai-agent")
+
+    assert [repo.open_issues for repo in page.items] == [50372, 234, 69]
+
+
+@pytest.mark.parametrize("bad_value", ["12", None, True])
+def test_search_rejects_wrong_open_issue_count(
+    client: GitHubClient, http_mock: respx.MockRouter, bad_value: object
+) -> None:
+    payload = load_fixture("search_repositories.json")
+    payload["items"][0]["open_issues_count"] = bad_value
+    http_mock.get(SEARCH_URL).respond(json=payload)
+
+    with pytest.raises(GitHubResponseError):
+        client.search_repositories("topic:ai-agent")
+
+
+# --- Hồ sơ chủ repo (F-006) -------------------------------------------------------------------
+
+USER_URL = f"{API_URL}/users/octocat"
+
+
+def test_get_user_parses_real_response(client: GitHubClient, http_mock: respx.MockRouter) -> None:
+    http_mock.get(USER_URL).respond(json=load_fixture("user.json"))
+
+    user = client.get_user("octocat")
+
+    assert user.login == "octocat"
+    assert user.github_id == 583231
+    assert user.account_type == "User"
+    assert user.created_at == datetime(2011, 1, 25, 18, 44, 36, tzinfo=UTC)
+    assert user.followers == 24725
+    assert user.public_repos == 8
+
+
+def test_get_user_keeps_login_case_in_path(
+    client: GitHubClient, http_mock: respx.MockRouter
+) -> None:
+    route = http_mock.get(f"{API_URL}/users/Octo-Cat9").respond(json=load_fixture("user.json"))
+
+    client.get_user("Octo-Cat9")
+
+    assert route.call_count == 1
+
+
+def test_get_user_not_found_raises_named_error(
+    client: GitHubClient, http_mock: respx.MockRouter
+) -> None:
+    http_mock.get(USER_URL).respond(404, json={"message": "Not Found"})
+
+    with pytest.raises(GitHubNotFoundError):
+        client.get_user("octocat")
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [("id", "583231"), ("followers", None), ("public_repos", True), ("created_at", "2011-01-25")],
+)
+def test_get_user_rejects_wrong_field_type(
+    client: GitHubClient, http_mock: respx.MockRouter, field: str, bad_value: object
+) -> None:
+    payload = load_fixture("user.json")
+    payload[field] = bad_value
+    http_mock.get(USER_URL).respond(json=payload)
+
+    with pytest.raises(GitHubResponseError):
+        client.get_user("octocat")
+
+
+@pytest.mark.parametrize("login", ["", "../repos", "a b", "a/b", "x" * 40, "octo?cat"])
+def test_get_user_rejects_odd_login_without_calling(client: GitHubClient, login: str) -> None:
+    # Không có route nào được khai báo: lỡ gọi mạng thì respx báo lỗi khác ValueError.
+    with pytest.raises(ValueError, match="login"):
+        client.get_user(login)
+
+
+def test_get_user_counts_against_budget(http_mock: respx.MockRouter, fake_time: FakeTime) -> None:
+    route = http_mock.get(USER_URL).respond(json=load_fixture("user.json"))
+
+    with make_client(fake_time, budget=CallBudget(1)) as github:
+        github.get_user("octocat")
+        with pytest.raises(CallBudgetExhaustedError):
+            github.get_user("octocat")
+
+    assert route.call_count == 1
