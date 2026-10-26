@@ -128,6 +128,17 @@ GITHUB_API_URL = "https://api.github.com"
 GITHUB_TIMEOUT_SECONDS = 20.0
 
 
+# AI qua 9router (integrations/llm, QĐ-18). Khoá để trống thì mọi bước phân loại tự bỏ qua.
+LLM_API_KEY = _env_str("LLM_API_KEY")
+LLM_BASE_URL = _env_str("LLM_BASE_URL", default="http://localhost:20128/v1")
+LLM_MODEL = _env_str("LLM_MODEL", default="ag/gemini-3.8-flash-low")
+LLM_TIMEOUT_SECONDS = 120.0
+# Chưa biết hạn mức của 9router → mặc định an toàn 10 lượt/phút (thiết kế F-010 mục 7).
+LLM_MIN_INTERVAL_SECONDS = 6.0
+# Phân loại dần cả kho: tối đa chừng này lượt gọi AI mỗi ngày (~40 repo mỗi lượt).
+LLM_BACKLOG_CALLS_PER_DAY = 150
+
+
 # Việc định kỳ (QĐ-15): bộ nhịp `core/scheduler.py` gọi lần lượt các hàm này trên luồng nền, đúng
 # thứ tự khai. Nhìn danh sách này là biết app tự làm những gì.
 SCHEDULED_JOBS: list[str] = [
