@@ -8,7 +8,7 @@ phần đã xong, và lần sau không gọi lại repo đã có nhãn mà mô t
 import logging
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from django.db import transaction
 from django.db.models import Count, F, Q, QuerySet, Sum
@@ -29,6 +29,9 @@ from features.taxonomy.prompt import (
 from integrations.llm.client import LlmClient
 
 logger = logging.getLogger(__name__)
+
+# Xuất lại cho tính năng khác (chỉ được import `taxonomy.services`).
+Origin = ClassifyRun.Origin
 
 BATCH_SIZE = 40  # repo mỗi lượt gọi AI: ~2.000 token nền mỗi lượt (đo 2026-10-27) nên gom nhiều
 # Lần phân loại không ghi nhịp sống quá chừng này thì coi như app đã tắt giữa chừng. Dài hơn lúc
@@ -218,6 +221,17 @@ def label_counts() -> dict[str, int]:
     )
     counts[UNCLASSIFIED] = Repository.objects.count() - RepoClassification.objects.count()
     return counts
+
+
+def last_failure_at(origin: str) -> datetime | None:
+    """Lúc lần phân loại gần nhất của nguồn `origin` bị ngắt vì lỗi (để nghỉ, không gọi dồn)."""
+    failed = (
+        ClassifyRun.objects.filter(origin=origin, status=ClassifyRun.Status.FAILED)
+        .exclude(finished_at=None)
+        .order_by("-finished_at")
+        .first()
+    )
+    return None if failed is None else failed.finished_at
 
 
 def ai_calls_on(day: date, *, origin: str) -> int:

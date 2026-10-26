@@ -25,7 +25,7 @@ class WatchQuery(models.Model):
 
 
 class DailyRun(models.Model):
-    """Lượt hằng ngày: mỗi ngày (giờ Việt Nam) tối đa một lượt, 5 bước, lưu tiến độ để làm tiếp."""
+    """Lượt hằng ngày: mỗi ngày (giờ Việt Nam) tối đa một lượt, 6 bước, lưu tiến độ để làm tiếp."""
 
     class Status(models.TextChoices):
         RUNNING = "running", "Đang quét"
@@ -35,10 +35,10 @@ class DailyRun(models.Model):
         FAILED = "failed", "Lỗi"
 
     class Step(models.IntegerChoices):
-        """Thứ tự chạy: quét lại → lọc thô → xác minh → lấy hồ sơ chủ → lập báo cáo.
+        """Thứ tự chạy: quét lại → lọc thô → xác minh → lấy hồ sơ chủ → phân loại → lập báo cáo.
 
-        `OWNERS` mang số 5 dù chạy trước `REPORT`: lượt cũ đã lập báo cáo lưu `step=4`. Code chỉ so
-        bằng, không so lớn nhỏ giữa các bước.
+        `OWNERS` (5) và `CLASSIFY` (6) chạy trước `REPORT` (4): lượt cũ đã lập báo cáo lưu `step=4`.
+        Code chỉ so bằng, không so lớn nhỏ giữa các bước.
         """
 
         RESCAN = 1, "Quét lại danh sách theo dõi"
@@ -46,6 +46,7 @@ class DailyRun(models.Model):
         VERIFY = 3, "Xác minh"
         REPORT = 4, "Lập báo cáo"
         OWNERS = 5, "Lấy hồ sơ chủ repo"
+        CLASSIFY = 6, "Phân loại repo"
 
     class PauseKind(models.TextChoices):
         STOPPED = "stopped", "Người dùng bấm Dừng"
@@ -80,6 +81,7 @@ class DailyRun(models.Model):
     verify_calls_used = models.PositiveIntegerField("Lượt gọi xác minh đã dùng", default=0)
     owner_budget = models.PositiveIntegerField("Ngân sách hồ sơ chủ repo", default=0)
     owner_calls_used = models.PositiveIntegerField("Lượt gọi hồ sơ chủ đã dùng", default=0)
+    ai_calls_used = models.PositiveIntegerField("Lượt gọi AI đã dùng", default=0)
     candidate_count = models.PositiveIntegerField("Số ứng viên", default=0)
     unverified_count = models.PositiveIntegerField("Ứng viên chưa xác minh", default=0)
     insufficient_count = models.PositiveIntegerField("Chưa đủ dữ liệu", default=0)

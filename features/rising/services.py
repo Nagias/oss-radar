@@ -1,8 +1,9 @@
 """Nghiệp vụ của Rising star: lượt quét hằng ngày theo danh sách theo dõi.
 
-Mỗi ngày (giờ Việt Nam) có tối đa một lượt, gồm 5 bước: quét lại danh sách theo dõi → lọc thô →
-xác minh → lấy hồ sơ chủ của rising star (F-006) → lập báo cáo. Bước đang làm lưu trong CSDL: bị
-gián đoạn thì lần sau làm tiếp từ bước dở.
+Mỗi ngày (giờ Việt Nam) có tối đa một lượt, gồm 6 bước: quét lại danh sách theo dõi → lọc thô →
+xác minh → lấy hồ sơ chủ của rising star (F-006) → phân loại repo của lượt bằng AI (F-010) →
+lập báo cáo. Việc định kỳ `classify_backlog_if_due` phân loại dần phần còn lại của kho. Bước đang
+làm lưu trong CSDL: bị gián đoạn thì lần sau làm tiếp từ bước dở.
 Lượt tự bắt đầu sau 7:00 (`run_daily_if_due`, việc định kỳ của bộ nhịp), hoặc khi bấm "Chạy ngay" /
 lệnh `daily` (`prepare_daily_run` rồi `execute_daily_run`).
 
@@ -38,6 +39,7 @@ from features.rising import growth
 from features.rising.models import DailyRun, DailyRunScan, RisingCheck, WatchQuery
 from features.scoring import services as scoring
 from features.scoring.services import REVIEW_FROM, GrowthFacts, Score
+from features.taxonomy import services as taxonomy
 from integrations.github.client import GitHubClient, get_github_client
 from integrations.github.errors import (
     GitHubAuthError,
@@ -54,6 +56,8 @@ from integrations.github.pacing import (
     CallBudgetExhaustedError,
 )
 from integrations.github.schemas import StarHistory
+from integrations.llm.client import get_llm_client, llm_configured
+from integrations.llm.errors import LlmError
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +77,11 @@ VERIFY_BUDGET_ANONYMOUS = 50
 # /giờ) dùng chung với bước xác minh, nên chỉ lấy ít.
 OWNER_BUDGET_WITH_TOKEN = 100
 OWNER_BUDGET_ANONYMOUS = 10
+# Phân loại bằng AI (F-010): trong lượt chỉ repo của lượt (rising trước) để báo cáo không ra
+# muộn; phần còn lại của kho do việc định kỳ phân loại dần, mỗi nhịp tối đa 10 lượt gọi.
+DAILY_RUN_CLASSIFY_CALLS = 5
+BACKLOG_CALLS_PER_TICK = 10
+BACKLOG_PAUSE_AFTER_ERROR = timedelta(minutes=30)
 # Ảnh chụp star và danh sách repo của lần quét hằng ngày chỉ giữ chừng này ngày (thiết kế mục 8):
 # ảnh chụp chỉ làm radar cho 7 tới 30 ngày, lịch sử dài hạn đã có ở GitHub.
 RETENTION_DAYS = 35
@@ -109,6 +118,10 @@ OWNERS_BLOCKED_NOTE = (
     "Lấy hồ sơ chủ repo bị ngắt ({detail}) — {count} chủ repo chưa có hồ sơ, lượt sau lấy tiếp "
     "(điểm nghi star giả của repo đó chưa tính phần hồ sơ chủ)."
 )
+CLASSIFY_BLOCKED_NOTE = (
+    "Phân loại repo bị ngắt ({detail}) — {count} repo chưa có nhãn, app phân loại dần sau."
+)
+_CLASSIFY_BUSY = "đang có lần phân loại khác"
 _OWNERS_STOPPED = "bạn bấm Dừng"
 _OWNERS_BLOCKED = "GitHub hoặc mạng đang chặn"
 _OWNERS_AUTH = "GitHub từ chối token — kiểm tra lại GITHUB_TOKEN trong .env"
@@ -390,8 +403,12 @@ class _DailyRunner:
             if not self._verify():
                 return
             run = self._load()
-        if run.step == DailyRun.Step.OWNERS and not self._owners():
-            return
+        if run.step == DailyRun.Step.OWNERS:
+            if not self._owners():
+                return
+            run = self._load()
+        if run.step == DailyRun.Step.CLASSIFY:
+            self._classify()
         self._report()
 
     # --- Bước 1: quét lại danh sách theo dõi -------------------------------------------------
@@ -761,7 +778,7 @@ class _DailyRunner:
         pending = scoring.owners_to_fetch(logins, now=timezone.now())
         if pending:
             self._fetch_owners(run, pending)
-        self._check_in(step=DailyRun.Step.REPORT)
+        self._check_in(step=DailyRun.Step.CLASSIFY)
         return True
 
     def _fetch_owners(self, run: DailyRun, pending: list[str]) -> None:
@@ -814,12 +831,65 @@ class _DailyRunner:
         left = len(scoring.owners_to_fetch(pending, now=timezone.now()))
         self._add_problem(OWNERS_BLOCKED_NOTE.format(count=left, detail=detail))
 
+    # --- Bước 5: phân loại repo của lượt bằng AI (F-010) ---------------------------------------
+
+    def _classify(self) -> None:
+        """Gắn nhãn cho repo của lượt (rising star trước). Chưa có khoá AI thì bỏ qua.
+
+        Chỉ làm giàu dữ liệu (nguyên tắc 8): hỏng gì (9router tắt, khoá sai, bấm Dừng, đang có lần
+        phân loại khác) cũng ghi chú rồi đi tiếp lập báo cáo. Hết ngân sách không phải lỗi: phần còn
+        lại do việc định kỳ phân loại dần.
+        """
+        self._check_in()
+        if llm_configured():
+            self._classify_repos()
+        self._check_in(step=DailyRun.Step.REPORT)
+
+    def _classify_repos(self) -> None:
+        in_run = Repository.objects.filter(rising_checks__daily_run_id=self.run_id)
+        repos = taxonomy.repositories_needing_labels(among=in_run)
+        if not repos:
+            return
+        order = list(
+            RisingCheck.objects.filter(daily_run_id=self.run_id)
+            .order_by("-is_rising", "-gain_7d", "pk")
+            .values_list("repository_id", flat=True)
+        )
+        rank = {repository_id: index for index, repository_id in enumerate(order)}
+        repos.sort(key=lambda repo: rank.get(repo.pk, len(rank)))
+        try:
+            classify_run = taxonomy.start_classify_run(taxonomy.Origin.DAILY)
+        except taxonomy.ClassifyBusyError:
+            self._add_problem(CLASSIFY_BLOCKED_NOTE.format(detail=_CLASSIFY_BUSY, count=len(repos)))
+            return
+        error = ""
+        budget = CallBudget(DAILY_RUN_CLASSIFY_CALLS)
+        try:
+            with get_llm_client(sleep=_HeartbeatSleep(self._beat_or_stop), budget=budget) as llm:
+                taxonomy.classify(classify_run, repos, llm=llm, before_each=self._beat_or_stop)
+        except CallBudgetExhaustedError:
+            logger.info(
+                "Lượt hằng ngày #%s: hết lượt phân loại trong lượt — phân loại dần sau", self.run_id
+            )
+        except _DailyStopRequestedError:
+            error = _OWNERS_STOPPED
+        except LlmError as exc:
+            logger.warning("Lượt hằng ngày #%s: phân loại bằng AI hỏng: %r", self.run_id, exc)
+            error = str(exc)
+        finally:
+            taxonomy.finish_classify_run(classify_run, error=error)
+            # Ghi cả khi lỗi; không ném lỗi ở đây để không che lỗi gốc.
+            self._owned().update(ai_calls_used=F("ai_calls_used") + classify_run.calls_used)
+        if error:
+            left = len(taxonomy.repositories_needing_labels(among=in_run))
+            self._add_problem(CLASSIFY_BLOCKED_NOTE.format(detail=error, count=left))
+
     def _beat_or_stop(self) -> None:
         """Ghi nhịp sống ở bước xác minh; người dùng đã bấm Dừng thì thôi, kể cả đang chờ GitHub."""
         if self._check_in().stop_requested:
             raise _DailyStopRequestedError
 
-    # --- Bước 5: lập báo cáo, dọn dữ liệu cũ -------------------------------------------------
+    # --- Bước 6: lập báo cáo, dọn dữ liệu cũ -------------------------------------------------
 
     def _report(self) -> None:
         """Ghi số rising / chưa xác minh, dọn dữ liệu quá hạn giữ, rồi kết thúc lượt.
@@ -1032,6 +1102,55 @@ def _summary(problems: list[str]) -> str:
 
 def _verify_budget() -> int:
     return VERIFY_BUDGET_WITH_TOKEN if settings.GITHUB_TOKEN else VERIFY_BUDGET_ANONYMOUS
+
+
+def classify_backlog_if_due(*, now: datetime | None = None) -> int:
+    """Việc định kỳ: phân loại dần phần kho chưa có nhãn. Trả số lượt gọi AI đã dùng ở nhịp này.
+
+    Chỉ chạy khi: đã có khoá AI, lượt hằng ngày hôm nay đã xong (không tranh luồng nền với lượt),
+    chưa dùng hết `LLM_BACKLOG_CALLS_PER_DAY` lượt hôm nay, và lần trước không vừa lỗi (nghỉ 30
+    phút — không gọi dồn khi 9router tắt hay khoá sai). Mỗi nhịp tối đa `BACKLOG_CALLS_PER_TICK`
+    lượt để luồng nền không bị giữ lâu.
+    """
+    if not llm_configured():
+        return 0
+    moment = now if now is not None else timezone.now()
+    today = timezone.localdate(moment)
+    run = DailyRun.objects.filter(day=today).first()
+    if run is None or run.status not in (
+        DailyRun.Status.SUCCEEDED,
+        DailyRun.Status.SUCCEEDED_PARTIAL,
+    ):
+        return 0
+    left = settings.LLM_BACKLOG_CALLS_PER_DAY - taxonomy.ai_calls_on(
+        today, origin=taxonomy.Origin.BACKLOG
+    )
+    if left <= 0:
+        return 0
+    failed_at = taxonomy.last_failure_at(taxonomy.Origin.BACKLOG)
+    if failed_at is not None and failed_at > moment - BACKLOG_PAUSE_AFTER_ERROR:
+        return 0
+    repos = taxonomy.repositories_needing_labels()
+    if not repos:
+        return 0
+    try:
+        classify_run = taxonomy.start_classify_run(taxonomy.Origin.BACKLOG)
+    except taxonomy.ClassifyBusyError:
+        return 0
+    background.relabel("Phân loại dần kho repo bằng AI")
+    calls = min(BACKLOG_CALLS_PER_TICK, left)
+    error = ""
+    try:
+        with get_llm_client(budget=CallBudget(calls)) as llm:
+            taxonomy.classify(classify_run, repos[: calls * taxonomy.BATCH_SIZE], llm=llm)
+    except CallBudgetExhaustedError:
+        logger.info("Phân loại dần: hết %s lượt của nhịp này", calls)
+    except LlmError as exc:
+        logger.warning("Phân loại dần kho bị ngắt, nghỉ 30 phút: %r", exc)
+        error = str(exc)
+    finally:
+        taxonomy.finish_classify_run(classify_run, error=error)
+    return classify_run.calls_used
 
 
 def _owner_budget() -> int:
@@ -1375,7 +1494,12 @@ def daily_estimate() -> DailyEstimate:
     latest = _reported_runs().order_by("-day").first()
     if latest is None:
         return DailyEstimate(None, None, None, has_token, seconds)
-    calls = latest.search_calls_used + latest.verify_calls_used + latest.owner_calls_used
+    calls = (
+        latest.search_calls_used
+        + latest.verify_calls_used
+        + latest.owner_calls_used
+        + latest.ai_calls_used
+    )
     # Làm tròn giây trước khi chia: 800 lượt nhân 2,1 giây ra 1680,0000000000002 trong số thực.
     minutes = math.ceil(round(calls * seconds) / 60)
     return DailyEstimate(calls, minutes, latest.day, has_token, seconds)
@@ -1419,6 +1543,9 @@ def _running_headline(run: DailyRun) -> str:
             else ""
         )
         return f"Đang chạy: lấy hồ sơ chủ repo của rising star{used}."
+    if run.step == DailyRun.Step.CLASSIFY:
+        used = f" — đã dùng {run.ai_calls_used} lượt gọi" if run.ai_calls_used else ""
+        return f"Đang chạy: phân loại repo của lượt bằng AI{used}."
     return "Đang chạy: lập báo cáo và dọn dữ liệu cũ."
 
 

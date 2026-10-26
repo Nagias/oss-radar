@@ -145,6 +145,7 @@ LLM_BACKLOG_CALLS_PER_DAY = 150
 SCHEDULED_JOBS: list[str] = [
     "features.discovery.services.resume_interrupted_scan",
     "features.rising.services.run_daily_if_due",
+    "features.rising.services.classify_backlog_if_due",
 ]
 
 
