@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "features.discovery",
     "features.rising",
     "features.scoring",
+    "features.taxonomy",
 ]
 
 MIDDLEWARE = [
