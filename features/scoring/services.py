@@ -10,7 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from django.db.models import QuerySet
+from django.db.models import OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
 from features.catalog import services as catalog
@@ -98,6 +98,23 @@ def score_repositories(
             ),
         )
     return scores
+
+
+def with_cached_scores(repos: QuerySet[Repository]) -> QuerySet[Repository]:
+    """Thêm `cached_quality`, `cached_level` (điểm lưu sẵn, QĐ-19) để lọc / sắp trong CSDL.
+
+    Repo chưa có điểm lưu sẵn (mới vào kho) có hai giá trị trống: không bị ẩn, xếp cuối khi sắp.
+    """
+    cache = ScoreCache.objects.filter(repository=OuterRef("pk"))
+    return repos.annotate(
+        cached_quality=Subquery(cache.values("quality")[:1]),
+        cached_level=Subquery(cache.values("suspicion_level")[:1]),
+    )
+
+
+def hide_high_suspicion(repos: QuerySet[Repository]) -> QuerySet[Repository]:
+    """Bỏ repo "Nghi cao" theo điểm lưu sẵn (gọi sau `with_cached_scores`). Chưa có điểm thì giữ."""
+    return repos.filter(Q(cached_level__isnull=True) | ~Q(cached_level=rules.SuspicionLevel.HIGH))
 
 
 def refresh_scores(repos: QuerySet[Repository] | None = None) -> int:

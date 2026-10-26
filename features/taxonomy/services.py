@@ -15,7 +15,8 @@ from django.db.models import Count, F, Q, QuerySet, Sum
 from django.utils import timezone
 
 from features.catalog.models import Repository
-from features.taxonomy.categories import Category, load_taxonomy
+from features.taxonomy.categories import Category
+from features.taxonomy.categories import load_taxonomy as load_taxonomy
 from features.taxonomy.models import ClassifyRun, RepoClassification, RepoLabel
 from features.taxonomy.prompt import (
     PROMPT_VERSION,
@@ -212,6 +213,21 @@ def labels_for(repository_ids: Iterable[int]) -> dict[int, RepoLabels]:
             reason=reason,
         )
     return result
+
+
+def repository_ids_with_labels(axis: str, codes: Sequence[str]) -> QuerySet[RepoLabel, int]:
+    """Truy vấn con: id repo có ÍT NHẤT MỘT nhãn trong `codes` ở lớp `axis` (HOẶC trong một lớp).
+
+    Dùng làm `pk__in=` — không truyền danh sách id dài vào câu lệnh.
+    """
+    return RepoLabel.objects.filter(axis=axis, code__in=list(codes)).values_list(
+        "repository_id", flat=True
+    )
+
+
+def classified_repository_ids() -> QuerySet[RepoClassification, int]:
+    """Truy vấn con: id repo đã có nhãn (để lọc "Chưa phân loại")."""
+    return RepoClassification.objects.values_list("repository_id", flat=True)
 
 
 def label_counts() -> dict[str, int]:

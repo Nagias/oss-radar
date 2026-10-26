@@ -1292,6 +1292,28 @@ def daily_report(
     )
 
 
+def latest_gain_subquery() -> Subquery:
+    """Biểu thức cho `annotate`: star tăng 7 ngày (lịch sử chính thức) ở lần xét gần nhất của repo.
+
+    Repo chưa từng được xác minh thì trống.
+    """
+    return Subquery(
+        RisingCheck.objects.filter(repository=OuterRef("pk"), source=RisingCheck.Source.HISTORY)
+        .order_by("-daily_run__day", "-pk")
+        .values("gain_7d")[:1]
+    )
+
+
+def latest_rising_repository_ids() -> QuerySet[RisingCheck, int]:
+    """Truy vấn con: id repo là rising star ở báo cáo mới nhất (rỗng khi chưa có báo cáo)."""
+    run = latest_report_run()
+    if run is None:
+        return RisingCheck.objects.none().values_list("repository_id", flat=True)
+    return RisingCheck.objects.filter(daily_run=run, is_rising=True).values_list(
+        "repository_id", flat=True
+    )
+
+
 def latest_report_run() -> DailyRun | None:
     """Lượt mới nhất đã lập xong báo cáo (trang Rising star mở báo cáo này mặc định)."""
     return _reported_runs().order_by("-day").first()
