@@ -10,6 +10,9 @@ from features.rising.models import WatchQuery
 
 pytestmark = pytest.mark.django_db
 
+# Ô lọc nhóm (F-010) để trống.
+NO_GROUPS: dict[str, list[str]] = {"audience": [], "aspects": []}
+
 VALID: dict[str, Any] = {
     "label": "Video AI",
     "query": "topic:ai-video",
@@ -104,7 +107,7 @@ def test_report_filter_defaults_when_empty() -> None:
     form = ReportFilterForm(data={"max_stars": "", "min_gain": "", "day": ""})
 
     assert form.is_valid(), form.errors
-    expected = {"max_stars": 1000, "min_gain": 50, "day": None, "sort": "potential"}
+    expected = {"max_stars": 1000, "min_gain": 50, "day": None, "sort": "potential", **NO_GROUPS}
     assert form.cleaned_data == expected
 
 
@@ -117,6 +120,7 @@ def test_report_filter_reads_values_including_zero_gain() -> None:
         "min_gain": 0,
         "day": date(2026, 10, 21),
         "sort": "potential",
+        **NO_GROUPS,
     }
 
 

@@ -11,6 +11,7 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
+from features.catalog.models import Repository
 from features.discovery import services
 from features.discovery.models import ScanRun
 from features.discovery.tests.conftest import (
@@ -19,6 +20,7 @@ from features.discovery.tests.conftest import (
     SEARCH_URL,
     run_scan_now,
 )
+from tests.factories import label_repository
 from tests.fakes import FakeGitHubSearch, make_search_items
 
 pytestmark = pytest.mark.django_db
@@ -472,3 +474,14 @@ def test_scored_results_split_hidden_and_keep_limit(use_fake: UseFake) -> None:
     everything = services.scored_results(scan, limit=500)
     assert [row.result.repository.full_name for row in everything.hidden] == ["gia-lap/repo-1"]
     assert everything.hidden[0].scores.suspicion.points == 65
+
+
+def test_scan_detail_shows_labels_and_links_to_full_list(client: Client, use_fake: UseFake) -> None:
+    use_fake(scored_items())
+    scan = run_scan_now()
+    label_repository(Repository.objects.get(github_id=3), audience=("creator",), aspects=("video",))
+
+    page = client.get(detail_url(scan)).text
+
+    assert "Video &amp; làm phim AI" in page
+    assert f'href="/repos/?scan={scan.pk}"' in page

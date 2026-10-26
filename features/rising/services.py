@@ -20,7 +20,7 @@ import logging
 import math
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from datetime import time as clock_time
@@ -1200,6 +1200,7 @@ class RisingRow:
     sparkline: str
     reason: str
     scores: scoring.RepoScores
+    labels: taxonomy.RepoLabels | None  # None = chưa phân loại
 
 
 @dataclass(frozen=True, slots=True)
@@ -1230,6 +1231,8 @@ def daily_report(
     max_stars: int = growth.RISING_MAX_STARS,
     min_gain: int = growth.RISING_MIN_GAIN_7D,
     sort: str = SORT_POTENTIAL,
+    audience: Sequence[str] = (),
+    aspects: Sequence[str] = (),
 ) -> DailyReport:
     """Báo cáo của một lượt, lọc theo ngưỡng người dùng chọn. Chỉ đọc dữ liệu đã lưu, không gọi API.
 
@@ -1240,6 +1243,8 @@ def daily_report(
     - "Mới vào danh sách": repo không là rising star trong báo cáo liền trước.
     - Mục chưa xác minh: dòng còn là ước lượng (hết ngân sách xác minh, hoặc GitHub trả lỗi).
     - Điểm tính lúc xem (không lưu), từ số liệu repo và hồ sơ chủ đang có trong kho.
+    - `audience` / `aspects` (F-010): chỉ giữ repo có ít nhất một nhãn đã chọn ở mỗi lớp được chọn
+      (HOẶC trong một lớp, VÀ giữa hai lớp) — như trang Kho repo.
     """
     checks = RisingCheck.objects.filter(daily_run=run).select_related("repository")
     all_verified = list(checks.filter(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk"))
@@ -1249,8 +1254,13 @@ def daily_report(
         [check.repository for check in every],
         growth={check.repository_id: _growth_facts(check) for check in every},
     )
+    labels = taxonomy.labels_for(check.repository_id for check in all_verified)
     verified = [
-        check for check in all_verified if check.stars < max_stars and check.gain_7d >= min_gain
+        check
+        for check in all_verified
+        if check.stars < max_stars
+        and check.gain_7d >= min_gain
+        and _has_labels(labels.get(check.repository_id), audience=audience, aspects=aspects)
     ]
     # DEBT(D-009): "Mới vào danh sách" so với ngưỡng mặc định của lượt trước, không theo bộ lọc.
     previous = _reported_runs().filter(day__lt=run.day).order_by("-day").first()
@@ -1267,6 +1277,7 @@ def daily_report(
             max_stars=max_stars,
             min_gain=min_gain,
             scores=scores[check.repository_id],
+            labels=labels.get(check.repository_id),
         )
         for check in verified
     ]
@@ -1337,6 +1348,18 @@ def _reported_runs() -> QuerySet[DailyRun]:
     )
 
 
+def _has_labels(
+    labels: taxonomy.RepoLabels | None, *, audience: Sequence[str], aspects: Sequence[str]
+) -> bool:
+    if not audience and not aspects:
+        return True
+    if labels is None:
+        return False
+    audience_ok = not audience or any(c.code in audience for c in labels.audience)
+    aspects_ok = not aspects or any(c.code in aspects for c in labels.aspects)
+    return audience_ok and aspects_ok
+
+
 def _growth_facts(check: RisingCheck) -> GrowthFacts:
     """Số tăng của dòng xét để chấm Tiềm năng và tín hiệu "dồn một ngày"."""
     verified = check.source == RisingCheck.Source.HISTORY
@@ -1367,6 +1390,7 @@ def _rising_row(
     max_stars: int,
     min_gain: int,
     scores: scoring.RepoScores,
+    labels: taxonomy.RepoLabels | None,
 ) -> RisingRow:
     repository = check.repository
     # Tuổi tính tới ngày của lượt (không phải hôm nay): xem lại báo cáo cũ vẫn khớp cờ
@@ -1382,6 +1406,7 @@ def _rising_row(
         sparkline=growth.sparkline_points(check.series),
         reason=_reason(check, max_stars=max_stars, min_gain=min_gain),
         scores=scores,
+        labels=labels,
     )
 
 
