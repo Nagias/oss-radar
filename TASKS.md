@@ -85,3 +85,11 @@
 - [x] Agent độc lập rà soát cả nhánh: 0 nghiêm trọng, 1 quan trọng (kẹt ở bước hồ sơ chủ thì mất báo cáo
       của ngày — đã sửa: bước này không còn chặn báo cáo), 7 nhỏ (sửa 4; còn lại ghi trong báo cáo)
 - [ ] Chủ dự án duyệt → push, PR, CI xanh, squash-merge
+
+## F-010 Phân loại repo bằng AI, trang Kho repo (2026-10-27, nhánh `feat/f010-phan-loai-duyet-kho`)
+
+- [x] Hỏi đáp với chủ dự án; thiết kế `docs/designs/2026-10-27-f010-phan-loai-duyet-kho.md` — đọc thử với vai
+      người làm theo, chủ dự án duyệt (2026-10-27); đo thật 9router
+- [x] Kế hoạch `docs/plans/2026-10-27-f010-phan-loai-duyet-kho.md` (9 task)
+- [ ] Code theo TDD (task 1–8)
+- [ ] Sổ sách, `poe check`, chạy thật (phân loại cả kho), rà soát độc lập, PR
