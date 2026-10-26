@@ -8,13 +8,18 @@ from django.utils import timezone
 
 from features.catalog.models import Repository
 from features.taxonomy import services
-from features.taxonomy.models import ClassifyRun, RepoClassification, RepoLabel
+from features.taxonomy.models import (
+    ClassifyMiss,
+    ClassifyRun,
+    RepoClassification,
+    RepoLabel,
+)
 from features.taxonomy.prompt import PROMPT_VERSION
 from features.taxonomy.tests.conftest import make_repos
 from integrations.github.pacing import CallBudget, CallBudgetExhaustedError
 from integrations.llm.client import get_llm_client
 from integrations.llm.errors import LlmAuthError
-from tests.fakes import FakeLlm
+from tests.fakes import FakeLlm, FakeTime
 
 pytestmark = pytest.mark.django_db
 
@@ -98,14 +103,14 @@ def test_missing_repo_in_reply_stays_unlabelled(fake_llm: FakeLlm) -> None:
     assert services.repositories_needing_labels() == [repos[1]]
 
 
-def test_garbled_batch_is_noted_and_next_batch_still_runs(fake_llm: FakeLlm) -> None:
+def test_garbled_batch_is_split_and_retried(fake_llm: FakeLlm) -> None:
     make_repos(50)
-    fake_llm.garbled = {1}
+    fake_llm.garbled = {1}  # lô 40 đầu tiên AI trả lời hỏng (ngẫu nhiên, ~2% lô)
 
     run, outcome = classify_all()
 
-    assert outcome.calls == 2
-    assert (outcome.classified, outcome.missing) == (10, 40)
+    assert [len(ids) for ids in fake_llm.calls] == [40, 20, 20, 10]
+    assert (outcome.classified, outcome.missing, outcome.calls) == (50, 0, 4)
     assert "không phải JSON" in run.error
 
 
@@ -229,3 +234,98 @@ def test_only_unlabelled_or_reseen_repos_are_examined(
         needed = services.repositories_needing_labels()
 
     assert needed == [repos[1]]
+
+
+# --- Lô bị từ chối, repo AI không phân loại được, nhịp sống lúc chờ (rà soát F-010) -------------
+
+
+def test_refused_batch_is_split_until_the_bad_repo_is_isolated(
+    fake_llm: FakeLlm, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(services, "BATCH_SIZE", 4)
+    repos = make_repos(4)
+    bad = repos[3].github_id
+    fake_llm.fail_when_ids = lambda ids: 400 if bad in ids else None  # bộ lọc an toàn chặn
+
+    run, outcome = classify_all()
+
+    assert fake_llm.calls == [
+        [r.github_id for r in repos],
+        [repos[0].github_id, repos[1].github_id],
+        [repos[2].github_id, bad],
+        [repos[2].github_id],
+        [bad],
+    ]
+    assert (outcome.classified, outcome.missing, outcome.calls) == (3, 1, 5)
+    assert run.status == Status.DONE
+    assert "nội dung bị chặn" in run.error
+    miss = ClassifyMiss.objects.get()
+    assert (miss.repository_id, miss.misses) == (repos[3].pk, 1)
+
+
+def test_repo_missed_twice_rests_seven_days(fake_llm: FakeLlm) -> None:
+    repos = make_repos(3)
+    fake_llm.skip_ids = {repos[1].github_id}
+    classify_all()
+    classify_all()
+
+    assert services.repositories_needing_labels() == []  # nghỉ, không đốt lượt mỗi nhịp
+    assert [r.pk for r in services.repositories_needing_labels(reclassify=True)] == [repos[1].pk]
+    ClassifyMiss.objects.update(last_missed_at=timezone.now() - timedelta(days=8))
+    assert services.repositories_needing_labels() == [repos[1]]
+
+
+def test_success_clears_previous_misses(fake_llm: FakeLlm) -> None:
+    [repo] = make_repos(1)
+    fake_llm.skip_ids = {repo.github_id}
+    classify_all()
+    fake_llm.skip_ids = set()
+
+    classify_all()
+
+    assert ClassifyMiss.objects.count() == 0
+    assert RepoClassification.objects.filter(repository=repo).exists()
+
+
+def test_reseen_but_unchanged_repo_is_checked_once(fake_llm: FakeLlm) -> None:
+    [repo] = make_repos(1)
+    classify_all()
+    an_hour_ago = timezone.now() - timedelta(hours=1)
+    RepoClassification.objects.update(checked_at=an_hour_ago)
+    # Quét lại nửa giờ trước, mô tả không đổi.
+    Repository.objects.filter(pk=repo.pk).update(last_seen_at=an_hour_ago + timedelta(minutes=30))
+
+    assert services.repositories_needing_labels() == []
+
+    stored = RepoClassification.objects.get(repository=repo)
+    assert stored.checked_at is not None
+    repo.refresh_from_db()
+    assert stored.checked_at >= repo.last_seen_at  # lần sau không phải kiểm lại
+
+
+def test_heartbeat_sleep_beats_run_while_waiting(fake_llm: FakeLlm, fake_time: FakeTime) -> None:
+    run = services.start_classify_run(Origin.BACKLOG)
+    ClassifyRun.objects.filter(pk=run.pk).update(heartbeat_at=timezone.now() - timedelta(minutes=9))
+    beats: list[int] = []
+
+    sleep = services.heartbeat_sleep(run, also=lambda: beats.append(1))
+    sleep(25)
+
+    assert fake_time.sleeps == [10, 10, 5]
+    assert len(beats) == 3
+    run.refresh_from_db()
+    assert run.heartbeat_at > timezone.now() - timedelta(minutes=1)
+
+
+def test_classify_catalog_retries_missed_once_and_reports(fake_llm: FakeLlm) -> None:
+    make_repos(50)
+    fake_llm.garbled = {1}  # lượt đầu AI trả lời hỏng → chia đôi lô 40 → thử lại ngay
+    progress: list[tuple[int, int]] = []
+
+    report = services.classify_catalog(budget=100, on_progress=lambda d, t: progress.append((d, t)))
+
+    assert report.needed == 50
+    assert report.run is not None
+    assert report.run.classified_count == 50
+    assert report.stopped == ""
+    assert progress[-1] == (50, 50)

@@ -220,7 +220,7 @@ class FakeGitHubUsers:
 
 # --- 9router giả (F-010) ----------------------------------------------------------------------
 
-_PROMPT_ID = re.compile(r"^id=(\d+) \|", re.MULTILINE)
+_PROMPT_ID = re.compile(r'^\{"id": (\d+),', re.MULTILINE)
 LLM_CHAT_URL = "http://localhost:20128/v1/chat/completions"
 DEFAULT_LABELS: tuple[list[str], list[str]] = (["developer"], ["devtools"])
 
@@ -237,6 +237,8 @@ class FakeLlm:
         self.labels = labels or (lambda _id: DEFAULT_LABELS)
         self.calls: list[list[int]] = []
         self.fail_with: Callable[[int], int | None] | None = None
+        # Lỗi theo nội dung lô (vd bộ lọc an toàn chặn lô có repo `id`): trả mã HTTP.
+        self.fail_when_ids: Callable[[list[int]], int | None] | None = None
         self.garbled: set[int] = set()
         self.skip_ids: set[int] = set()
         # Gọi mỗi khi nhận một lượt — để test giả lập việc xảy ra giữa chừng.
@@ -252,6 +254,8 @@ class FakeLlm:
             self.on_call(call_number)
         if self.fail_with is not None and (status := self.fail_with(call_number)) is not None:
             return httpx.Response(status, json={"error": {"message": "lỗi giả lập"}})
+        if self.fail_when_ids is not None and (status := self.fail_when_ids(ids)) is not None:
+            return httpx.Response(status, json={"error": {"message": "nội dung bị chặn"}})
         if call_number in self.garbled:
             content = "Xin lỗi, tôi không chắc."
         else:

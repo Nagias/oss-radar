@@ -3,6 +3,8 @@
 uv run python manage.py classify                    # mọi repo chưa có nhãn (tối đa 1.000 lượt gọi)
 uv run python manage.py classify --budget 50        # chỉ tiêu tối đa 50 lượt gọi AI
 uv run python manage.py classify --reclassify       # gắn lại nhãn do prompt / bộ nhóm cũ
+
+Lớp mỏng: kiểm tham số → `taxonomy.services.classify_catalog` → in tiến độ và tổng kết.
 """
 
 import time
@@ -12,9 +14,7 @@ from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.utils import formats
 
 from features.taxonomy import services
-from features.taxonomy.models import ClassifyRun
-from integrations.github.pacing import CallBudget, CallBudgetExhaustedError
-from integrations.llm.client import get_llm_client, llm_configured
+from integrations.llm.client import llm_configured
 from integrations.llm.errors import LlmError
 
 DEFAULT_BUDGET = 1000  # cả kho ~32.000 repo ≈ 810 lượt (40 repo mỗi lượt)
@@ -39,7 +39,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--reclassify",
             action="store_true",
-            help="Gắn lại cả nhãn do prompt / bộ nhóm phiên bản cũ gắn.",
+            help="Gắn lại cả nhãn do prompt / bộ nhóm cũ, và thử lại repo đang nghỉ vì AI bỏ sót.",
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -49,67 +49,41 @@ class Command(BaseCommand):
                 "vào."
             )
         budget: int = options["budget"]
-        if budget < 1:
-            raise CommandError("--budget phải từ 1 trở lên.")
-        repos = services.repositories_needing_labels(reclassify=options["reclassify"])
-        if options["limit"] is not None:
-            repos = repos[: options["limit"]]
-        self.stdout.write(f"Cần phân loại: {_n(len(repos))} repo.")
-        if not repos:
-            return
+        limit: int | None = options["limit"]
+        if budget < 1 or (limit is not None and limit < 1):
+            raise CommandError("--budget và --limit phải từ 1 trở lên.")
+        started = time.monotonic()
         try:
-            run = services.start_classify_run(ClassifyRun.Origin.COMMAND)
+            report = services.classify_catalog(
+                budget=budget,
+                limit=limit,
+                reclassify=options["reclassify"],
+                on_progress=self._progress,
+                on_retry=lambda count: self.stdout.write(f"Thử lại {_n(count)} repo AI bỏ sót."),
+            )
         except services.ClassifyBusyError as exc:
             raise CommandError(f"{exc} Chờ lần đó xong rồi chạy lại.") from exc
-        started = time.monotonic()
-        error = ""
-        try:
-            with get_llm_client(budget=CallBudget(budget)) as llm:
-                outcome = services.classify(
-                    run,
-                    repos,
-                    llm=llm,
-                    after_batch=lambda done: self._progress(run, done, len(repos)),
-                )
-                if outcome.missed_ids:
-                    # Đo thật: ~2% lô AI trả lời hỏng một cách ngẫu nhiên → thử lại một lần ngay.
-                    missed = set(outcome.missed_ids)
-                    retry = [repo for repo in repos if repo.pk in missed]
-                    self.stdout.write(f"Thử lại {_n(len(retry))} repo AI bỏ sót.")
-                    services.classify(
-                        run,
-                        retry,
-                        llm=llm,
-                        after_batch=lambda done: self._progress(run, done, len(retry)),
-                    )
-        except CallBudgetExhaustedError:
-            error = f"Hết ngân sách {budget} lượt gọi."
-            self.stdout.write(error)
         except LlmError as exc:
-            services.finish_classify_run(run, error=str(exc))
             raise CommandError(f"Dừng phân loại: {exc}") from exc
         except KeyboardInterrupt:
-            services.finish_classify_run(run, error="Dừng tay (Ctrl+C).")
             self.stdout.write("Đã dừng (Ctrl+C) — phần đã phân loại vẫn được lưu.")
             raise
-        services.finish_classify_run(run, error=error)
-        self._summary(
-            run, missing=len(repos) - run.classified_count, seconds=time.monotonic() - started
-        )
-
-    def _progress(self, run: ClassifyRun, done: int, total: int) -> None:
-        run.refresh_from_db()
+        self.stdout.write(f"Cần phân loại: {_n(report.needed)} repo.")
+        if report.run is None:
+            return
+        if report.stopped:
+            self.stdout.write(report.stopped)
+        run = report.run
+        missing = max(0, report.needed - run.classified_count)
         self.stdout.write(
-            f"[{done}/{total}] {_n(run.classified_count)} repo có nhãn · {run.calls_used} lượt gọi"
-            f" · {_n(run.prompt_tokens + run.completion_tokens)} token"
-        )
-
-    def _summary(self, run: ClassifyRun, *, missing: int, seconds: float) -> None:
-        self.stdout.write(
-            f"Xong: {_n(run.classified_count)} repo có nhãn, {_n(max(0, missing))} repo AI bỏ sót"
+            f"Xong: {_n(run.classified_count)} repo có nhãn, {_n(missing)} repo AI bỏ sót"
             f" · {run.calls_used} lượt gọi AI · {_n(run.prompt_tokens)} token vào,"
-            f" {_n(run.completion_tokens)} token ra · {seconds / 60:.1f} phút."
+            f" {_n(run.completion_tokens)} token ra · {(time.monotonic() - started) / 60:.1f} phút."
         )
+
+    def _progress(self, done: int, total: int) -> None:
+        self.stdout.write(f"[{done}/{total}]")
+        self.stdout.flush()
 
 
 def _n(value: int) -> str:

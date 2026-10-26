@@ -134,7 +134,9 @@ GITHUB_TIMEOUT_SECONDS = 20.0
 LLM_API_KEY = _env_str("LLM_API_KEY")
 LLM_BASE_URL = _env_str("LLM_BASE_URL", default="http://localhost:20128/v1")
 LLM_MODEL = _env_str("LLM_MODEL", default="ag/gemini-3.8-flash-low")
-LLM_TIMEOUT_SECONDS = 120.0
+# Một lượt HTTP tới 9router không ghi được nhịp sống → phải ngắn hơn hẳn 120 giây (ngưỡng coi lượt
+# hằng ngày là bị gián đoạn). Đo thật: một lượt 40 repo mất ~6 giây.
+LLM_TIMEOUT_SECONDS = 60.0
 # Chưa biết hạn mức của 9router → mặc định an toàn 10 lượt/phút (thiết kế F-010 mục 7).
 LLM_MIN_INTERVAL_SECONDS = 6.0
 # Phân loại dần cả kho: tối đa chừng này lượt gọi AI mỗi ngày (~40 repo mỗi lượt).

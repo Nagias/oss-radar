@@ -18,6 +18,8 @@ class RepoClassification(models.Model):
     taxonomy_version = models.PositiveSmallIntegerField("Phiên bản bộ nhóm")
     fingerprint = models.CharField("Dấu vân tay đầu vào", max_length=64)
     classified_at = models.DateTimeField("Phân loại lúc")
+    # Lần gần nhất đã kiểm dấu vân tay (repo được quét lại sau mốc này thì xét lại mô tả có đổi).
+    checked_at = models.DateTimeField("Kiểm dấu vân tay lúc", null=True, blank=True)
 
     class Meta:
         verbose_name = "phân loại repo"
@@ -50,6 +52,28 @@ class RepoLabel(models.Model):
 
     def __str__(self) -> str:
         return f"{self.repository_id}: {self.axis}={self.code}"
+
+
+class ClassifyMiss(models.Model):
+    """Repo AI chưa phân loại được (bỏ sót, hoặc bị từ chối kể cả khi gửi riêng một mình).
+
+    Gặp từ `MAX_MISSES` lần thì tạm bỏ qua một thời gian: với `temperature=0`, repo đã hỏng thì gần
+    như lần nào cũng hỏng — gọi lại chỉ tốn lượt. Phân loại được thì xoá dòng này.
+    """
+
+    repository = models.OneToOneField(
+        Repository, on_delete=models.CASCADE, related_name="classify_miss"
+    )
+    misses = models.PositiveSmallIntegerField("Số lần AI không phân loại được", default=0)
+    last_missed_at = models.DateTimeField("Lần gần nhất")
+    reason = models.CharField("Lý do gần nhất", max_length=300, blank=True, default="")
+
+    class Meta:
+        verbose_name = "repo AI chưa phân loại được"
+        verbose_name_plural = "repo AI chưa phân loại được"
+
+    def __str__(self) -> str:
+        return f"{self.repository_id}: {self.misses} lần"
 
 
 class ClassifyRun(models.Model):

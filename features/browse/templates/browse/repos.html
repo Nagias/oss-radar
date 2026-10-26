@@ -29,7 +29,10 @@
         <label class="chip-check"><input type="checkbox" name="aspects" value="{{ category.code }}"{% if category.code in filters.aspects %} checked{% endif %}> {{ category.name }} <span class="muted small">{{ count|intcomma }}</span></label>
       {% endfor %}
     </fieldset>
-    <p class="muted small">Chọn nhiều nhóm trong cùng một ô là "hoặc"; chọn ở cả hai ô là "và" — ví dụ (Marketer hoặc Nhà sáng tạo) và Video.</p>
+    <p class="muted small">
+      Chọn nhiều nhóm trong cùng một ô là "hoặc"; chọn ở cả hai ô là "và" — ví dụ (Marketer hoặc Nhà sáng tạo) và Video.
+      Số cạnh mỗi nhóm đếm cả repo đang ẩn vì nghi star giả.
+    </p>
 
     <div class="field-grid compact">
       <div class="field">

@@ -97,11 +97,26 @@ def test_classify_command_ctrl_c_closes_run(fake_llm: FakeLlm) -> None:
 
 
 def test_classify_command_retries_missed_repos_once(fake_llm: FakeLlm) -> None:
-    make_repos(50)
-    fake_llm.garbled = {1}  # lượt đầu AI trả lời hỏng (đo thật: ~2% lô, ngẫu nhiên)
+    repos = make_repos(50)
+    target = repos[0].github_id
+    fake_llm.skip_ids = {target}  # lượt đầu AI bỏ sót một repo (ngẫu nhiên)
+
+    def answer_on_retry(call_number: int) -> None:
+        if call_number == 3:
+            fake_llm.skip_ids.clear()
+
+    fake_llm.on_call = answer_on_retry
 
     text = run_command()
 
-    assert "Thử lại 40 repo AI bỏ sót" in text
+    assert "Thử lại 1 repo AI bỏ sót" in text
     assert RepoClassification.objects.count() == 50
-    assert [len(ids) for ids in fake_llm.calls] == [40, 10, 40]
+    assert [len(ids) for ids in fake_llm.calls] == [40, 10, 1]
+
+
+@pytest.mark.parametrize("args", [("--limit", "-1"), ("--limit", "0"), ("--budget", "0")])
+def test_classify_command_rejects_bad_numbers(fake_llm: FakeLlm, args: tuple[str, str]) -> None:
+    make_repos(2)
+
+    with pytest.raises(CommandError, match="từ 1"):
+        run_command(*args)

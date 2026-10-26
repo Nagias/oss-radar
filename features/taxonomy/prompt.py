@@ -1,9 +1,10 @@
 """Prompt phân loại và kiểm đầu ra của AI — hàm thuần (không CSDL, không mạng).
 
 AI chỉ được chọn nhãn trong bộ nhóm. Câu trả lời của AI là dữ liệu không tin cậy: mã lạ bị bỏ, số
-nhãn bị cắt, repo thiếu coi như chưa phân loại. Mô tả repo do người lạ viết (có thể chứa câu "bỏ qua
-hướng dẫn…"): nó chỉ nằm trong khối dữ liệu của tin nhắn người dùng, và đầu ra chỉ là nhãn trong
-danh sách cố định nên lệnh chèn không làm được gì hơn là gắn sai nhãn cho chính repo đó.
+nhãn bị cắt, repo thiếu hoặc trả sai dạng coi như chưa phân loại. Mô tả repo do người lạ viết (có
+thể chứa câu "bỏ qua hướng dẫn…"): mỗi repo là một dòng JSON trong khối dữ liệu của tin nhắn người
+dùng (mô tả không giả được dòng của repo khác), id trả về hai lần thì bỏ cả hai, và đầu ra chỉ là
+nhãn trong danh sách cố định.
 """
 
 import hashlib
@@ -14,7 +15,7 @@ from dataclasses import dataclass
 
 from features.taxonomy.categories import OTHER, Axis, Taxonomy
 
-PROMPT_VERSION = 1  # tăng khi đổi nội dung prompt (để biết nhãn nào do prompt cũ gắn)
+PROMPT_VERSION = 2  # tăng khi đổi nội dung prompt (để biết nhãn nào do prompt cũ gắn)
 MAX_AUDIENCE = 2
 MAX_ASPECTS = 3
 MAX_DESCRIPTION = 300
@@ -64,31 +65,50 @@ def build_messages(taxonomy: Taxonomy, repos: Sequence[RepoForPrompt]) -> list[d
         "chỉ dùng mã có trong danh sách."
     )
     lines = [
-        f"id={r.id} | {r.full_name} | {r.language or '—'} | topics: {', '.join(r.topics) or '—'}"
-        f" | {_flatten(r.description)[:MAX_DESCRIPTION] or '(không có mô tả)'}"
+        json.dumps(
+            {
+                "id": r.id,
+                "name": r.full_name,
+                "language": r.language,
+                "topics": list(r.topics),
+                "description": _flatten(r.description)[:MAX_DESCRIPTION],
+            },
+            ensure_ascii=False,
+        )
         for r in repos
     ]
-    user = "Dữ liệu các repo cần phân loại (mỗi dòng một repo):\n" + "\n".join(lines)
+    user = "Dữ liệu các repo cần phân loại (mỗi dòng một repo, dạng JSON):\n" + "\n".join(lines)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 def parse_labels(content: str, *, taxonomy: Taxonomy, expected_ids: set[int]) -> dict[int, Labels]:
     """Nhãn hợp lệ theo id repo. Repo AI bỏ sót hoặc trả sai dạng thì vắng mặt (lần sau thử lại)."""
-    entries = _entries(content)
     labels: dict[int, Labels] = {}
-    for entry in entries:
+    duplicated: set[int] = set()
+    for entry in _entries(content):
         if not isinstance(entry, dict):
             continue
         repo_id = entry.get("id")
         if isinstance(repo_id, bool) or not isinstance(repo_id, int) or repo_id not in expected_ids:
             continue
-        audience = _codes(entry.get("audience"), taxonomy, "audience", MAX_AUDIENCE)
+        if repo_id in labels or repo_id in duplicated:
+            # Một id trả hai lần (vd mô tả của repo khác giả dòng của nó): không tin lần nào.
+            duplicated.add(repo_id)
+            labels.pop(repo_id, None)
+            continue
+        if not isinstance(entry.get("aspects"), list):
+            continue  # sai dạng → chưa phân loại, lần sau thử lại
         aspects = _codes(entry.get("aspects"), taxonomy, "aspects", None)
         real = tuple(code for code in aspects if code != OTHER)
-        aspects = real[:MAX_ASPECTS] if real else (OTHER,)
+        if real:
+            aspects = real[:MAX_ASPECTS]
+        elif OTHER in aspects:
+            aspects = (OTHER,)
+        else:
+            continue  # AI không chọn mã hợp lệ nào (kể cả "Khác") → chưa phân loại
         reason = entry.get("reason")
         labels[repo_id] = Labels(
-            audience=audience,
+            audience=_codes(entry.get("audience"), taxonomy, "audience", MAX_AUDIENCE),
             aspects=aspects,
             reason=_flatten(reason)[:MAX_REASON] if isinstance(reason, str) else "",
         )

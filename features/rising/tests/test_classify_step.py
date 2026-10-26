@@ -197,17 +197,18 @@ def test_backlog_waits_for_todays_daily_run(fake_llm: FakeLlm) -> None:
     assert fake_llm.calls == []
 
 
-def test_backlog_classifies_at_most_ten_calls_per_tick(
+def test_backlog_classifies_at_most_three_calls_per_tick(
     fake_llm: FakeLlm, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Mỗi nhịp chỉ giữ luồng nền chừng nửa phút: bấm Quét / Chạy ngay không phải chờ lâu.
     monkeypatch.setattr(taxonomy, "BATCH_SIZE", 2)
     catalog_of(30)
     finished_run_today()
 
     used = services.classify_backlog_if_due()
 
-    assert used == 10
-    assert RepoClassification.objects.count() == 20
+    assert used == 3
+    assert RepoClassification.objects.count() == 6
     run = ClassifyRun.objects.get()
     assert (run.origin, run.status) == (ClassifyRun.Origin.BACKLOG, ClassifyRun.Status.DONE)
 
@@ -216,11 +217,11 @@ def test_backlog_respects_daily_cap(
     fake_llm: FakeLlm, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(taxonomy, "BATCH_SIZE", 1)
-    settings.LLM_BACKLOG_CALLS_PER_DAY = 12
+    settings.LLM_BACKLOG_CALLS_PER_DAY = 5
     catalog_of(30)
     finished_run_today()
 
-    assert services.classify_backlog_if_due() == 10
+    assert services.classify_backlog_if_due() == 3
     assert services.classify_backlog_if_due() == 2
     assert services.classify_backlog_if_due() == 0
 
@@ -285,3 +286,75 @@ def test_estimate_counts_ai_calls_and_step_name() -> None:
 
     assert services.daily_estimate().calls == 800
     assert Step.CLASSIFY.label == "Phân loại repo"
+
+
+# --- Rà soát F-010: không chặn báo cáo, không ghi nhầm "Xong" -----------------------------------
+
+
+def test_ai_call_timeout_is_well_under_the_heartbeat_window(settings: Settings) -> None:
+    from features.discovery.models import LIVE_HEARTBEAT_WINDOW
+
+    # Một lượt HTTP tới 9router không ghi được nhịp sống: phải ngắn hơn hẳn ngưỡng "mất nhịp sống".
+    assert LIVE_HEARTBEAT_WINDOW.total_seconds() >= settings.LLM_TIMEOUT_SECONDS * 2
+
+
+def test_unexpected_error_in_classify_step_marks_classify_run_failed(
+    watch_list: list[WatchQuery],
+    use_fake: UseFake,
+    fake_llm: FakeLlm,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    three_repos(use_fake)
+
+    def broken(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("CSDL bị khoá")
+
+    monkeypatch.setattr(taxonomy, "classify", broken)
+
+    with pytest.raises(RuntimeError):
+        run_daily_now()
+
+    run = ClassifyRun.objects.get()
+    assert run.status == ClassifyRun.Status.FAILED
+    assert "không mong đợi" in run.error
+
+
+def test_unexpected_error_in_backlog_marks_failed_and_rests(
+    fake_llm: FakeLlm, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog_of(5)
+    finished_run_today()
+
+    def broken(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("CSDL bị khoá")
+
+    monkeypatch.setattr(taxonomy, "classify", broken)
+
+    with pytest.raises(RuntimeError):
+        services.classify_backlog_if_due()
+
+    assert ClassifyRun.objects.get().status == ClassifyRun.Status.FAILED
+    monkeypatch.undo()
+    assert services.classify_backlog_if_due() == 0  # nghỉ 30 phút như mọi lỗi
+
+
+def test_classify_run_heartbeat_kept_while_waiting_for_9router(
+    watch_list: list[WatchQuery],
+    use_fake: UseFake,
+    fake_llm: FakeLlm,
+) -> None:
+    three_repos(use_fake)
+    first = [True]
+
+    def slow_down_once(call_number: int) -> int | None:
+        if first[0]:
+            first[0] = False
+            return 429  # 9router bắt chờ: client ngủ (có ghi nhịp sống) rồi gọi lại
+        return None
+
+    fake_llm.fail_with = slow_down_once
+
+    run = run_daily_now()
+
+    assert run.status == Status.SUCCEEDED
+    assert len(fake_llm.calls) == 2

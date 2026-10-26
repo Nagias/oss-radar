@@ -239,3 +239,16 @@ Hai câu cần chủ dự án / đã xử lý:
 
 Claude tự chốt thêm: trang Kho repo ở `features/browse/` và chiều phụ thuộc (mục 10); ẩn "Nghi cao" trên cả kho
 xử lý cùng bài toán tốc độ ở mục 9; `khac` không đi kèm nhãn khác; lọc giấy phép cho phép dùng thương mại.
+
+## 16. Sửa sau rà soát độc lập cả nhánh (2026-10-27)
+
+- Lô bị Gemini từ chối (bộ lọc an toàn, 4xx, trả rỗng) hoặc trả JSON hỏng → **chia đôi lô** và gọi lại tới khi khoanh
+  được repo gây lỗi (trước đó một lô xấu làm kẹt mãi việc phân loại vì repo luôn xếp theo star).
+- Repo AI không phân loại được từ 2 lần → **nghỉ 7 ngày** (bảng `ClassifyMiss`); `classify --reclassify` thử lại ngay.
+- Thời gian chờ mỗi lượt gọi AI 60 giây (thấp hẳn ngưỡng 120 giây coi lượt hằng ngày là gián đoạn); lúc chờ 9router
+  hồi lượt vẫn ghi nhịp sống; lỗi bất ngờ ghi lần phân loại là "Bị ngắt" chứ không phải "Xong".
+- Việc phân loại dần: **3 lượt mỗi nhịp** (thay vì 10) để không giữ luồng nền lâu.
+- Prompt gửi mỗi repo một dòng JSON (mô tả không giả được dòng của repo khác); id trả hai lần thì bỏ; trả sai dạng
+  thì coi là chưa phân loại (không gắn "Khác"). `PROMPT_VERSION` = 2.
+- Repo được quét lại mà mô tả không đổi chỉ kiểm dấu vân tay một lần (`checked_at`).
+- Ô lọc số có giới hạn trên (số quá lớn từng gây lỗi 500); lệnh `classify` thành lớp mỏng gọi `classify_catalog`.

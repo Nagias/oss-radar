@@ -6,6 +6,8 @@ phần đã xong, và lần sau không gọi lại repo đã có nhãn mà mô t
 """
 
 import logging
+import time
+from collections import deque
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -17,7 +19,7 @@ from django.utils import timezone
 from features.catalog.models import Repository
 from features.taxonomy.categories import Category
 from features.taxonomy.categories import load_taxonomy as load_taxonomy
-from features.taxonomy.models import ClassifyRun, RepoClassification, RepoLabel
+from features.taxonomy.models import ClassifyMiss, ClassifyRun, RepoClassification, RepoLabel
 from features.taxonomy.prompt import (
     PROMPT_VERSION,
     LabelParseError,
@@ -27,7 +29,9 @@ from features.taxonomy.prompt import (
     fingerprint,
     parse_labels,
 )
-from integrations.llm.client import LlmClient
+from integrations.github.pacing import CallBudget, CallBudgetExhaustedError, Sleep
+from integrations.llm.client import LlmClient, get_llm_client
+from integrations.llm.errors import LlmError, LlmResponseError
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +39,17 @@ logger = logging.getLogger(__name__)
 Origin = ClassifyRun.Origin
 
 BATCH_SIZE = 40  # repo mỗi lượt gọi AI: ~2.000 token nền mỗi lượt (đo 2026-10-27) nên gom nhiều
-# Lần phân loại không ghi nhịp sống quá chừng này thì coi như app đã tắt giữa chừng. Dài hơn lúc
-# client chờ 9router hồi lượt (tối đa 5 phút).
+# Lần phân loại không ghi nhịp sống quá chừng này thì coi như app đã tắt giữa chừng. Lúc chờ 9router
+# hồi lượt vẫn ghi nhịp sống (`heartbeat_sleep`); một lượt HTTP dài nhất `LLM_TIMEOUT_SECONDS`.
 LIVE_WINDOW = timedelta(minutes=10)
+HEARTBEAT_CHUNK_SECONDS = 10.0
+# Repo AI không phân loại được từ chừng này lần thì nghỉ một thời gian (temperature=0: hỏng là hỏng
+# lại) — không đốt lượt mỗi nhịp 5 phút cho đúng mấy repo đó.
+MAX_MISSES = 2
+MISS_REST = timedelta(days=7)
 UNCLASSIFIED = "__unclassified__"  # khoá đếm số repo chưa có nhãn trong `label_counts`
 REASON_INTERRUPTED = "Bị gián đoạn (app tắt giữa chừng)."
+REASON_UNEXPECTED = "Lỗi không mong đợi — xem log của máy chủ."
 _IN_BATCH = 500  # SQLite giới hạn số tham số mỗi câu lệnh
 
 
@@ -74,23 +84,30 @@ class ClassifyOutcome:
 def repositories_needing_labels(
     *, among: QuerySet[Repository] | None = None, reclassify: bool = False
 ) -> list[Repository]:
-    """Repo chưa có nhãn, hoặc mô tả / topics / ngôn ngữ đã đổi từ lần phân loại trước.
+    """Repo chưa có nhãn, hoặc mô tả / topics / ngôn ngữ đã đổi từ lần kiểm trước.
 
-    `reclassify`: thêm repo được gắn nhãn bằng prompt hay bộ nhóm cũ. Thứ tự: nhiều star trước.
+    `reclassify`: thêm repo được gắn nhãn bằng prompt hay bộ nhóm cũ, và cả repo đang nghỉ vì AI
+    không phân loại được. Thứ tự: nhiều star trước.
 
     Mô tả chỉ đổi được khi repo được quét lại (`upsert_repositories` ghi `last_seen_at`), nên chỉ
-    xét repo chưa có nhãn hoặc được thấy lại sau lần phân loại — việc nền gọi hàm này mỗi 5 phút,
-    không được tính lại dấu vân tay của cả kho mỗi lần.
+    xét repo chưa có nhãn hoặc được thấy lại sau lần kiểm trước; repo xét rồi mà mô tả không đổi
+    được ghi `checked_at` để lần sau khỏi xét — việc nền gọi hàm này mỗi 5 phút.
     """
+    now = timezone.now()
     repos = (among if among is not None else Repository.objects.all()).select_related(
         "classification"
     )
     if not reclassify:
         repos = repos.filter(
-            Q(classification__isnull=True) | Q(last_seen_at__gt=F("classification__classified_at"))
+            Q(classification__isnull=True)
+            | Q(classification__checked_at__isnull=True)
+            | Q(last_seen_at__gt=F("classification__checked_at"))
+        ).exclude(
+            classify_miss__misses__gte=MAX_MISSES, classify_miss__last_missed_at__gt=now - MISS_REST
         )
     current = (PROMPT_VERSION, load_taxonomy().version)
     needed: list[Repository] = []
+    unchanged: list[int] = []
     for repo in repos.order_by("-stars", "pk").iterator(chunk_size=2000):
         # Quan hệ ngược một-một: repo chưa phân loại thì truy cập ném lỗi kiểu AttributeError.
         previous: RepoClassification | None = getattr(repo, "classification", None)
@@ -102,6 +119,12 @@ def repositories_needing_labels(
         )
         if changed or outdated:
             needed.append(repo)
+        elif previous is not None:
+            unchanged.append(previous.pk)
+    for start in range(0, len(unchanged), _IN_BATCH):
+        RepoClassification.objects.filter(pk__in=unchanged[start : start + _IN_BATCH]).update(
+            checked_at=now
+        )
     return needed
 
 
@@ -142,44 +165,144 @@ def classify(
 ) -> ClassifyOutcome:
     """Gắn nhãn cho `repos`, mỗi lô `BATCH_SIZE` repo một lượt gọi AI, lưu ngay sau mỗi lô.
 
-    - `before_each()` chạy trước mỗi lô (bên gọi ghi nhịp sống, ném lỗi khi bấm Dừng).
-    - `after_batch(số repo đã xét)` chạy sau mỗi lô (để in tiến độ).
-    - Lô AI trả lời hỏng → ghi lý do vào `run.error`, đi tiếp lô sau.
-    - Lỗi AI (khoá sai, hết lượt, 9router tắt) và hết ngân sách → ném ra; các lô trước đã lưu.
+    - `before_each()` chạy trước mỗi lượt gọi (bên gọi ghi nhịp sống, ném lỗi khi bấm Dừng).
+    - `after_batch(số repo đã xét)` chạy sau mỗi lô xong (để in tiến độ).
+    - Lô bị từ chối (bộ lọc an toàn, 4xx, trả rỗng) hoặc trả lời hỏng → **chia đôi** và gọi lại
+      từng nửa, tới khi khoanh được repo gây lỗi; repo đó ghi vào `ClassifyMiss` rồi đi tiếp. Không
+      thì một lô xấu làm kẹt mãi cả việc phân loại (repo luôn xếp theo star).
+    - Repo AI bỏ sót cũng ghi vào `ClassifyMiss`; hỏng `MAX_MISSES` lần thì nghỉ `MISS_REST`.
+    - Lỗi khoá, hết lượt, 9router tắt, hết ngân sách → ném ra; các lô trước đã lưu.
     """
     taxonomy = load_taxonomy()
     outcome = ClassifyOutcome()
+    queue = deque(
+        list(repos[start : start + BATCH_SIZE]) for start in range(0, len(repos), BATCH_SIZE)
+    )
     done = 0
-    for start in range(0, len(repos), BATCH_SIZE):
-        batch = list(repos[start : start + BATCH_SIZE])
+    while queue:
+        batch = queue.popleft()
         before_each()
         calls_before = llm.calls_made
+        failure = ""
+        labels: dict[int, Labels] = {}
+        model = llm.model
         try:
             result = llm.complete(build_messages(taxonomy, [_for_prompt(r) for r in batch]))
+        except LlmResponseError as exc:  # lỗi của riêng lô này, không phải của 9router
+            failure = str(exc)
+        else:
+            model = result.model or model
+            ClassifyRun.objects.filter(pk=run.pk).update(
+                prompt_tokens=F("prompt_tokens") + result.prompt_tokens,
+                completion_tokens=F("completion_tokens") + result.completion_tokens,
+            )
+            try:
+                labels = parse_labels(
+                    result.content,
+                    taxonomy=taxonomy,
+                    expected_ids={repo.github_id for repo in batch},
+                )
+            except LabelParseError as exc:
+                failure = str(exc)
         finally:
             _count_calls(run, llm.calls_made - calls_before, outcome)
-        expected = {repo.github_id for repo in batch}
-        try:
-            labels = parse_labels(result.content, taxonomy=taxonomy, expected_ids=expected)
-        except LabelParseError as exc:
-            logger.warning("Phân loại #%s: một lô AI trả lời hỏng: %s", run.pk, exc)
-            labels = {}
-            ClassifyRun.objects.filter(pk=run.pk).update(error=str(exc)[:500])
-        _save(
-            run, batch, labels, model=result.model or llm.model, taxonomy_version=taxonomy.version
-        )
-        ClassifyRun.objects.filter(pk=run.pk).update(
-            prompt_tokens=F("prompt_tokens") + result.prompt_tokens,
-            completion_tokens=F("completion_tokens") + result.completion_tokens,
-            heartbeat_at=timezone.now(),
-        )
+        if failure:
+            logger.warning("Phân loại #%s: lô %s repo hỏng: %s", run.pk, len(batch), failure)
+            ClassifyRun.objects.filter(pk=run.pk).update(error=failure[:500])
+            if len(batch) > 1:
+                half = len(batch) // 2
+                queue.appendleft(batch[half:])
+                queue.appendleft(batch[:half])
+                continue
+        _save(run, batch, labels, model=model, taxonomy_version=taxonomy.version)
+        missed = [repo for repo in batch if repo.github_id not in labels]
+        _record_misses(missed, reason=failure or "AI bỏ sót repo này trong câu trả lời")
         outcome.classified += len(labels)
-        outcome.missing += len(batch) - len(labels)
-        outcome.missed_ids.extend(repo.pk for repo in batch if repo.github_id not in labels)
+        outcome.missing += len(missed)
+        outcome.missed_ids.extend(repo.pk for repo in missed)
         done += len(batch)
         after_batch(done)
     run.refresh_from_db()
     return outcome
+
+
+def heartbeat_sleep(run: ClassifyRun, *, also: Callable[[], None] | None = None) -> Sleep:
+    """Hàm ngủ cho client AI: ngủ từng khúc ≤ 10 giây, sau mỗi khúc ghi nhịp sống của lần phân loại.
+
+    Chờ 9router hồi lượt có khi vài phút: không ghi nhịp sống thì lần khác (lệnh `classify`) tưởng
+    lần này đã chết rồi chạy chồng. `also()` để bên gọi ghi nhịp sống của chính nó (lượt hằng ngày)
+    và ném lỗi khi người dùng bấm Dừng.
+    """
+
+    def sleep(seconds: float) -> None:
+        remaining = seconds
+        while remaining > 0:
+            step = min(HEARTBEAT_CHUNK_SECONDS, remaining)
+            time.sleep(step)
+            remaining -= step
+            ClassifyRun.objects.filter(pk=run.pk).update(heartbeat_at=timezone.now())
+            if also is not None:
+                also()
+
+    return sleep
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogReport:
+    run: ClassifyRun | None  # None = không có gì cần phân loại
+    needed: int
+    retried: int
+    stopped: str  # lý do dừng sớm (hết ngân sách); rỗng = chạy hết
+
+
+def classify_catalog(
+    *,
+    budget: int,
+    limit: int | None = None,
+    reclassify: bool = False,
+    on_progress: Callable[[int, int], None] = lambda _done, _total: None,
+    on_retry: Callable[[int], None] = lambda _count: None,
+) -> CatalogReport:
+    """Phân loại bù cả kho (lệnh `classify`): tối đa `budget` lượt gọi, thử lại một lần repo bỏ sót.
+
+    Đo thật: ~2% lô Gemini trả lời hỏng một cách ngẫu nhiên → thử lại ngay thay vì đợi ngày sau.
+    Ném `ClassifyBusyError` khi đang có lần phân loại khác, `LlmError` khi 9router hỏng hẳn (lần
+    phân loại được đóng kèm lý do trước khi ném). Ctrl+C cũng đóng lần phân loại rồi ném lại.
+    """
+    repos = repositories_needing_labels(reclassify=reclassify)
+    if limit is not None:
+        repos = repos[:limit]
+    if not repos:
+        return CatalogReport(run=None, needed=0, retried=0, stopped="")
+    run = start_classify_run(Origin.COMMAND)
+    stopped = ""
+    retried = 0
+    error = ""
+    try:
+        with get_llm_client(sleep=heartbeat_sleep(run), budget=CallBudget(budget)) as llm:
+            outcome = classify(
+                run, repos, llm=llm, after_batch=lambda d: on_progress(d, len(repos))
+            )
+            missed = set(outcome.missed_ids)
+            if missed:
+                retry = [repo for repo in repos if repo.pk in missed]
+                retried = len(retry)
+                on_retry(retried)
+                classify(run, retry, llm=llm, after_batch=lambda d: on_progress(d, len(retry)))
+    except CallBudgetExhaustedError:
+        stopped = f"Hết ngân sách {budget} lượt gọi."
+    except LlmError as exc:
+        error = str(exc)
+        raise
+    except KeyboardInterrupt:
+        error = "Dừng tay (Ctrl+C)."
+        raise
+    except BaseException:
+        error = REASON_UNEXPECTED
+        raise
+    finally:
+        finish_classify_run(run, error=error)
+    return CatalogReport(run=run, needed=len(repos), retried=retried, stopped=stopped)
 
 
 # --- Đọc nhãn cho trang ----------------------------------------------------------------------
@@ -307,8 +430,10 @@ def _save(
                     "taxonomy_version": taxonomy_version,
                     "fingerprint": _fingerprint(repo),
                     "classified_at": now,
+                    "checked_at": now,
                 },
             )
+            ClassifyMiss.objects.filter(repository=repo).delete()
             RepoLabel.objects.filter(repository=repo).delete()
             RepoLabel.objects.bulk_create(
                 [
@@ -323,6 +448,19 @@ def _save(
         ClassifyRun.objects.filter(pk=run.pk).update(
             classified_count=F("classified_count") + len(labels)
         )
+
+
+def _record_misses(repos: list[Repository], *, reason: str) -> None:
+    """Repo AI chưa phân loại được: cộng một lần hỏng (đủ `MAX_MISSES` lần thì nghỉ `MISS_REST`)."""
+    now = timezone.now()
+    for repo in repos:
+        miss, created = ClassifyMiss.objects.get_or_create(
+            repository=repo, defaults={"misses": 1, "last_missed_at": now, "reason": reason[:300]}
+        )
+        if not created:
+            ClassifyMiss.objects.filter(pk=miss.pk).update(
+                misses=F("misses") + 1, last_missed_at=now, reason=reason[:300]
+            )
 
 
 def _categories(

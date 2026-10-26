@@ -103,7 +103,7 @@ class ReportFilterForm(forms.Form):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        taxonomy = load_taxonomy()  # đọc lúc tạo form: sửa categories.toml có hiệu lực ngay
+        taxonomy = load_taxonomy()  # nạp một lần mỗi lần mở app (sửa file → khởi động lại app)
         self.fields["audience"].choices = [(c.code, c.name) for c in taxonomy.audience]  # type: ignore[attr-defined]
         self.fields["aspects"].choices = [(c.code, c.name) for c in taxonomy.aspects]  # type: ignore[attr-defined]
 

@@ -78,9 +78,9 @@ VERIFY_BUDGET_ANONYMOUS = 50
 OWNER_BUDGET_WITH_TOKEN = 100
 OWNER_BUDGET_ANONYMOUS = 10
 # Phân loại bằng AI (F-010): trong lượt chỉ repo của lượt (rising trước) để báo cáo không ra
-# muộn; phần còn lại của kho do việc định kỳ phân loại dần, mỗi nhịp tối đa 10 lượt gọi.
+# muộn; phần còn lại của kho do việc định kỳ phân loại dần, mỗi nhịp tối đa 3 lượt gọi.
 DAILY_RUN_CLASSIFY_CALLS = 5
-BACKLOG_CALLS_PER_TICK = 10
+BACKLOG_CALLS_PER_TICK = 3  # ~40 giây mỗi nhịp: không giữ luồng nền lâu (bấm Quét không phải chờ)
 BACKLOG_PAUSE_AFTER_ERROR = timedelta(minutes=30)
 # Ảnh chụp star và danh sách repo của lần quét hằng ngày chỉ giữ chừng này ngày (thiết kế mục 8):
 # ảnh chụp chỉ làm radar cho 7 tới 30 ngày, lịch sử dài hạn đã có ở GitHub.
@@ -864,8 +864,10 @@ class _DailyRunner:
             return
         error = ""
         budget = CallBudget(DAILY_RUN_CLASSIFY_CALLS)
+        # Lúc chờ 9router vẫn ghi nhịp sống của cả lần phân loại lẫn lượt (và thấy nút Dừng).
+        sleep = taxonomy.heartbeat_sleep(classify_run, also=self._beat_or_stop)
         try:
-            with get_llm_client(sleep=_HeartbeatSleep(self._beat_or_stop), budget=budget) as llm:
+            with get_llm_client(sleep=sleep, budget=budget) as llm:
                 taxonomy.classify(classify_run, repos, llm=llm, before_each=self._beat_or_stop)
         except CallBudgetExhaustedError:
             logger.info(
@@ -876,6 +878,11 @@ class _DailyRunner:
         except LlmError as exc:
             logger.warning("Lượt hằng ngày #%s: phân loại bằng AI hỏng: %r", self.run_id, exc)
             error = str(exc)
+        except BaseException:
+            # Lỗi bất ngờ (vd CSDL bị khoá) hay luồng mất quyền giữ lượt: ghi đúng là bị ngắt rồi
+            # ném tiếp cho `execute_daily_run` xử lý — không ghi nhầm lần phân loại là "Xong".
+            error = taxonomy.REASON_UNEXPECTED
+            raise
         finally:
             taxonomy.finish_classify_run(classify_run, error=error)
             # Ghi cả khi lỗi; không ném lỗi ở đây để không che lỗi gốc.
@@ -1140,14 +1147,18 @@ def classify_backlog_if_due(*, now: datetime | None = None) -> int:
     background.relabel("Phân loại dần kho repo bằng AI")
     calls = min(BACKLOG_CALLS_PER_TICK, left)
     error = ""
+    sleep = taxonomy.heartbeat_sleep(classify_run)
     try:
-        with get_llm_client(budget=CallBudget(calls)) as llm:
+        with get_llm_client(sleep=sleep, budget=CallBudget(calls)) as llm:
             taxonomy.classify(classify_run, repos[: calls * taxonomy.BATCH_SIZE], llm=llm)
     except CallBudgetExhaustedError:
         logger.info("Phân loại dần: hết %s lượt của nhịp này", calls)
     except LlmError as exc:
         logger.warning("Phân loại dần kho bị ngắt, nghỉ 30 phút: %r", exc)
         error = str(exc)
+    except BaseException:
+        error = taxonomy.REASON_UNEXPECTED  # ghi "bị ngắt" để nghỉ 30 phút, rồi ném tiếp
+        raise
     finally:
         taxonomy.finish_classify_run(classify_run, error=error)
     return classify_run.calls_used

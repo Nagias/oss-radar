@@ -99,3 +99,19 @@ def test_form_filters_keep_valid_fields_when_others_are_wrong() -> None:
     assert filters.rising_only is True
     assert filters.page == 1
     assert BrowseForm().filters() == BrowseFilters()
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        {"created_days": "1000000"},
+        {"created_days": "99999999999"},
+        {"scan": "99999999999999999999"},
+    ],
+)
+def test_huge_numbers_do_not_break_the_page(client: Client, query: dict[str, str]) -> None:
+    add_repo(1)
+
+    response = client.get(URL, query)
+
+    assert response.status_code == 200
