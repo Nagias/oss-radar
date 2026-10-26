@@ -10,11 +10,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from django.db.models import QuerySet
 from django.utils import timezone
 
 from features.catalog import services as catalog
 from features.catalog.models import OwnerProfile, Repository
 from features.scoring import rules
+from features.scoring.models import ScoreCache
 
 # Xuất lại cho tính năng khác: chúng chỉ được import `scoring.services` (CLAUDE.md, nguyên tắc 5).
 from features.scoring.rules import REVIEW_FROM as REVIEW_FROM
@@ -32,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 # Hồ sơ chủ repo ít đổi (tuổi tài khoản không đổi; người theo dõi, số repo đổi chậm).
 OWNER_PROFILE_MAX_AGE = timedelta(days=30)
+# Tính lại điểm lưu sẵn theo lô: cả kho ~32.000 repo mất ~3 giây (đo 2026-10-27).
+REFRESH_BATCH = 2000
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +98,47 @@ def score_repositories(
             ),
         )
     return scores
+
+
+def refresh_scores(repos: QuerySet[Repository] | None = None) -> int:
+    """Tính lại điểm lưu sẵn (QĐ-19) cho `repos` (mặc định cả kho); trả số repo đã ghi.
+
+    Không có số tăng star: điểm nghi star giả lưu sẵn chỉ dùng tín hiệu của repo và hồ sơ chủ (như
+    trang lần quét). Đọc theo lô `REFRESH_BATCH` để không giữ cả kho trong bộ nhớ.
+    """
+    source = (repos if repos is not None else Repository.objects.all()).order_by("pk")
+    written = 0
+    last_pk = 0
+    while True:
+        batch = list(source.filter(pk__gt=last_pk)[:REFRESH_BATCH])
+        if not batch:
+            return written
+        now = timezone.now()
+        scores = score_repositories(batch, now=now)
+        ScoreCache.objects.bulk_create(
+            [
+                ScoreCache(
+                    repository=repo,
+                    quality=scores[repo.pk].quality.total,
+                    suspicion_points=scores[repo.pk].suspicion.points,
+                    suspicion_level=scores[repo.pk].suspicion.level,
+                    formula_version=rules.FORMULA_VERSION,
+                    computed_at=now,
+                )
+                for repo in batch
+            ],
+            update_conflicts=True,
+            unique_fields=["repository"],
+            update_fields=[
+                "quality",
+                "suspicion_points",
+                "suspicion_level",
+                "formula_version",
+                "computed_at",
+            ],
+        )
+        written += len(batch)
+        last_pk = batch[-1].pk
 
 
 def owners_to_fetch(logins: Sequence[str], *, now: datetime) -> list[str]:

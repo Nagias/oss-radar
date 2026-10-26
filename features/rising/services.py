@@ -836,6 +836,10 @@ class _DailyRunner:
             before=timezone.localdate(now) - timedelta(days=RETENTION_DAYS)
         )
         results = discovery.prune_daily_results(before=now - timedelta(days=RETENTION_DAYS))
+        # Điểm lưu sẵn cho trang Kho repo (QĐ-19): cả kho mỗi ngày ~3 giây, sau khi đã có số liệu
+        # mới của các lần quét và hồ sơ chủ của lượt.
+        scored = scoring.refresh_scores()
+        logger.info("Lượt hằng ngày #%s: đã tính lại điểm lưu sẵn cho %s repo", self.run_id, scored)
         logger.info(
             "Lượt hằng ngày #%s: đã dọn %s ảnh chụp và %s dòng kết quả quét quá %s ngày",
             self.run_id,

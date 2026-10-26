@@ -444,6 +444,10 @@ def execute_scan(scan_id: int) -> None:
     try:
         with get_github_client(sleep=sleeper, budget=budget) as github:
             runner.run(github)
+        if scan.origin == ScanRun.Origin.MANUAL:
+            # Lượt hằng ngày tự tính lại điểm cả kho ở bước lập báo cáo; quét tay thì tính ngay để
+            # trang Kho repo lọc / sắp đúng (QĐ-19).
+            scoring.refresh_scores(repositories_seen_in([scan.pk]))
     except ScanSupersededError:
         logger.info("Lần quét #%s: lượt chạy cũ rút lui, không ghi gì thêm", scan.pk)
     except KeyboardInterrupt:
