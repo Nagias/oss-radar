@@ -42,6 +42,8 @@ class LlmClient:
         self._model = model
         self._pacer = pacer
         self._budget = budget
+        # Số lượt HTTP đã thật sự gửi (kể cả lượt gọi lại, lượt bị từ chối) — để ghi chi phí.
+        self.calls_made = 0
         self._http = httpx.Client(
             base_url=base_url.rstrip("/"),
             headers={"Authorization": f"Bearer {api_key}", "User-Agent": "oss-radar"},
@@ -61,6 +63,10 @@ class LlmClient:
 
     def close(self) -> None:
         self._http.close()
+
+    @property
+    def model(self) -> str:
+        return self._model
 
     def complete(self, messages: list[dict[str, str]]) -> ChatResult:
         """Gửi hội thoại, nhận một câu trả lời JSON trọn khối (không dạng luồng)."""
@@ -83,6 +89,7 @@ class LlmClient:
             self._pacer.before_request()
             if self._budget is not None:
                 self._budget.take()
+            self.calls_made += 1
             try:
                 response = self._http.post(path, json=body)
             except httpx.RequestError as exc:

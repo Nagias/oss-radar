@@ -137,6 +137,7 @@ def test_server_errors_retried_three_times_then_raise(
         client.complete(MESSAGES)
 
     assert route.call_count == 4
+    assert client.calls_made == 4  # mọi lượt gửi đi đều được đếm
 
 
 def test_network_failure_raises_unavailable(client: LlmClient, http_mock: respx.MockRouter) -> None:
@@ -183,6 +184,7 @@ def test_every_call_spends_budget(http_mock: respx.MockRouter, fake_time: FakeTi
             llm.complete(MESSAGES)
 
     assert route.call_count == 1
+    assert llm.calls_made == 1  # hết ngân sách: không gửi, không đếm
 
 
 def test_get_llm_client_reads_settings(settings: Settings, http_mock: respx.MockRouter) -> None:
