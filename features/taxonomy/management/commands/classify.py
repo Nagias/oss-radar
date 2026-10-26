@@ -65,12 +65,23 @@ class Command(BaseCommand):
         error = ""
         try:
             with get_llm_client(budget=CallBudget(budget)) as llm:
-                services.classify(
+                outcome = services.classify(
                     run,
                     repos,
                     llm=llm,
                     after_batch=lambda done: self._progress(run, done, len(repos)),
                 )
+                if outcome.missed_ids:
+                    # Đo thật: ~2% lô AI trả lời hỏng một cách ngẫu nhiên → thử lại một lần ngay.
+                    missed = set(outcome.missed_ids)
+                    retry = [repo for repo in repos if repo.pk in missed]
+                    self.stdout.write(f"Thử lại {_n(len(retry))} repo AI bỏ sót.")
+                    services.classify(
+                        run,
+                        retry,
+                        llm=llm,
+                        after_batch=lambda done: self._progress(run, done, len(retry)),
+                    )
         except CallBudgetExhaustedError:
             error = f"Hết ngân sách {budget} lượt gọi."
             self.stdout.write(error)

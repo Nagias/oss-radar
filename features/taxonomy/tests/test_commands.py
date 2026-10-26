@@ -94,3 +94,14 @@ def test_classify_command_ctrl_c_closes_run(fake_llm: FakeLlm) -> None:
     run = ClassifyRun.objects.get()
     assert (run.status, run.error) == (ClassifyRun.Status.FAILED, "Dừng tay (Ctrl+C).")
     assert RepoClassification.objects.count() == 40
+
+
+def test_classify_command_retries_missed_repos_once(fake_llm: FakeLlm) -> None:
+    make_repos(50)
+    fake_llm.garbled = {1}  # lượt đầu AI trả lời hỏng (đo thật: ~2% lô, ngẫu nhiên)
+
+    text = run_command()
+
+    assert "Thử lại 40 repo AI bỏ sót" in text
+    assert RepoClassification.objects.count() == 50
+    assert [len(ids) for ids in fake_llm.calls] == [40, 10, 40]

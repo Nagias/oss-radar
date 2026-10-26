@@ -7,7 +7,7 @@ phần đã xong, và lần sau không gọi lại repo đã có nhãn mà mô t
 
 import logging
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from django.db import transaction
@@ -61,6 +61,7 @@ class ClassifyOutcome:
     classified: int = 0
     missing: int = 0  # repo AI bỏ sót hoặc trả sai dạng: lần sau thử lại
     calls: int = 0
+    missed_ids: list[int] = field(default_factory=list)  # `Repository.pk` của các repo bỏ sót
 
 
 # --- Chọn repo cần phân loại ------------------------------------------------------------------
@@ -159,6 +160,7 @@ def classify(
         )
         outcome.classified += len(labels)
         outcome.missing += len(batch) - len(labels)
+        outcome.missed_ids.extend(repo.pk for repo in batch if repo.github_id not in labels)
         done += len(batch)
         after_batch(done)
     run.refresh_from_db()
