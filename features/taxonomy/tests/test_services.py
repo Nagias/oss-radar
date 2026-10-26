@@ -1,6 +1,7 @@
 """Dịch vụ phân loại: gom lô, lưu ngay, không gọi lại repo không đổi, hỏng không mất phần cũ."""
 
 from datetime import timedelta
+from typing import Any
 
 import pytest
 from django.utils import timezone
@@ -62,7 +63,10 @@ def test_second_pass_calls_nothing_and_changed_repo_is_redone(fake_llm: FakeLlm)
 
     _, again = classify_all()
     assert again.calls == 0
-    Repository.objects.filter(pk=repos[2].pk).update(description="Mô tả mới hẳn")
+    # Quét lại thấy mô tả mới (upsert ghi cả last_seen_at).
+    Repository.objects.filter(pk=repos[2].pk).update(
+        description="Mô tả mới hẳn", last_seen_at=timezone.now() + timedelta(minutes=1)
+    )
     fake_llm.labels = lambda _id: (["marketer"], ["ads"])
 
     _, redo = classify_all()
@@ -207,3 +211,21 @@ def test_ai_calls_on_counts_by_day_and_origin(fake_llm: FakeLlm) -> None:
 
     assert services.ai_calls_on(timezone.localdate(), origin=Origin.COMMAND) == 2
     assert services.ai_calls_on(timezone.localdate(), origin=Origin.BACKLOG) == 0
+
+
+def test_only_unlabelled_or_reseen_repos_are_examined(
+    fake_llm: FakeLlm, django_assert_max_num_queries: Any
+) -> None:
+    repos = make_repos(3)
+    classify_all()
+    # Mô tả đổi nhưng repo chưa được quét lại (last_seen_at cũ hơn lúc phân loại): không thể xảy ra
+    # ngoài đời — chỉ upsert khi quét mới đổi mô tả. Dùng để chứng minh repo này không được xét lại.
+    Repository.objects.filter(pk=repos[0].pk).update(description="đổi mà không quét lại")
+    Repository.objects.filter(pk=repos[1].pk).update(
+        description="quét lại thấy mô tả mới", last_seen_at=timezone.now() + timedelta(minutes=1)
+    )
+
+    with django_assert_max_num_queries(2):
+        needed = services.repositories_needing_labels()
+
+    assert needed == [repos[1]]

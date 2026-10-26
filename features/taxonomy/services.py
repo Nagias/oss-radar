@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from django.db import transaction
-from django.db.models import Count, F, QuerySet, Sum
+from django.db.models import Count, F, Q, QuerySet, Sum
 from django.utils import timezone
 
 from features.catalog.models import Repository
@@ -73,18 +73,29 @@ def repositories_needing_labels(
     """Repo chưa có nhãn, hoặc mô tả / topics / ngôn ngữ đã đổi từ lần phân loại trước.
 
     `reclassify`: thêm repo được gắn nhãn bằng prompt hay bộ nhóm cũ. Thứ tự: nhiều star trước.
+
+    Mô tả chỉ đổi được khi repo được quét lại (`upsert_repositories` ghi `last_seen_at`), nên chỉ
+    xét repo chưa có nhãn hoặc được thấy lại sau lần phân loại — việc nền gọi hàm này mỗi 5 phút,
+    không được tính lại dấu vân tay của cả kho mỗi lần.
     """
-    repos = among if among is not None else Repository.objects.all()
-    rows = RepoClassification.objects.filter(repository__in=repos.values("pk")).values_list(
-        "repository_id", "fingerprint", "prompt_version", "taxonomy_version"
+    repos = (among if among is not None else Repository.objects.all()).select_related(
+        "classification"
     )
-    stored = {repository_id: (print_, versions) for repository_id, print_, *versions in rows}
-    current = [PROMPT_VERSION, load_taxonomy().version]
+    if not reclassify:
+        repos = repos.filter(
+            Q(classification__isnull=True) | Q(last_seen_at__gt=F("classification__classified_at"))
+        )
+    current = (PROMPT_VERSION, load_taxonomy().version)
     needed: list[Repository] = []
-    for repo in repos.order_by("-stars", "pk").iterator():
-        previous = stored.get(repo.pk)
-        changed = previous is None or previous[0] != _fingerprint(repo)
-        outdated = reclassify and previous is not None and previous[1] != current
+    for repo in repos.order_by("-stars", "pk").iterator(chunk_size=2000):
+        # Quan hệ ngược một-một: repo chưa phân loại thì truy cập ném lỗi kiểu AttributeError.
+        previous: RepoClassification | None = getattr(repo, "classification", None)
+        changed = previous is None or previous.fingerprint != _fingerprint(repo)
+        outdated = (
+            reclassify
+            and previous is not None
+            and ((previous.prompt_version, previous.taxonomy_version) != current)
+        )
         if changed or outdated:
             needed.append(repo)
     return needed
