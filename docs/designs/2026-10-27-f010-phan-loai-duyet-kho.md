@@ -1,6 +1,9 @@
 # F-010 — Phân loại repo theo nhóm bằng AI, trang duyệt kho có lọc và sắp xếp: bản thiết kế
 
-> **Trạng thái: CHỜ CHỦ DỰ ÁN DUYỆT** (soạn 2026-10-27 sau buổi hỏi đáp). Chưa có dòng code nào.
+> **Trạng thái: ĐÃ DUYỆT** (soạn 2026-10-27 sau buổi hỏi đáp; chủ dự án đồng ý làm và đã điền `LLM_API_KEY`).
+> Đo thật 9router (2026-10-27): gọi được `ag/gemini-3.8-flash-low`; mặc định trả dạng luồng nên phải gửi
+> `stream: false`; nội dung bọc khung ```json``` dù có `response_format`; mỗi lượt có ~2.000 token nền (3 repo: 2.285 vào,
+> 137 ra, 6,4 giây).
 > Chỗ ghi "(quyết định của Claude)" là đề xuất, bác được. Đã qua một lượt đọc thử với vai người làm theo
 > (mục 15).
 

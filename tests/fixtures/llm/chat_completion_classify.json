@@ -1,0 +1,21 @@
+{
+  "id": "chatcmpl-PZjfarmWM_Ggvr0Pn4PT2Ao",
+  "object": "chat.completion",
+  "created": 1793038402,
+  "model": "gemini-3.8-flash-n",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```json\n{\n  \"repos\": [\n    {\"id\": 1, \"audience\": [\"developer\"], \"aspects\": [\"agent\", \"devtools\"], \"reason\": \"Git thiết kế dành riêng cho AI agents\"},\n    {\"id\": 2, \"audience\": [\"creator\"], \"aspects\": [\"video\", \"writing\"], \"reason\": \"Kỹ năng AI làm kịch bản và tạo video ngắn\"},\n    {\"id\": 3, \"audience\": [\"developer\"], \"aspects\": [\"agent\", \"productivity\"], \"reason\": \"Skill hỗ trợ tự động tính toán mã giảm giá McDonald's\"}\n  ]\n}\n```"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 2285,
+    "completion_tokens": 137,
+    "total_tokens": 2422
+  }
+}
