@@ -89,8 +89,8 @@
 {% if scored.shown or scored.hidden %}
 <section>
   <h2>Kết quả, sắp theo star</h2>
+  <p><a href="{% url 'browse:repos' %}?scan={{ scan.pk }}">Xem cả {{ scan.fetched_count|intcomma }} repo của lần quét này ở Kho repo</a> — lọc theo nhóm, sắp theo nhiều cách, phân trang.</p>
   {% if scan.fetched_count > results_limit %}
-    {# DEBT(D-007): chỉ hiện 500 repo nhiều star nhất; xem đủ cần trang duyệt kho. #}
     <p class="muted">Đang xét {{ results_limit }} repo nhiều star nhất trên {{ scan.fetched_count|intcomma }} repo đã lấy{% if scored.hidden %} (trong đó {{ scored.hidden|length }} repo nghi star giả bị ẩn ở cuối bảng){% endif %}.</p>
   {% endif %}
   <div class="table-wrap">
@@ -109,6 +109,7 @@
             <td class="num">{{ forloop.counter }}</td>
             <td>
               <a href="{{ repo.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ repo.full_name }}</strong></a>
+              {% include "taxonomy/_labels.html" with labels=row.labels %}
               {% if repo.description %}<div class="desc">{{ repo.description|truncatechars:180 }}</div>{% endif %}
               {% if repo.topics %}
                 <div class="topics">{% for topic in repo.topics|slice:":6" %}<span class="topic">{{ topic }}</span>{% endfor %}</div>

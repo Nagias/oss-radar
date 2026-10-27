@@ -31,3 +31,16 @@ def _block_real_http(request: pytest.FixtureRequest) -> None:
     """Mọi test đều chạy trong http_mock, trừ test đánh dấu @pytest.mark.live (gọi dịch vụ thật)."""
     if request.node.get_closest_marker("live") is None:
         request.getfixturevalue("http_mock")
+
+
+@pytest.fixture(autouse=True)
+def _ignore_local_secrets(request: pytest.FixtureRequest) -> None:
+    """Test chạy như máy sạch: không dùng token GitHub, khoá AI trong .env của máy (trừ test live).
+
+    Không vậy thì kết quả test đổi theo máy (có token → ngân sách khác) và test có thể gọi nhầm
+    9router thật. Test cần "có token / có khoá" thì tự đặt `settings.GITHUB_TOKEN = ...`.
+    """
+    if request.node.get_closest_marker("live") is None:
+        settings = request.getfixturevalue("settings")
+        settings.GITHUB_TOKEN = ""
+        settings.LLM_API_KEY = ""

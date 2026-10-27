@@ -16,6 +16,9 @@ from enum import StrEnum
 
 from django.utils import formats
 
+# Tăng khi đổi công thức hay trọng số: điểm lưu sẵn (ScoreCache) có phiên bản cũ là điểm cũ.
+FORMULA_VERSION = 1
+
 # --- Chất lượng (0-100) ----------------------------------------------------------------------
 POPULARITY_MAX = 30  # 30 * log10(star/10)/3: 10 star → 0, 100 → 10, 1.000 → 20, 10.000 → 30
 COMMUNITY_MAX = 20

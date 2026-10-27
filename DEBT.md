@@ -21,7 +21,7 @@ nhận, khi nào trả, quên trả thì sao.
 | D-004 | Mỗi lần quét chỉ lấy trang đầu (tối đa 100 repo nhiều star nhất) | Đã trả (2026-10-22) | F-002: chia lát vượt trần 1.000 |
 | D-005 | Gọi GitHub một lần, lỗi là dừng — chưa thử lại, chưa giãn nhịp, chưa có ngân sách gọi API | Đã trả (2026-10-22) | F-002: `integrations/github/pacing.py` |
 | D-006 | Tắt app giữa chừng thì lần quét chỉ chuyển sang Tạm dừng; phải bấm Tiếp tục bằng tay | Đã trả (2026-10-23) | F-005: bộ nhịp tự chạy tiếp lần quét bị gián đoạn |
-| D-007 | Trang kết quả lần quét chỉ hiện 500 repo nhiều star nhất | Mở | Khi làm trang duyệt kho (lọc, phân trang) |
+| D-007 | Trang kết quả lần quét chỉ hiện 500 repo nhiều star nhất | Đã trả (2026-10-27) | F-010: trang Kho repo `/repos/?scan=<id>` |
 | D-008 | 5 điểm nhỏ còn lại từ rà soát F-002 (tính dư lượt khi Dừng lúc chờ, lệch đồng hồ, lệnh in "0/None", lát gốc lỗi báo "còn sót", trạng thái `queued` cũ) | Đã trả (2026-10-23) | PR `fix/d008-diem-nho-f002` |
 | D-009 | 4 điểm để sau của F-005 (services.py rising ~1.400 dòng, ngày của bước lọc thô, nhãn "Mới vào danh sách" theo ngưỡng mặc định, "35 ngày" viết cứng) | Mở | PR `fix/` riêng ngay sau F-006 |
 
@@ -118,6 +118,9 @@ nhận, khi nào trả, quên trả thì sao.
   chỉ thấy qua lệnh hoặc CSDL.
 - **Vị trí:** `features/discovery/views.py` (`RESULTS_SHOWN_LIMIT`),
   `features/discovery/templates/discovery/scan_detail.html`.
+- **Đã trả (2026-10-27, F-010):** trang Kho repo `/repos/` duyệt toàn kho có lọc (nhóm, ngôn ngữ, star, ngày
+  tạo, giấy phép, rising star) và phân trang; trang lần quét có link "Xem cả N repo của lần quét này ở Kho
+  repo" (`/repos/?scan=<id>`). Trang lần quét vẫn in 500 repo đầu cho nhanh.
 
 ### D-008 — 5 điểm nhỏ còn lại từ rà soát F-002
 - **Nợ gì:** agent rà soát cuối của F-002 chỉ ra 5 điểm nhỏ, ghi trong PR Nagias/oss-radar#2 nhưng chưa sửa:

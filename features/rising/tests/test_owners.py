@@ -11,7 +11,7 @@ import pytest
 from django.utils import timezone
 from pytest_django.fixtures import Settings
 
-from features.catalog.models import OwnerProfile
+from features.catalog.models import OwnerProfile, Repository
 from features.catalog.services import save_owner_profile
 from features.rising import growth, services
 from features.rising.models import DailyRun, WatchQuery
@@ -26,6 +26,7 @@ from features.rising.tests.conftest import (
     snapshot,
 )
 from features.scoring import rules
+from features.scoring.models import ScoreCache
 from integrations.github.schemas import GitHubUser
 from tests.fakes import make_user
 
@@ -299,3 +300,15 @@ def test_owner_step_has_a_readable_name() -> None:
 @pytest.fixture
 def use_fake(use_fake_github: UseFake) -> UseFake:
     return use_fake_github
+
+
+def test_report_step_refreshes_stored_scores_of_whole_catalog(
+    watch_list: list[WatchQuery], use_fake: UseFake
+) -> None:
+    four_repos(use_fake)
+    snapshot(999, stars=10)  # repo trong kho nhưng không nằm trong lượt nào
+
+    run_daily_now()
+
+    assert ScoreCache.objects.count() == Repository.objects.count()
+    assert ScoreCache.objects.filter(repository__github_id=999).exists()

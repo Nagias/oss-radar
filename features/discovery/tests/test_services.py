@@ -18,6 +18,7 @@ from features.discovery.tests.conftest import (
     SEARCH_URL,
     run_scan_now,
 )
+from features.scoring.models import ScoreCache
 from tests.factories import load_fixture, make_github_repo
 from tests.fakes import FakeTime
 
@@ -378,3 +379,11 @@ def test_forbidden_qualifier_hint(query: str, hint: str | None) -> None:
 def test_shared_constants_are_read_from_services() -> None:
     assert [value for value, _ in services.BUDGET_CHOICES] == [1, 50, 300, 1000]
     assert timedelta(seconds=120) == services.LIVE_HEARTBEAT_WINDOW
+
+
+def test_manual_scan_refreshes_stored_scores_of_its_repositories(
+    github_search: respx.Route,
+) -> None:
+    run_scan_now()
+
+    assert ScoreCache.objects.count() == Repository.objects.count() > 0

@@ -149,3 +149,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .hidden-repos { margin-top: 14px; }
 .hidden-repos summary { cursor: pointer; color: var(--muted); font-weight: 600; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* F-010: nhãn nhóm, trang Kho repo */
+.labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.label { border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.label:hover { text-decoration: none; filter: brightness(0.95); }
+.label-audience { background: var(--ok-bg); color: var(--ok); }
+.label-aspect { background: var(--chip-bg); color: var(--text); }
+.group-filter { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.group-filter legend { font-weight: 600; font-size: 0.88rem; padding: 0 4px; }
+.chip-check { display: inline-flex; align-items: center; gap: 4px; font-size: 0.88rem; cursor: pointer; }
+.browse-filters .checks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; font-size: 0.9rem; }
+.pager { display: flex; gap: 16px; align-items: center; justify-content: center; margin: 14px 0; }

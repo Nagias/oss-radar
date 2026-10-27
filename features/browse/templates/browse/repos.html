@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Kho repo{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Kho repo</h1>
+  <p class="muted">
+    Mọi repo app đã tìm thấy, lọc theo nhóm và sắp theo số liệu. Nhãn nhóm do AI (Gemini) gắn chỉ dựa trên mô tả và
+    từ khoá của repo — AI chỉ phân loại, không chấm điểm; mọi con số lấy từ GitHub. Di chuột lên nhãn để xem vì sao
+    AI xếp như vậy.
+  </p>
+
+  <form method="get" action="{% url 'browse:repos' %}" class="filter-form browse-filters">
+    {% for field in form %}
+      {% if field.errors %}<p class="error" role="alert">{{ field.label }}: {{ field.errors|join:" " }} — đang bỏ qua ô này.</p>{% endif %}
+    {% endfor %}
+
+    <fieldset class="group-filter">
+      <legend>Dành cho ai</legend>
+      {% for category, count in audience %}
+        <label class="chip-check"><input type="checkbox" name="audience" value="{{ category.code }}"{% if category.code in filters.audience %} checked{% endif %}> {{ category.name }} <span class="muted small">{{ count|intcomma }}</span></label>
+      {% endfor %}
+    </fieldset>
+    <fieldset class="group-filter">
+      <legend>Làm được gì</legend>
+      {% for category, count in aspects %}
+        <label class="chip-check"><input type="checkbox" name="aspects" value="{{ category.code }}"{% if category.code in filters.aspects %} checked{% endif %}> {{ category.name }} <span class="muted small">{{ count|intcomma }}</span></label>
+      {% endfor %}
+    </fieldset>
+    <p class="muted small">
+      Chọn nhiều nhóm trong cùng một ô là "hoặc"; chọn ở cả hai ô là "và" — ví dụ (Marketer hoặc Nhà sáng tạo) và Video.
+      Số cạnh mỗi nhóm đếm cả repo đang ẩn vì nghi star giả.
+    </p>
+
+    <div class="field-grid compact">
+      <div class="field">
+        <label for="id_q">Từ khoá trong tên / mô tả</label>
+        <input type="search" id="id_q" name="q" value="{{ filters.q }}" maxlength="100">
+      </div>
+      <div class="field">
+        <label for="id_language">Ngôn ngữ</label>
+        <input type="text" id="id_language" name="language" value="{{ filters.language }}" list="languages" maxlength="100">
+        <datalist id="languages">{% for language in page.languages %}<option value="{{ language }}">{% endfor %}</datalist>
+      </div>
+      <div class="field">
+        <label for="id_min_stars">Star tối thiểu</label>
+        <input type="number" id="id_min_stars" name="min_stars" value="{{ form.min_stars.value|default_if_none:'' }}" min="0">
+      </div>
+      <div class="field">
+        <label for="id_max_stars">Star tối đa</label>
+        <input type="number" id="id_max_stars" name="max_stars" value="{{ form.max_stars.value|default_if_none:'' }}" min="0">
+      </div>
+      <div class="field">
+        <label for="id_created_days">Tạo trong (ngày gần đây)</label>
+        <input type="number" id="id_created_days" name="created_days" value="{{ form.created_days.value|default_if_none:'' }}" min="1">
+      </div>
+      <div class="field">
+        <label for="id_sort">Sắp theo</label>
+        <select id="id_sort" name="sort">
+          {% for value, label in sorts.items %}<option value="{{ value }}"{% if value == filters.sort %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="checks">
+      <label><input type="checkbox" name="rising_only"{% if filters.rising_only %} checked{% endif %}> Chỉ rising star (báo cáo mới nhất)</label>
+      <label><input type="checkbox" name="commercial"{% if filters.commercial %} checked{% endif %}> Giấy phép cho phép dùng thương mại (MIT, Apache, BSD…)</label>
+      <label><input type="checkbox" name="unclassified"{% if filters.unclassified %} checked{% endif %}> Chỉ repo chưa phân loại <span class="muted small">{{ unclassified_count|intcomma }}</span></label>
+      <label><input type="checkbox" name="show_suspicious"{% if filters.show_suspicious %} checked{% endif %}> Hiện cả repo nghi star giả</label>
+    </div>
+
+    {% if filters.scan %}
+      <input type="hidden" name="scan" value="{{ filters.scan }}">
+      <p class="notice">Chỉ hiện repo của <a href="{% url 'discovery:scan_detail' filters.scan %}">lần quét #{{ filters.scan }}</a>.</p>
+    {% endif %}
+
+    <div class="inline-form">
+      <button type="submit">Lọc</button>
+      <a href="{% url 'browse:repos' %}">Xoá bộ lọc</a>
+    </div>
+  </form>
+</section>
+
+<section>
+  <h2>{{ page.total|intcomma }} repo{% if page.pages > 1 %} <span class="muted small">· Trang {{ page.page }}/{{ page.pages }}</span>{% endif %}</h2>
+  {% if page.rows %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="num">#</th><th>Repo</th><th class="num">Star</th><th class="num">Fork</th>
+            <th class="num">+7 ngày</th><th class="num">Chất lượng</th><th class="num">Nghi star giả</th>
+            <th>Ngôn ngữ</th><th>Đẩy code</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in page.rows %}
+            {% with repo=row.repository %}
+            <tr>
+              <td class="num">{{ forloop.counter0|add:page.first_index }}</td>
+              <td>
+                <a href="{{ repo.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ repo.full_name }}</strong></a>
+                {% include "taxonomy/_labels.html" with labels=row.labels %}
+                {% if repo.description %}<div class="desc">{{ repo.description|truncatechars:200 }}</div>{% endif %}
+              </td>
+              <td class="num">{{ repo.stars|intcomma }}</td>
+              <td class="num">{{ repo.forks|intcomma }}</td>
+              <td class="num">{% if row.gain_7d is not None %}+{{ row.gain_7d|intcomma }}{% else %}—{% endif %}</td>
+              <td class="num">{% include "scoring/_score.html" with score=row.scores.quality %}</td>
+              <td class="num">{% include "scoring/_suspicion.html" with suspicion=row.scores.suspicion %}</td>
+              <td>{{ repo.language|default:"—" }}</td>
+              <td class="nowrap">{{ repo.gh_pushed_at|date:"d/m/Y"|default:"—" }}</td>
+            </tr>
+            {% endwith %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page.pages > 1 %}
+      <nav class="pager" aria-label="Phân trang">
+        {% if previous_url %}<a href="{% url 'browse:repos' %}{{ previous_url }}">← Trang trước</a>{% endif %}
+        <span>Trang {{ page.page }}/{{ page.pages }}</span>
+        {% if next_url %}<a href="{% url 'browse:repos' %}{{ next_url }}">Trang sau →</a>{% endif %}
+      </nav>
+    {% endif %}
+  {% else %}
+    <p class="muted">Không có repo nào khớp bộ lọc. Thử bỏ bớt nhóm, hoặc bấm "Xoá bộ lọc".</p>
+  {% endif %}
+</section>
+{% endblock %}

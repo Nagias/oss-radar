@@ -1,0 +1,119 @@
+# Bộ nhóm phân loại repo (F-010). Sửa tay được: thêm, bớt, đổi tên nhóm — không cần sửa code.
+#
+# - `code`: mã cố định, chỉ chữ thường a-z và dấu gạch dưới. Đổi mã = nhóm mới (nhãn cũ bị bỏ qua).
+# - `name`: tên hiện trên trang.
+# - `hint`: câu gợi ý cho AI — cái gì thuộc nhóm, cái gì không.
+# - Mỗi lần sửa file thì TĂNG `version`, rồi chạy `uv run python manage.py classify --reclassify`
+#   (~810 lượt gọi AI cho cả kho) để phân loại lại theo bộ nhóm mới.
+# - Lớp "aspects" bắt buộc có nhóm `khac` (Khác).
+
+version = 1
+
+# --- Lớp 1: Dành cho ai (mỗi repo 1–2 nhãn) --------------------------------------------------
+
+[[audience]]
+code = "developer"
+name = "Lập trình viên"
+hint = "Người viết code: thư viện, framework, SDK, công cụ dòng lệnh, hạ tầng. Không dùng cho repo chỉ là danh sách link."
+
+[[audience]]
+code = "marketer"
+name = "Marketer"
+hint = "Người làm marketing, quảng cáo, SEO, mạng xã hội, email, phân tích khách hàng."
+
+[[audience]]
+code = "business"
+name = "Kinh doanh & doanh nghiệp một người"
+hint = "Chủ doanh nghiệp, người làm một mình: bán hàng, CRM, kế toán, vận hành, chăm sóc khách hàng, mẫu startup."
+
+[[audience]]
+code = "creator"
+name = "Nhà sáng tạo nội dung (video, YouTube, ảnh)"
+hint = "Người làm video, YouTube, TikTok, phim ngắn, podcast, ảnh, thiết kế, viết bài."
+
+[[audience]]
+code = "gamedev"
+name = "Làm game"
+hint = "Người làm game: engine, công cụ, tài nguyên, game mẫu."
+
+[[audience]]
+code = "research"
+name = "Nghiên cứu & dữ liệu"
+hint = "Nhà nghiên cứu, người làm dữ liệu và học máy: bài báo, bộ dữ liệu, đánh giá mô hình, huấn luyện."
+
+# --- Lớp 2: Làm được gì (mỗi repo 1–3 nhãn) --------------------------------------------------
+
+[[aspects]]
+code = "agent"
+name = "AI Agent & tự động hoá"
+hint = "AI tự làm việc thay người: agent, skill cho Claude/Codex, tự động hoá trình duyệt, đa agent."
+
+[[aspects]]
+code = "video"
+name = "Video & làm phim AI"
+hint = "Tạo, sửa, cắt ghép, phụ đề, lồng tiếng video; phim ngắn AI; prompt cho mô hình video."
+
+[[aspects]]
+code = "image"
+name = "Ảnh & thiết kế AI"
+hint = "Tạo, sửa ảnh bằng AI; thiết kế đồ hoạ, logo, giao diện bằng AI; ComfyUI, Stable Diffusion."
+
+[[aspects]]
+code = "audio"
+name = "Âm thanh & giọng nói"
+hint = "Chuyển giọng nói thành chữ, đọc văn bản, nhân bản giọng, nhạc AI, podcast."
+
+[[aspects]]
+code = "writing"
+name = "Viết nội dung & SEO"
+hint = "Viết bài, kịch bản, dịch, tóm tắt, SEO, quản lý nội dung (CMS, blog)."
+
+[[aspects]]
+code = "social"
+name = "Mạng xã hội & YouTube"
+hint = "Đăng bài, lên lịch, tải video, quản lý kênh YouTube/TikTok/Facebook/X, phân tích kênh."
+
+[[aspects]]
+code = "ads"
+name = "Quảng cáo & phân tích marketing"
+hint = "Quảng cáo trả phí, đo lường, theo dõi chuyển đổi, phân tích web, email marketing."
+
+[[aspects]]
+code = "scraping"
+name = "Thu thập dữ liệu (crawl, scrape)"
+hint = "Crawl web, scrape dữ liệu, tìm kiếm web cho AI, trích xuất nội dung trang."
+
+[[aspects]]
+code = "devtools"
+name = "Công cụ lập trình & vibe code (IDE, CLI, MCP)"
+hint = "Công cụ giúp viết code: IDE, CLI, MCP server, review code, git, vibe coding, trợ lý lập trình."
+
+[[aspects]]
+code = "ai_infra"
+name = "Mô hình & hạ tầng AI (chạy LLM, RAG, fine-tune)"
+hint = "Chạy mô hình, gọi API AI, RAG, cơ sở dữ liệu vector, fine-tune, đánh giá mô hình, proxy LLM."
+
+[[aspects]]
+code = "webapp"
+name = "Web, app & giao diện"
+hint = "Xây web, app di động, giao diện người dùng, template trang web, dashboard."
+
+[[aspects]]
+code = "game"
+name = "Game engine & tài nguyên game"
+hint = "Engine game, game hoàn chỉnh, tài nguyên (sprite, âm thanh game), mod, công cụ làm game."
+
+[[aspects]]
+code = "commerce"
+name = "Bán hàng & thương mại điện tử"
+hint = "Cửa hàng online, thanh toán, sàn TMĐT (Shopee, Amazon, TikTok Shop), dropshipping, so sánh giá."
+
+[[aspects]]
+code = "productivity"
+name = "Năng suất & quy trình (workflow, no-code)"
+hint = "Ghi chú, quản lý việc, workflow tự động (n8n), no-code, tài liệu, trợ lý cá nhân."
+
+[[aspects]]
+code = "khac"
+name = "Khác"
+hint = "Chỉ dùng khi repo không hợp nhóm nào ở trên (vd danh sách link chung chung, bài tập cá nhân)."

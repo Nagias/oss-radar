@@ -24,11 +24,13 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 | QĐ-09 | Một lệnh kiểm tra | `uv run poe check` (poethepoet) | Đã duyệt, đã dùng |
 | QĐ-10 | CI & bảo vệ nhánh | GitHub Actions trên `windows-latest`, action ghim SHA, main chỉ nhận PR có CI xanh | Đã duyệt, đã bật (Nagias/oss-radar) |
 | QĐ-11 | Việc nền & lịch hằng ngày | Huey + SqliteHuey | Thay bởi QĐ-14 (2026-10-22) |
-| QĐ-12 | AI | Gemini qua 9router (chuẩn OpenAI), AI chỉ phân loại/đánh giá | Dự kiến — chưa cài |
+| QĐ-12 | AI | Gemini qua 9router (chuẩn OpenAI), AI chỉ phân loại/đánh giá | Thay bởi QĐ-18 (2026-10-27) |
 | QĐ-13 | Nguồn khám phá phụ | Exa, Tavily | Dự kiến — chưa cài |
 | QĐ-14 | Việc nền | Một luồng trong tiến trình web (`core/background.py`), trạng thái + nhịp sống trong CSDL | Đã duyệt 2026-10-22, đã dùng (F-002); câu "nơi duy nhất tạo luồng" sửa bởi QĐ-15 |
 | QĐ-15 | Lịch hằng ngày, chạy bù | Bộ nhịp trong tiến trình web (`core/scheduler.py`) + `settings.SCHEDULED_JOBS`; mỗi lúc một việc | Đã duyệt 2026-10-22, đã dùng (F-005) |
 | QĐ-16 | Nguồn số liệu star tăng | Lịch sử star chính thức của GitHub; ảnh chụp star chỉ làm radar, giữ 35 ngày | Đã duyệt 2026-10-22, đã dùng (F-005) |
+| QĐ-18 | AI (thay QĐ-12) | Client `integrations/llm` gọi 9router (chuẩn OpenAI, `stream: false`); AI **chỉ phân loại** repo vào bộ nhóm cố định, đầu ra kiểm theo danh sách mã; ngân sách, giãn nhịp 10 lượt/phút | Đã duyệt 2026-10-27 (thiết kế F-010), đã dùng |
+| QĐ-19 | Điểm lưu sẵn (sửa QĐ-17) | Điểm Chất lượng + mức nghi star giả lưu ở `ScoreCache` để lọc / sắp cả kho; phần giải thích vẫn tính trực tiếp | Đã duyệt 2026-10-27 (đo: 3,2 giây cho 32.412 repo), đã dùng |
 | QĐ-17 | Chấm điểm, lọc star giả | Hàm thuần tính lúc hiển thị (không lưu điểm); "Nghi cao" ẩn chứ không xoá; hồ sơ chủ repo lưu ở kho, làm mới sau 30 ngày | Đã duyệt 2026-10-23 (thiết kế F-006), đã dùng (F-006) |
 
 ---
@@ -147,6 +149,30 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
   dụng, (3) tóm tắt tiếng Việt. AI **không được tạo số liệu** (star, contributor, tổ chức đứng sau) —
   số liệu luôn lấy từ GitHub API. Mỗi đánh giá của AI được lưu kèm lý do và phiên bản prompt để kiểm lại.
 
+### QĐ-18 — AI qua 9router, chỉ để phân loại (thay QĐ-12)
+- **Client** `integrations/llm/` (httpx, chuẩn OpenAI): `LlmClient.complete` gửi `stream: false` (9router mặc
+  định trả dạng luồng — đo 2026-10-27), `temperature: 0`, xin JSON; lỗi có tên; giãn nhịp và ngân sách dùng lại
+  `integrations/github/pacing.py`. Cấu hình `.env`: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`.
+- **Vai trò AI (chủ dự án chốt 2026-10-27):** chỉ gắn nhãn repo vào bộ nhóm hai lớp ở
+  `features/taxonomy/categories.toml`, dựa trên tên, mô tả, topics, ngôn ngữ. **Không chấm điểm, không gợi ý,
+  không tạo số liệu.** Đầu ra là dữ liệu không tin cậy: mã lạ bị bỏ, số nhãn bị cắt, repo AI bỏ sót coi như
+  chưa phân loại; mỗi nhãn lưu kèm lý do (từ khoá), model, phiên bản prompt và bộ nhóm.
+- **Tốn:** đo thật 2026-10-27 — phân loại cả kho 32.412 repo: 813 lượt gọi, 5,57 triệu token vào + 1,58 triệu
+  token ra (~6.900 vào, ~1.950 ra mỗi lượt 40 repo), 162 phút. Sau đó tối đa 150 lượt/ngày cho repo mới.
+- **Rủi ro:** 9router / gói Gemini đổi hoặc hết hạn mức → phân loại dừng, phần còn lại của app chạy bình thường
+  (bước phân loại không chặn báo cáo). ~2% lô Gemini trả JSON hỏng ngẫu nhiên → thử lại.
+- **Đã loại:** gửi README cho AI (tốn token, chủ dự án chốt chỉ dựa vào mô tả); để AI chấm mức liên quan (chủ dự
+  án không cần).
+
+### QĐ-19 — Lưu sẵn điểm để lọc, sắp cả kho (sửa QĐ-17)
+- QĐ-17 tính điểm lúc xem. Đo 2026-10-27: đọc + chấm 32.412 repo mất 3,2 giây → trang Kho repo (lọc, sắp, ẩn
+  "Nghi cao" trên cả kho) quá chậm.
+- **Lưu `ScoreCache`** (`features/scoring`): điểm Chất lượng, điểm và mức nghi star giả (không có số tăng star,
+  như trang lần quét), phiên bản công thức. Tính lại cả kho ở bước lập báo cáo mỗi ngày (~3 giây) và sau mỗi
+  lần quét tay; lệnh `manage.py rescore` khi đổi công thức (`FORMULA_VERSION`).
+- Phần giải thích điểm trên trang vẫn tính trực tiếp từ `rules.py` cho các dòng đang hiện → luôn khớp công thức.
+- Repo mới vào kho chưa có điểm lưu sẵn: không bị ẩn, xếp cuối khi sắp theo Chất lượng.
+
 ### QĐ-13 — Exa, Tavily (dự kiến)
 - Nguồn khám phá phụ: tìm các link `github.com/...` xuất hiện trong bài viết, blog (kể cả blog Trung Quốc)
   mà tìm kiếm của GitHub bỏ sót. Link tìm được đi qua **cùng một đường chuẩn hoá** bằng GitHub API như mọi
@@ -237,8 +263,11 @@ features/
     tests/               Test của riêng tính năng
   rising/                F-005 Rising star + quét hằng ngày (growth.py: hàm thuần tính star tăng)
   scoring/               F-006 Chấm điểm (rules.py: hàm thuần; services.py: gom dữ kiện, lấy hồ sơ chủ)
+  taxonomy/              F-010 Phân loại repo bằng AI (categories.toml: bộ nhóm; prompt.py: hàm thuần)
+  browse/                F-010 Trang Kho repo: lọc, sắp, phân trang toàn kho
 integrations/
   github/                Client GitHub (+ pacing.py: giãn nhịp, gọi lại, ngân sách). Không biết Django model.
+  llm/                   Client AI qua 9router (chuẩn OpenAI) — QĐ-18.
 core/
   background.py          Chạy việc nền một luồng (QĐ-14).
   scheduler.py           Bộ nhịp gọi việc định kỳ trong settings.SCHEDULED_JOBS (QĐ-15).

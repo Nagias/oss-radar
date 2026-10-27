@@ -34,7 +34,8 @@ class Command(BaseCommand):
         verify = f"{run.verify_calls_used}/{run.verify_budget}"
         owners = f"{run.owner_calls_used}/{run.owner_budget}"
         self.stdout.write(
-            f"Lượt gọi: Search {run.search_calls_used}, xác minh {verify}, hồ sơ chủ {owners}."
+            f"Lượt gọi: Search {run.search_calls_used}, xác minh {verify}, hồ sơ chủ {owners},"
+            f" AI {run.ai_calls_used}."
         )
         for note in run.stop_reason.splitlines():
             self.stdout.write(f"Ghi chú: {note}")

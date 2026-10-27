@@ -5,6 +5,7 @@ ngày tạo — hình dạng dữ liệu luôn đúng như GitHub trả.
 """
 
 import copy
+import json
 import re
 import time
 from collections.abc import Callable
@@ -215,3 +216,60 @@ class FakeGitHubUsers:
             return httpx.Response(404, json={"message": "Not Found"})
         headers = {"x-ratelimit-remaining": "59", "x-ratelimit-reset": str(int(time.time()) + 3600)}
         return httpx.Response(200, json=user, headers=headers)
+
+
+# --- 9router giả (F-010) ----------------------------------------------------------------------
+
+_PROMPT_ID = re.compile(r'^\{"id": (\d+),', re.MULTILINE)
+LLM_CHAT_URL = "http://localhost:20128/v1/chat/completions"
+DEFAULT_LABELS: tuple[list[str], list[str]] = (["developer"], ["devtools"])
+
+
+class FakeLlm:
+    """Dùng làm `side_effect` của respx cho POST /chat/completions của 9router.
+
+    Đọc id repo trong prompt, trả nhãn đúng hình dạng phản hồi THẬT (tests/fixtures/llm/), kể cả
+    khung ```json mà Gemini hay bọc. `labels` quyết định nhãn theo id; `fail_with(lần gọi thứ n)`
+    trả mã lỗi HTTP; `garbled` là các lần gọi trả nội dung không phải JSON.
+    """
+
+    def __init__(self, labels: Callable[[int], tuple[list[str], list[str]]] | None = None) -> None:
+        self.labels = labels or (lambda _id: DEFAULT_LABELS)
+        self.calls: list[list[int]] = []
+        self.fail_with: Callable[[int], int | None] | None = None
+        # Lỗi theo nội dung lô (vd bộ lọc an toàn chặn lô có repo `id`): trả mã HTTP.
+        self.fail_when_ids: Callable[[list[int]], int | None] | None = None
+        self.garbled: set[int] = set()
+        self.skip_ids: set[int] = set()
+        # Gọi mỗi khi nhận một lượt — để test giả lập việc xảy ra giữa chừng.
+        self.on_call: Callable[[int], None] | None = None
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        user = next(m["content"] for m in body["messages"] if m["role"] == "user")
+        ids = [int(found) for found in _PROMPT_ID.findall(user)]
+        self.calls.append(ids)
+        call_number = len(self.calls)
+        if self.on_call is not None:
+            self.on_call(call_number)
+        if self.fail_with is not None and (status := self.fail_with(call_number)) is not None:
+            return httpx.Response(status, json={"error": {"message": "lỗi giả lập"}})
+        if self.fail_when_ids is not None and (status := self.fail_when_ids(ids)) is not None:
+            return httpx.Response(status, json={"error": {"message": "nội dung bị chặn"}})
+        if call_number in self.garbled:
+            content = "Xin lỗi, tôi không chắc."
+        else:
+            repos = [
+                {
+                    "id": repo_id,
+                    "audience": self.labels(repo_id)[0],
+                    "aspects": self.labels(repo_id)[1],
+                    "reason": f"từ khoá của repo {repo_id}",
+                }
+                for repo_id in ids
+                if repo_id not in self.skip_ids
+            ]
+            content = "```json\n" + json.dumps({"repos": repos}, ensure_ascii=False) + "\n```"
+        reply = copy.deepcopy(load_fixture("llm/chat_completion_classify.json"))
+        reply["choices"][0]["message"]["content"] = content
+        return httpx.Response(200, json=reply)

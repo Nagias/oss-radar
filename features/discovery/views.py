@@ -11,7 +11,8 @@ from features.discovery import services
 from features.discovery.forms import ResumeForm, ScanForm
 from features.discovery.models import ScanRun
 
-# DEBT(D-007): trang kết quả chỉ hiện 500 repo nhiều star nhất; xem đủ cần trang duyệt kho.
+# Trang lần quét chỉ in 500 repo nhiều star nhất; xem đủ cả lần quét ở trang Kho repo
+# (`/repos/?scan=<id>`, F-010).
 RESULTS_SHOWN_LIMIT = 500
 
 

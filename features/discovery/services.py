@@ -32,6 +32,7 @@ from features.discovery.slicing import (
     split,
 )
 from features.scoring import services as scoring
+from features.taxonomy import services as taxonomy
 from integrations.github.client import GitHubClient, get_github_client
 from integrations.github.errors import (
     GitHubAuthError,
@@ -331,6 +332,7 @@ def scan_results(scan: ScanRun) -> QuerySet[ScanResult]:
 class ScoredResult:
     result: ScanResult
     scores: scoring.RepoScores
+    labels: taxonomy.RepoLabels | None  # None = chưa phân loại (F-010)
 
 
 @dataclass(frozen=True, slots=True)
@@ -348,7 +350,11 @@ def scored_results(scan: ScanRun, *, limit: int) -> ScoredResults:
     """
     results = list(scan_results(scan)[:limit])
     scores = scoring.score_repositories([result.repository for result in results])
-    rows = [ScoredResult(result, scores[result.repository_id]) for result in results]
+    labels = taxonomy.labels_for(result.repository_id for result in results)
+    rows = [
+        ScoredResult(result, scores[result.repository_id], labels.get(result.repository_id))
+        for result in results
+    ]
     return ScoredResults(
         shown=[row for row in rows if not row.scores.suspicion.is_hidden],
         hidden=[row for row in rows if row.scores.suspicion.is_hidden],
@@ -444,6 +450,10 @@ def execute_scan(scan_id: int) -> None:
     try:
         with get_github_client(sleep=sleeper, budget=budget) as github:
             runner.run(github)
+        if scan.origin == ScanRun.Origin.MANUAL:
+            # Lượt hằng ngày tự tính lại điểm cả kho ở bước lập báo cáo; quét tay thì tính ngay để
+            # trang Kho repo lọc / sắp đúng (QĐ-19).
+            scoring.refresh_scores(repositories_seen_in([scan.pk]))
     except ScanSupersededError:
         logger.info("Lần quét #%s: lượt chạy cũ rút lui, không ghi gì thêm", scan.pk)
     except KeyboardInterrupt:

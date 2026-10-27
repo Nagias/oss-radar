@@ -27,6 +27,7 @@ from features.rising.tests.conftest import (
     make_run,
     some_repos,
 )
+from tests.factories import label_repository
 
 pytestmark = pytest.mark.django_db
 
@@ -613,6 +614,7 @@ def test_stop_unknown_run_is_404_and_get_is_refused(client: Client) -> None:
         ("/rising/", "Rising star"),
         ("/rising/watch/", "Theo dõi"),
         ("/rising/watch/{watch}/", "Theo dõi"),
+        ("/repos/", "Kho repo"),
     ],
 )
 def test_nav_links_on_every_page(
@@ -627,6 +629,7 @@ def test_nav_links_on_every_page(
     assert [(href, label) for href, _, label in links] == [
         ("/", "Quét"),
         ("/rising/", "Rising star"),
+        ("/repos/", "Kho repo"),
         ("/rising/watch/", "Theo dõi"),
     ]
     assert [label for _, mark, label in links if mark] == [current]
@@ -736,3 +739,20 @@ def test_report_unverified_rows_show_estimated_potential(client: Client) -> None
 
     assert "Tiềm năng (ước lượng)" in page
     assert "<strong>36</strong>" in page
+
+
+def test_report_page_shows_labels_and_filters_by_group(client: Client) -> None:
+    run = make_run()
+    for github_id in (1, 2):
+        make_check(run, github_id, stars=300, gain_7d=100 + github_id, is_rising=True)
+    label_repository(make_repo(1), audience=("creator",), aspects=("video",))
+
+    every = client.get(REPORT_URL).text
+    creators = client.get(REPORT_URL, {"audience": "creator"}).text
+
+    assert "Video &amp; làm phim AI" in every
+    assert 'href="/repos/?aspects=video"' in every
+    assert "gia-lap/repo-2" in every
+    assert "gia-lap/repo-1" in creators
+    assert "gia-lap/repo-2" not in creators
+    assert 'value="creator" checked' in creators

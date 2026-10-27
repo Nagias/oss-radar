@@ -9,6 +9,7 @@ from features.rising.growth import FLAG_LABELS, Flag, sparkline_points
 from features.rising.models import DailyRun, RisingCheck
 from features.rising.tests.conftest import DAY, make_check, make_repo, make_run
 from features.scoring.rules import SuspicionLevel
+from tests.factories import label_repository
 
 pytestmark = pytest.mark.django_db
 
@@ -217,3 +218,38 @@ def test_unverified_rows_carry_estimated_potential() -> None:
     assert row.check.repository.github_id == 1
     assert row.potential.estimated is True
     assert row.potential.total == 36  # tốc độ 10 + tăng tương đối 6 + còn chỗ lớn 20 + đà bền 0
+
+
+# --- Nhãn nhóm và lọc theo nhóm (F-010) ------------------------------------------------------
+
+
+def three_labelled_risers() -> DailyRun:
+    run = make_run()
+    for github_id in (1, 2, 3):
+        make_check(run, github_id, stars=300, gain_7d=100 + github_id, is_rising=True)
+    label_repository(make_repo(1), audience=("creator",), aspects=("video",))
+    label_repository(make_repo(2), audience=("marketer",), aspects=("ads",))
+    return run
+
+
+def ids(rows: list[services.RisingRow]) -> list[int]:
+    return sorted(row.repository.github_id for row in rows)
+
+
+def test_rows_carry_labels() -> None:
+    run = three_labelled_risers()
+
+    rows = {row.repository.github_id: row for row in services.daily_report(run).rising}
+
+    assert rows[1].labels is not None
+    assert [c.code for c in rows[1].labels.aspects] == ["video"]
+    assert rows[3].labels is None  # chưa phân loại
+
+
+def test_group_filters_or_within_axis_and_between_axes() -> None:
+    run = three_labelled_risers()
+
+    assert ids(services.daily_report(run, audience=("creator",)).rising) == [1]
+    assert ids(services.daily_report(run, audience=("creator", "marketer")).rising) == [1, 2]
+    assert ids(services.daily_report(run, audience=("creator",), aspects=("ads",)).rising) == []
+    assert ids(services.daily_report(run, aspects=("ads",)).rising) == [2]

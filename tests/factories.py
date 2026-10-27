@@ -46,3 +46,28 @@ def load_fixture_list(relative_path: str) -> list[Any]:
     """Như `load_fixture` nhưng cho phản hồi dạng mảng JSON (vd lịch sử star)."""
     data: list[Any] = json.loads((FIXTURES_DIR / relative_path).read_text(encoding="utf-8"))
     return data
+
+
+def label_repository(
+    repository: Any, *, audience: tuple[str, ...] = (), aspects: tuple[str, ...] = ()
+) -> None:
+    """Gắn nhãn F-010 cho một repo trong kho như thể AI vừa phân loại (lý do "lý do <id>")."""
+    from django.utils import timezone
+
+    from features.taxonomy.models import RepoClassification, RepoLabel
+
+    RepoClassification.objects.update_or_create(
+        repository=repository,
+        defaults={
+            "reason": f"lý do {repository.github_id}",
+            "model": "gemini",
+            "prompt_version": 1,
+            "taxonomy_version": 1,
+            "fingerprint": "x",
+            "classified_at": timezone.now(),
+        },
+    )
+    RepoLabel.objects.bulk_create(
+        [RepoLabel(repository=repository, axis="audience", code=code) for code in audience]
+        + [RepoLabel(repository=repository, axis="aspects", code=code) for code in aspects]
+    )

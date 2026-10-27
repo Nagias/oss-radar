@@ -14,9 +14,10 @@ test ở đâu, đang nợ gì.
 | Mã | Tính năng | Trạng thái | Thư mục | Lối vào | Test chính | Nợ |
 |---|---|---|---|---|---|---|
 | F-001 | Quét GitHub theo truy vấn → lưu không trùng → xem sắp theo star | Đã gộp vào F-002 (= mức Nhanh) | `features/discovery/` | như F-002 | `features/discovery/tests/` | — |
-| F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py`, `test_auto_resume.py` | D-007 |
+| F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py`, `test_auto_resume.py` | — |
 | F-005 | Rising star + lượt quét hằng ngày: ảnh chụp star, lọc thô, xác minh bằng lịch sử star chính thức, lịch chạy trong app, chạy bù, tự chạy tiếp | Chạy thật | `features/rising/` | Web `/rising/`, `/rising/watch/`, nút Chạy ngay/Chạy tiếp/Dừng; lệnh `manage.py daily`; tự chạy sau 7:00 khi app mở | `features/rising/tests/test_daily_run.py`, `test_verify.py`, `test_e2e.py` | D-009 |
 | F-006 | Chấm điểm Chất lượng / Tiềm năng có giải thích, lọc star giả (ẩn "Nghi cao", có nút hiện), hồ sơ chủ repo cho rising star | Chạy thật | `features/scoring/` | Cột điểm ở `/rising/` và `/scans/<id>/`; bước "Lấy hồ sơ chủ repo" của lượt hằng ngày | `features/scoring/tests/`, `features/rising/tests/test_owners.py` | — |
+| F-010 | Phân loại repo theo nhóm bằng AI (Gemini qua 9router) + trang Kho repo lọc và sắp toàn kho | Chạy thật | `features/taxonomy/`, `features/browse/` | Web `/repos/`; nhãn ở `/rising/` và `/scans/<id>/`; lệnh `manage.py classify` | `features/taxonomy/tests/`, `features/browse/tests/` | — |
 
 ## Mô-đun lõi và cửa ra ngoài
 
@@ -24,9 +25,53 @@ test ở đâu, đang nợ gì.
 |---|---|---|---|
 | `features/catalog/` | Lõi "kho repo": bảng `Repository` (khoá chống trùng `github_id`; có `open_issues` từ F-006), hàm `upsert_repositories` (ghi kèm ảnh chụp star `StarSnapshot` theo ngày); `baseline_snapshots`, `prune_snapshots`; hồ sơ chủ repo `OwnerProfile` (`save_owner_profile`, `mark_owner_missing`, `owner_profiles_for`, `logins_needing_profile`). Nơi DUY NHẤT ghi ba bảng này | Mọi tính năng, qua `features.catalog.services` | `features/catalog/tests/` |
 | `integrations/github/` | Cửa ra GitHub REST API: `GitHubClient.search_repositories`, `GitHubClient.star_history` (lịch sử star theo `github_id`), `GitHubClient.get_user` (hồ sơ tài khoản), dataclass `GitHubRepo`/`RepoSearchPage`/`StarHistory`/`GitHubUser`, lỗi có tên (`GitHubRateLimitError`, `GitHubAuthError`…); `pacing.py`: giãn nhịp, chờ hồi lượt, gọi lại khi lỗi tạm thời, `CallBudget` | Service của các tính năng, qua `get_github_client(sleep=, budget=)` | `integrations/github/tests/` |
+| `integrations/llm/` | Cửa ra AI qua 9router (chuẩn OpenAI): `LlmClient.complete` (gửi `stream: false`, xin JSON), `ChatResult` (nội dung + token), lỗi có tên (`LlmAuthError`, `LlmRateLimitError`, `LlmUnavailableError`, `LlmResponseError`, `LlmNotConfiguredError`); giãn nhịp và ngân sách dùng lại `integrations/github/pacing.py` (QĐ-18). AI chỉ phân loại, không tạo số liệu | Service của các tính năng, qua `get_llm_client(sleep=, budget=)`, `llm_configured()` | `integrations/llm/tests/` |
 | `core/` | Hạ tầng dùng chung, không phải tính năng: `core.background` chạy việc nền trên MỘT luồng trong tiến trình web (`submit`, `submit_if_idle`, `busy_label`, `relabel` — QĐ-14); `core.scheduler` bộ nhịp gọi `settings.SCHEDULED_JOBS` (QĐ-15); lệnh `runserver` của dự án bật bộ nhịp. Chỉ hai file này được tạo luồng | View và lệnh của các tính năng | `core/tests/` |
 
 ## Chi tiết từng tính năng
+
+### F-010 — Phân loại repo theo nhóm bằng AI, trang Kho repo
+- **Phục vụ vế nào của mục tiêu:** tìm đúng (lọc đúng mảng mình cần thay vì một danh sách trộn lẫn), không rác
+  (ẩn "Nghi cao" trên cả kho, lọc giấy phép cho phép dùng thương mại).
+- **Người dùng làm gì → thấy gì:**
+  - Mở **Kho repo** (`/repos/`), tick nhóm "Dành cho ai" / "Làm được gì" (mỗi nhóm có số repo).
+  - Lọc thêm theo từ khoá, ngôn ngữ, star, ngày tạo, giấy phép thương mại, chỉ rising star, chưa phân loại.
+  - Sắp theo star, fork, tăng 7 ngày, Chất lượng, mới tạo, mới đẩy code; 50 repo/trang.
+  - Mỗi dòng có nhãn: bấm nhãn = lọc theo nhãn đó, di chuột = lý do AI xếp.
+  - Trang Rising star có nhãn và ô lọc nhóm.
+  - Trang lần quét có nhãn và link "Xem cả N repo của lần quét này ở Kho repo".
+- **Luồng chạy:**
+  - **Phân loại:** `taxonomy.services.repositories_needing_labels` (repo chưa có nhãn hoặc được quét lại có mô tả
+    đổi) → `classify` (lô 40 repo, `prompt.build_messages` → `LlmClient.complete` → `prompt.parse_labels` kiểm
+    đầu ra → lưu `RepoClassification` + `RepoLabel` ngay sau mỗi lô).
+  - **Ba lối chạy:**
+    - bước 5 "Phân loại repo" của lượt hằng ngày: repo của lượt, rising trước, ≤ 5 lượt gọi; hỏng thì ghi chú,
+      vẫn lập báo cáo;
+    - việc định kỳ `rising.services.classify_backlog_if_due`: sau khi lượt hôm nay xong, ≤ 10 lượt mỗi nhịp,
+      ≤ 150 lượt/ngày, nghỉ 30 phút sau lỗi;
+    - lệnh `manage.py classify` (phân loại bù, `--reclassify` sau khi đổi bộ nhóm).
+  - **Trang Kho repo:** `browse.services.browse` lọc / sắp trong CSDL (nhãn qua `taxonomy`, điểm lưu sẵn qua
+    `scoring.with_cached_scores`, rising / tăng 7 ngày qua `rising`, lần quét qua `discovery`); 50 dòng đang hiện
+    mới chấm điểm trực tiếp.
+- **Thành phần:**
+  - `integrations/llm/` (client AI);
+  - `features/taxonomy/`: `categories.toml` (bộ nhóm, sửa tay), `categories.py`, `prompt.py` (hàm thuần),
+    `services.py`, model `RepoClassification` / `RepoLabel` / `ClassifyRun`, lệnh `classify`, template con
+    `taxonomy/_labels.html`, check `taxonomy.E001`;
+  - `features/browse/`: form `BrowseForm`, `services.browse`, view `repos`, `browse/repos.html`;
+  - `features/scoring`: `ScoreCache`, `refresh_scores`, lệnh `rescore` (QĐ-19);
+  - `features/rising`: bước `CLASSIFY` (số 6), `DailyRun.ai_calls_used`, `classify_backlog_if_due`, ô lọc nhóm.
+- **Phụ thuộc:** `rising` → `taxonomy` → `catalog`; `browse` → `taxonomy`, `scoring`, `rising`, `discovery`,
+  `catalog`; `taxonomy` không import `rising`/`discovery`.
+- **Kiểm chứng tự động:**
+  - `integrations/llm/tests/`;
+  - `features/taxonomy/tests/` (bộ nhóm, prompt + câu chèn lệnh, gom lô, không gọi lại, thử lại, lệnh);
+  - `features/browse/tests/` (mọi ô lọc, HOẶC / VÀ, sắp, phân trang, ô sai, số câu truy vấn không tăng theo dòng);
+  - `features/rising/tests/test_classify_step.py`, `features/scoring/tests/test_cache.py`;
+  - gọi 9router thật: `uv run poe test-live`.
+- **Kiểm chứng tay:** `uv run python manage.py classify --budget 5`; `uv run poe dev` rồi mở
+  `http://127.0.0.1:8765/repos/`.
+- **Nợ liên quan:** trả D-007.
 
 ### F-006 — Chấm điểm Chất lượng / Tiềm năng, lọc star giả
 - **Phục vụ vế nào của mục tiêu:** không rác (lọc star giả), tìm đúng (xếp theo chất lượng/tiềm năng thay vì
@@ -139,7 +184,7 @@ test ở đâu, đang nợ gì.
   Quét mức Sâu trên 1.500 repo → độ phủ 100%, quét lại không trùng. Gọi GitHub thật: `uv run poe test-live`.
 - **Kiểm chứng tay:** `uv run python manage.py scan "topic:ai-video" --budget 300`; hoặc mở trình duyệt,
   quét mức Vừa, bấm Dừng rồi Tiếp tục.
-- **Nợ liên quan:** D-007 (trang chỉ hiện 500 repo đầu). D-008 đã trả (2026-10-23). D-006 đã trả ở F-005
+- **Nợ liên quan:** D-007 đã trả ở F-010 (xem đủ cả lần quét ở Kho repo). D-008 đã trả (2026-10-23). D-006 đã trả ở F-005
   (lần quét bị gián đoạn tự chạy tiếp).
 
 ### F-001 — Quét GitHub theo truy vấn (bộ khung đi được)

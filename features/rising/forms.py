@@ -12,6 +12,7 @@ from features.discovery.services import BUDGET_CHOICES, forbidden_qualifier_hint
 from features.rising.growth import RISING_MAX_STARS, RISING_MIN_GAIN_7D
 from features.rising.models import WatchQuery
 from features.rising.services import SORT_GAIN, SORT_POTENTIAL
+from features.taxonomy.services import load_taxonomy
 
 DEFAULT_WATCH_BUDGET = 300  # mức "Sâu": đủ quét trọn một truy vấn cỡ vài nghìn repo
 
@@ -75,6 +76,8 @@ class ReportFilterForm(forms.Form):
         label="Tăng tối thiểu trong 7 ngày", min_value=0, required=False, initial=RISING_MIN_GAIN_7D
     )
     day = forms.DateField(label="Ngày báo cáo", required=False)
+    audience = forms.MultipleChoiceField(label="Dành cho ai", required=False, choices=())
+    aspects = forms.MultipleChoiceField(label="Làm được gì", required=False, choices=())
     sort = forms.ChoiceField(
         label="Sắp theo",
         choices=[(SORT_POTENTIAL, "Điểm Tiềm năng"), (SORT_GAIN, "Tăng 7 ngày")],
@@ -97,6 +100,20 @@ class ReportFilterForm(forms.Form):
             cleaned.get("min_gain", RISING_MIN_GAIN_7D),
             cleaned.get("day"),
         )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        taxonomy = load_taxonomy()  # nạp một lần mỗi lần mở app (sửa file → khởi động lại app)
+        self.fields["audience"].choices = [(c.code, c.name) for c in taxonomy.audience]  # type: ignore[attr-defined]
+        self.fields["aspects"].choices = [(c.code, c.name) for c in taxonomy.aspects]  # type: ignore[attr-defined]
+
+    def groups(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """(nhóm "Dành cho ai", nhóm "Làm được gì") đã chọn; ô có mã lạ thì coi như không chọn."""
+        if not self.is_bound:
+            return (), ()
+        self.is_valid()
+        data = self.cleaned_data
+        return tuple(data.get("audience") or ()), tuple(data.get("aspects") or ())
 
     def sort_order(self) -> str:
         """Thứ tự bảng rising star; để trống hoặc giá trị lạ thì theo điểm Tiềm năng."""
