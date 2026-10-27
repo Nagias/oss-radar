@@ -1,0 +1,8 @@
+{% comment %}Thanh chuyển trang của một mục báo cáo. Biến: pager (None = một trang, không hiện), anchor (id mục để nhảy về).{% endcomment %}
+{% if pager %}
+<nav class="pager" aria-label="Phân trang">
+  {% if pager.previous_url %}<a href="{% url 'rising:report' %}{{ pager.previous_url }}#{{ anchor }}">← Trang trước</a>{% endif %}
+  <span>Trang {{ pager.info.page }}/{{ pager.info.pages }}</span>
+  {% if pager.next_url %}<a href="{% url 'rising:report' %}{{ pager.next_url }}#{{ anchor }}">Trang sau →</a>{% endif %}
+</nav>
+{% endif %}

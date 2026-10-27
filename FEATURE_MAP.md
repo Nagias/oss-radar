@@ -114,8 +114,10 @@ test ở đâu, đang nợ gì.
 - **Người dùng làm gì → thấy gì:** mở app sau 7:00 → lượt hằng ngày tự chạy (hoặc bấm **Chạy ngay**) →
   trang `/rising/` hiện tiến độ ("đã xong k/16 truy vấn"), xong thì hiện bảng rising star: +1/+7/+30 ngày,
   tăng %, tuổi repo, biểu đồ 30 ngày, nhãn **Mới vào danh sách**, cờ cảnh giác, dòng "Vì sao có mặt" ghi
-  nguồn và khoảng ngày UTC; mục "Ứng viên chưa xác minh" (ước lượng, ghi rõ) và "Chưa đủ dữ liệu". Lọc
-  nhanh theo star tối đa và mức tăng tối thiểu. Trang `/rising/watch/`: thêm/sửa/tắt truy vấn theo dõi,
+  nguồn và khoảng ngày UTC; mục "Ứng viên chưa xác minh" (ước lượng, ghi rõ; gập sẵn) và "Chưa đủ dữ
+  liệu". Lọc nhanh theo star tối đa và mức tăng tối thiểu. Bảng rising (25 dòng/trang, ô `page`) và mục chưa
+  xác minh (20 dòng/trang, ô `upage`) chia trang riêng; link chuyển trang giữ mọi ô lọc và trang của mục
+  kia — trang mặc định ~130 KB trên CSDL thật (trước đó tới 1,35 MB, tự tải lại mỗi 10 giây khi lượt chạy). Trang `/rising/watch/`: thêm/sửa/tắt truy vấn theo dõi,
   ước lượng lượt gọi và thời gian mỗi ngày, lịch sử các lượt, nút **Chạy ngay / Chạy tiếp / Dừng**. Trong
   lúc lượt chạy, nút Quét ở trang chủ bị khoá kèm nhãn việc đang chạy.
 - **Luồng chạy:** `core.scheduler` (bật trong `runserver`) cứ 5 phút → `rising.services.run_daily_if_due`
@@ -138,14 +140,15 @@ test ở đâu, đang nợ gì.
   - form: `WatchQueryForm`, `ReportFilterForm`
   - view/URL (`app_name = "rising"`): `report` (`/rising/`), `watch` (`/rising/watch/`), `watch_edit`
     (`/rising/watch/<id>/`), `run_now` (POST `/rising/run/`), `stop` (POST `/rising/runs/<id>/stop/`)
-  - template: `rising/report.html`, `watch.html`, `watch_edit.html`, `_today.html`, `_watch_form.html`
+  - template: `rising/report.html`, `watch.html`, `watch_edit.html`, `_today.html`, `_watch_form.html`,
+    `_pager.html`
   - lệnh: `manage.py daily` (chạy lượt của hôm nay ở tiền cảnh)
 - **Phụ thuộc:** `discovery.services` (quét, tự chạy tiếp, dọn kết quả), `catalog.services` (ảnh chụp
   star), `integrations.github` (`star_history`), `core.background`, `core.scheduler`.
 - **Kiểm chứng tự động:** `features/rising/tests/` — hàm thuần với phản hồi lịch sử star thật đã lưu; lượt
   hằng ngày với GitHub giả lập (quét lại, lọc thô, xác minh, hết ngân sách, repo bị xoá 404, bị gián đoạn
   rồi chạy tiếp, Dừng, sang ngày mới, lỗi token rồi Chạy tiếp); lịch (trước/sau 7:00, chạy bù, tối đa 3
-  lần tự chạy tiếp); trang và lệnh; `test_e2e.py` chạy `manage.py daily` trên 300 repo giả rồi mở `/rising/`.
+  lần tự chạy tiếp); trang và lệnh (gồm chia trang báo cáo); `test_e2e.py` chạy `manage.py daily` trên 300 repo giả rồi mở `/rising/`.
   `features/discovery/tests/test_auto_resume.py` cho phần trả D-006. Gọi GitHub thật: `uv run poe test-live`.
 - **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/rising/` sau 7:00 (lượt tự chạy) hoặc
   bấm Chạy ngay; sửa một file `.py` giữa lúc chạy để server khởi động lại → khoảng 5 phút sau lượt tự nối.

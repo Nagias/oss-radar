@@ -106,4 +106,15 @@
       4 lượt gọi AI (trần 5), 268 rising star, 691 repo mới; phân loại dần tự chạy mỗi 5 phút (3 lượt/nhịp) →
       33.103/33.103 repo có nhãn, 268/268 rising star có nhãn
 - [x] `poe check` xanh (817 test, độ phủ 98,65%); `poe test-live` 5/5 (GitHub + 9router)
+- [x] PR Nagias/oss-radar#6, CI xanh, chủ dự án duyệt → squash-merge vào `main`
+
+## Sửa: trang `/rising/` quá nặng (2026-10-27, nhánh `fix/rising-chia-trang`)
+
+- [x] Đo trên bản sao CSDL thật: báo cáo 27/10 nặng 1.355 KB (bảng rising 262 dòng ~869 KB, mỗi dòng ~3,4 KB vì
+      có giải thích điểm; 337 ứng viên chưa xác minh ~389 KB), báo cáo 23/10 nặng 737 KB
+- [x] Test đỏ trước (service, form, trang) → chia trang: bảng rising 25 dòng/trang (`page`), mục chưa xác minh
+      20 dòng/trang (`upage`, gập sẵn, mở sẵn khi đang lật trang của nó); link giữ mọi ô lọc
+- [x] Đo lại: 27/10 còn 129 KB, 23/10 còn 125 KB; trình duyệt: lật trang hai mục, bộ lọc giữ nguyên, đánh số
+      tiếp 26, 27…, không lỗi console
+- [x] `poe check` xanh (825 test, độ phủ 98,66%)
 - [ ] Chủ dự án duyệt PR → CI xanh, squash-merge

@@ -12,6 +12,7 @@ pytestmark = pytest.mark.django_db
 
 # Ô lọc nhóm (F-010) để trống.
 NO_GROUPS: dict[str, list[str]] = {"audience": [], "aspects": []}
+NO_PAGES: dict[str, None] = {"page": None, "upage": None}
 
 VALID: dict[str, Any] = {
     "label": "Video AI",
@@ -107,7 +108,14 @@ def test_report_filter_defaults_when_empty() -> None:
     form = ReportFilterForm(data={"max_stars": "", "min_gain": "", "day": ""})
 
     assert form.is_valid(), form.errors
-    expected = {"max_stars": 1000, "min_gain": 50, "day": None, "sort": "potential", **NO_GROUPS}
+    expected = {
+        "max_stars": 1000,
+        "min_gain": 50,
+        "day": None,
+        "sort": "potential",
+        **NO_GROUPS,
+        **NO_PAGES,
+    }
     assert form.cleaned_data == expected
 
 
@@ -121,6 +129,7 @@ def test_report_filter_reads_values_including_zero_gain() -> None:
         "day": date(2026, 10, 21),
         "sort": "potential",
         **NO_GROUPS,
+        **NO_PAGES,
     }
 
 
@@ -158,3 +167,13 @@ def test_report_sort_defaults_to_potential_and_rejects_unknown_values() -> None:
     assert unknown.sort_order() == "potential"
     assert "sort" in unknown.errors
     assert ReportFilterForm().sort_order() == "potential"
+
+
+def test_report_filter_pages_default_to_first_and_reject_bad_numbers() -> None:
+    assert ReportFilterForm().pages() == (1, 1)
+    assert ReportFilterForm(data={"page": "3", "upage": "2"}).pages() == (3, 2)
+    wrong = ReportFilterForm(data={"page": "0", "upage": "abc", "min_gain": "70"})
+
+    assert wrong.pages() == (1, 1)
+    assert set(wrong.errors) == {"page", "upage"}  # số trang sai vẫn báo, không im lặng
+    assert wrong.values()[1] == 70  # ô lọc hợp lệ khác vẫn giữ

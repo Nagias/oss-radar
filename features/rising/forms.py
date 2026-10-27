@@ -84,6 +84,21 @@ class ReportFilterForm(forms.Form):
         required=False,
         initial=SORT_POTENTIAL,
     )
+    # Chỉ đến từ link chuyển trang, không nằm trong form: bấm Lọc thì về trang 1 của cả hai mục.
+    page = forms.IntegerField(
+        label="Trang bảng rising star", min_value=1, max_value=10**6, required=False
+    )
+    upage = forms.IntegerField(
+        label="Trang ứng viên chưa xác minh", min_value=1, max_value=10**6, required=False
+    )
+
+    def pages(self) -> tuple[int, int]:
+        """(trang bảng rising, trang mục chưa xác minh); trống hoặc sai thì trang 1."""
+        if not self.is_bound:
+            return 1, 1
+        self.is_valid()
+        data = self.cleaned_data
+        return data.get("page") or 1, data.get("upage") or 1
 
     def values(self) -> tuple[int, int, date | None]:
         """(star tối đa, tăng tối thiểu, ngày) dùng để lọc.
