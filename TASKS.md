@@ -53,7 +53,7 @@
 
 ## Tiếp theo (sau F-005)
 
-- [ ] Chủ dự án điền `GITHUB_TOKEN` (xác minh 300 repo/ngày thay vì 50, quét nhanh gấp ~3 lần)
+- [x] Chủ dự án điền `GITHUB_TOKEN` (xác minh 300 repo/ngày thay vì 50, quét nhanh gấp ~3 lần)
 - [x] PR `fix/d008-diem-nho-f002` trả D-008 (5 điểm nhỏ của F-002) — xem mục dưới
 - [ ] Chủ dự án chọn tính năng kế tiếp trong lộ trình FEATURE_MAP (F-003 làm giàu, F-004 ưu tiên Trung Quốc,
       F-006 chấm điểm + lọc star giả…) → thiết kế → duyệt → kế hoạch → TDD
@@ -84,12 +84,26 @@
       chủ của repo đang bị nghi; phần giải thích điểm tràn cột
 - [x] Agent độc lập rà soát cả nhánh: 0 nghiêm trọng, 1 quan trọng (kẹt ở bước hồ sơ chủ thì mất báo cáo
       của ngày — đã sửa: bước này không còn chặn báo cáo), 7 nhỏ (sửa 4; còn lại ghi trong báo cáo)
-- [ ] Chủ dự án duyệt → push, PR, CI xanh, squash-merge
+- [x] PR Nagias/oss-radar#5, CI xanh, chủ dự án duyệt → squash-merge vào `main`
 
 ## F-010 Phân loại repo bằng AI, trang Kho repo (2026-10-27, nhánh `feat/f010-phan-loai-duyet-kho`)
 
 - [x] Hỏi đáp với chủ dự án; thiết kế `docs/designs/2026-10-27-f010-phan-loai-duyet-kho.md` — đọc thử với vai
       người làm theo, chủ dự án duyệt (2026-10-27); đo thật 9router
 - [x] Kế hoạch `docs/plans/2026-10-27-f010-phan-loai-duyet-kho.md` (9 task)
-- [ ] Code theo TDD (task 1–8)
-- [ ] Sổ sách, `poe check`, chạy thật (phân loại cả kho), rà soát độc lập, PR
+- [x] Code theo TDD (task 1–8)
+- [x] Sổ sách: ARCHITECTURE (QĐ-18 thay QĐ-12, QĐ-19), FEATURE_MAP (F-010, `integrations/llm`), DEBT (D-007 đã trả)
+- [x] Agent độc lập rà soát cả nhánh: 1 nghiêm trọng (một lô bị bộ lọc an toàn của AI chặn thì kẹt mãi —
+      đã sửa: chia đôi lô hỏng tới khi cô lập repo hỏng), các điểm quan trọng/nhỏ đã sửa (thiết kế §16)
+- [x] Chạy thật trên CSDL thật (sao lưu `data/backup-truoc-f010-2026-10-27.sqlite3`, migrate, `rescore`
+      32.412 repo trong 4,4 giây): `classify --budget 1000` gắn nhãn 32.371 repo, 41 repo AI bỏ sót — 811 lượt
+      gọi, 5,56 triệu token vào + 1,57 triệu token ra, 162 phút; chạy bù bằng code mới: 41/41 repo, 2 lượt gọi
+- [x] Kiểm tay 30 repo ngẫu nhiên: 28 nhãn hợp lý, 2 lệch nhẹ (không sai hẳn)
+- [x] Trang `/repos/` trên dữ liệu thật: mọi bộ lọc/sắp 0,06–0,15 giây, cả trang 0,16 giây; lọc nhóm, chỉ
+      rising star, nhập sai (báo lỗi, bỏ qua ô), trang quá lớn (về trang cuối), màn hình điện thoại (không tràn
+      ngang); trang lần quét có nhãn + link sang Kho repo; không lỗi console
+- [x] Lượt hằng ngày 27/10 chạy thật (bấm "Chạy ngay", 52 phút): 580 lượt Search, 300 xác minh, 100 hồ sơ chủ,
+      4 lượt gọi AI (trần 5), 268 rising star, 691 repo mới; phân loại dần tự chạy mỗi 5 phút (3 lượt/nhịp) →
+      33.103/33.103 repo có nhãn, 268/268 rising star có nhãn
+- [x] `poe check` xanh (817 test, độ phủ 98,65%); `poe test-live` 5/5 (GitHub + 9router)
+- [ ] Chủ dự án duyệt PR → CI xanh, squash-merge

@@ -157,8 +157,8 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
   `features/taxonomy/categories.toml`, dựa trên tên, mô tả, topics, ngôn ngữ. **Không chấm điểm, không gợi ý,
   không tạo số liệu.** Đầu ra là dữ liệu không tin cậy: mã lạ bị bỏ, số nhãn bị cắt, repo AI bỏ sót coi như
   chưa phân loại; mỗi nhãn lưu kèm lý do (từ khoá), model, phiên bản prompt và bộ nhóm.
-- **Tốn:** đo thật 2026-10-27 — mỗi lượt 40 repo ~7.000 token vào, ~1.900 ra, ~12 giây (cả giãn nhịp); cả kho
-  32.412 repo ~810 lượt, ~7 triệu token vào, ~2 giờ 50 phút. Sau đó tối đa 150 lượt/ngày cho repo mới.
+- **Tốn:** đo thật 2026-10-27 — phân loại cả kho 32.412 repo: 813 lượt gọi, 5,57 triệu token vào + 1,58 triệu
+  token ra (~6.900 vào, ~1.950 ra mỗi lượt 40 repo), 162 phút. Sau đó tối đa 150 lượt/ngày cho repo mới.
 - **Rủi ro:** 9router / gói Gemini đổi hoặc hết hạn mức → phân loại dừng, phần còn lại của app chạy bình thường
   (bước phân loại không chặn báo cáo). ~2% lô Gemini trả JSON hỏng ngẫu nhiên → thử lại.
 - **Đã loại:** gửi README cho AI (tốn token, chủ dự án chốt chỉ dựa vào mô tả); để AI chấm mức liên quan (chủ dự
