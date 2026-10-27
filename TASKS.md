@@ -117,4 +117,6 @@
 - [x] Đo lại: 27/10 còn 129 KB, 23/10 còn 125 KB; trình duyệt: lật trang hai mục, bộ lọc giữ nguyên, đánh số
       tiếp 26, 27…, không lỗi console
 - [x] `poe check` xanh (825 test, độ phủ 98,66%)
-- [ ] Chủ dự án duyệt PR → CI xanh, squash-merge
+- [x] PR Nagias/oss-radar#7, CI xanh, chủ dự án duyệt → squash-merge vào `main`
+- [x] Kiểm thêm sau khi mở PR: giả lập lượt đang chạy trên bản sao CSDL → trang tự tải lại mỗi 10 giây,
+      mỗi lần ~130 KB, giữ đúng trang và bộ lọc
