@@ -30,7 +30,7 @@
   <ul class="stats">
     <li><strong>{{ report.scans|length }}</strong> lần quét lại danh sách theo dõi</li>
     <li><strong>{{ report.run.new_repo_count|intcomma }}</strong> repo mới phát hiện</li>
-    <li>Ứng viên: <strong>{{ report.run.candidate_count|intcomma }}</strong> — đã xác minh <strong>{{ report.verified_count|intcomma }}</strong>, chưa xác minh <strong>{{ report.unverified|length|intcomma }}</strong></li>
+    <li>Ứng viên: <strong>{{ report.run.candidate_count|intcomma }}</strong> — đã xác minh <strong>{{ report.verified_count|intcomma }}</strong>, chưa xác minh <strong>{{ report.unverified_page.total|intcomma }}</strong></li>
     <li><strong>{{ report.run.insufficient_count|intcomma }}</strong> chưa đủ dữ liệu</li>
     <li><strong>{{ report.run.rising_count|intcomma }}</strong> rising star{% if report.hidden_rising_count %} (đã ẩn {{ report.hidden_rising_count }} nghi star giả){% endif %}</li>
   </ul>
@@ -115,8 +115,8 @@
 {% endif %}
 
 {% if report %}
-<section>
-  <h2>Bảng rising star ({{ report.rising|length }})</h2>
+<section id="rising">
+  <h2>Bảng rising star ({{ report.rising_page.total|intcomma }}){% if rising_pager %} <span class="muted small">· Trang {{ report.rising_page.page }}/{{ report.rising_page.pages }}</span>{% endif %}</h2>
   {% if report.rising %}
     <div class="table-wrap">
       <table>
@@ -132,7 +132,7 @@
         <tbody>
           {% for row in report.rising %}
             <tr>
-              <td class="num">{{ forloop.counter }}</td>
+              <td class="num">{{ forloop.counter0|add:report.rising_page.first_index }}</td>
               <td>
                 <a href="{{ row.repository.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ row.repository.full_name }}</strong></a>
                 {% if row.is_new_entry %}<span class="badge badge-new">Mới vào danh sách</span>{% endif %}
@@ -161,6 +161,7 @@
         </tbody>
       </table>
     </div>
+    {% include "rising/_pager.html" with pager=rising_pager anchor="rising" %}
   {% elif not report.hidden %}
     <p class="muted">Không có repo nào đạt ngưỡng (dưới {{ max_stars|intcomma }} star, tăng từ {{ min_gain|intcomma }} star trong 7 ngày) ở báo cáo này.</p>
   {% endif %}
@@ -203,12 +204,14 @@
 </section>
 
 {% if report.unverified %}
-<section>
-  <h2>Ứng viên chưa xác minh ({{ report.unverified|length }})</h2>
+<section id="unverified">
+  <h2>Ứng viên chưa xác minh ({{ report.unverified_page.total|intcomma }})</h2>
   <p class="muted">
     Hết ngân sách xác minh (hay gặp khi chưa có token) hoặc GitHub không trả được lịch sử star. Số tăng dưới đây chỉ là
     ước lượng từ ảnh chụp star của app, chưa phải số chính thức — đừng coi là đã chắc chắn.
   </p>
+  <details class="unverified-list"{% if unverified_open %} open{% endif %}>
+  <summary>Xem danh sách{% if unverified_pager %} — trang {{ report.unverified_page.page }}/{{ report.unverified_page.pages }}, {{ report.unverified_page.size }} dòng mỗi trang{% endif %}</summary>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Repo</th><th class="num">Star</th><th class="num">Ước lượng +7 ngày</th><th class="num">Tiềm năng (ước lượng)</th><th>Nguồn</th></tr></thead>
@@ -234,6 +237,8 @@
       </tbody>
     </table>
   </div>
+  {% include "rising/_pager.html" with pager=unverified_pager anchor="unverified" %}
+  </details>
 </section>
 {% endif %}
 

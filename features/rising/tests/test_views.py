@@ -1,9 +1,11 @@
 """Trang Rising star và trang Theo dõi — lớp mỏng: nhận yêu cầu → gọi services → hiển thị."""
 
+import html
 import re
 from collections.abc import Callable
 from concurrent.futures import Future
 from datetime import datetime, time, timedelta
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from django.template.loader import render_to_string
@@ -756,3 +758,78 @@ def test_report_page_shows_labels_and_filters_by_group(client: Client) -> None:
     assert "gia-lap/repo-1" in creators
     assert "gia-lap/repo-2" not in creators
     assert 'value="creator" checked' in creators
+
+
+# --- Chia trang (trang mặc định nhẹ, tự tải lại không nặng) -----------------------------------
+
+
+def pager_links(page: str, anchor: str) -> list[dict[str, list[str]]]:
+    """Tham số của các link chuyển trang dẫn tới `#anchor`, đã bỏ escape HTML."""
+    hrefs = re.findall(r'href="([^"]*#' + anchor + ')"', page)
+    return [parse_qs(urlsplit(html.unescape(href)).query) for href in hrefs]
+
+
+def test_report_pager_keeps_every_filter_and_the_other_section_page(client: Client) -> None:
+    run = make_run()
+    for github_id in range(1, services.RISING_PAGE_SIZE + 2):
+        make_check(run, github_id, stars=300, gain_7d=100 + github_id, is_rising=True)
+        label_repository(make_repo(github_id), audience=("creator",))
+    query = {
+        "day": run.day.isoformat(),
+        "max_stars": "500",
+        "min_gain": "10",
+        "sort": "gain",
+        "audience": "creator",
+        "upage": "3",
+    }
+
+    first = client.get(REPORT_URL, query).text
+    second = client.get(REPORT_URL, {**query, "page": "2"}).text
+
+    [next_link] = pager_links(first, "rising")
+    assert next_link == {**{key: [value] for key, value in query.items()}, "page": ["2"]}
+    assert f"Bảng rising star ({services.RISING_PAGE_SIZE + 1})" in first
+    assert "Trang 1/2" in first
+    assert "gia-lap/repo-1<" not in first  # tăng ít nhất → trang 2
+    assert "gia-lap/repo-1<" in second
+    assert f'<td class="num">{services.RISING_PAGE_SIZE + 1}</td>' in second  # đánh số tiếp
+    [previous_link] = pager_links(second, "rising")
+    assert previous_link["page"] == ["1"]
+
+
+def test_report_filter_form_starts_again_from_first_page(client: Client) -> None:
+    run = make_run()
+    make_check(run, 1, stars=300, gain_7d=100, is_rising=True)
+
+    page = client.get(REPORT_URL, {"page": "2", "upage": "2"}).text
+
+    assert 'name="page"' not in page  # bấm Lọc → về trang 1 của cả hai mục
+    assert 'name="upage"' not in page
+    assert "Trang 1/1" not in page  # chỉ một trang thì không hiện thanh chuyển trang
+
+
+def test_report_unverified_section_is_collapsed_until_paged(client: Client) -> None:
+    run = make_run()
+    for github_id in range(1, services.UNVERIFIED_PAGE_SIZE + 2):
+        make_check(run, github_id, stars=300, gain_7d=github_id, source=Source.SNAPSHOT)
+
+    default = client.get(REPORT_URL).text
+    paged = client.get(REPORT_URL, {"upage": "2"}).text
+
+    assert f"Ứng viên chưa xác minh ({services.UNVERIFIED_PAGE_SIZE + 1})" in default
+    assert '<details class="unverified-list">' in default
+    assert "gia-lap/repo-1<" not in default  # ước lượng tăng ít nhất → trang 2
+    assert '<details class="unverified-list" open>' in paged
+    assert "gia-lap/repo-1<" in paged
+    [next_link] = pager_links(default, "unverified")
+    assert next_link == {"upage": ["2"]}
+
+
+def test_report_with_invalid_page_falls_back_to_first_page(client: Client) -> None:
+    run = make_run()
+    make_check(run, 1, stars=300, gain_7d=100, is_rising=True)
+
+    response = client.get(REPORT_URL, {"page": "abc", "upage": "-1"})
+
+    assert response.status_code == 200
+    assert "gia-lap/repo-1<" in response.text

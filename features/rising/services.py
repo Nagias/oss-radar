@@ -1197,6 +1197,35 @@ class _HeartbeatSleep:
 SORT_POTENTIAL = "potential"
 SORT_GAIN = "gain"
 
+# Số dòng mỗi trang của báo cáo. Một dòng rising nặng ~3,4 KB (kèm giải thích từng điểm), một dòng
+# chưa xác minh ~1,2 KB: giữ trang mặc định dưới ~150 KB dù lượt có hàng trăm dòng — trang tự tải
+# lại mỗi 10 giây khi lượt hôm nay đang chạy.
+RISING_PAGE_SIZE = 25
+UNVERIFIED_PAGE_SIZE = 20
+
+
+@dataclass(frozen=True, slots=True)
+class PageInfo:
+    """Vị trí của trang đang xem trong một danh sách dài (tổng dòng, trang mấy trên mấy)."""
+
+    total: int
+    page: int
+    pages: int
+    size: int
+
+    @property
+    def first_index(self) -> int:
+        """Số thứ tự của dòng đầu trang (để đánh số 26, 27… ở trang 2)."""
+        return (self.page - 1) * self.size + 1
+
+
+def _paginate[T](rows: list[T], page: int, size: int) -> tuple[list[T], PageInfo]:
+    """Cắt lấy trang `page`; số trang ngoài khoảng thì về trang đầu/cuối gần nhất."""
+    pages = max(1, math.ceil(len(rows) / size))
+    page = min(max(1, page), pages)
+    shown = rows[(page - 1) * size : page * size]
+    return shown, PageInfo(total=len(rows), page=page, pages=pages, size=size)
+
 
 @dataclass(frozen=True, slots=True)
 class RisingRow:
@@ -1225,10 +1254,13 @@ class UnverifiedRow:
 @dataclass(frozen=True, slots=True)
 class DailyReport:
     run: DailyRun
+    # Chỉ các dòng của trang đang xem; tổng số dòng và số trang nằm ở `rising_page`.
     rising: list[RisingRow]
+    rising_page: PageInfo
     # Dòng qua bộ lọc nhưng "Nghi cao" star giả: ẩn khỏi bảng chính, có nút hiện (kèm lý do).
     hidden: list[RisingRow]
-    unverified: list[UnverifiedRow]
+    unverified: list[UnverifiedRow]  # trang đang xem; tổng ở `unverified_page`
+    unverified_page: PageInfo
     scans: list[DailyRunScan]
     # Số dòng đã xác minh bằng lịch sử chính thức, bất kể ngưỡng lọc của người xem.
     verified_count: int
@@ -1244,6 +1276,8 @@ def daily_report(
     sort: str = SORT_POTENTIAL,
     audience: Sequence[str] = (),
     aspects: Sequence[str] = (),
+    page: int = 1,
+    unverified_page: int = 1,
 ) -> DailyReport:
     """Báo cáo của một lượt, lọc theo ngưỡng người dùng chọn. Chỉ đọc dữ liệu đã lưu, không gọi API.
 
@@ -1256,6 +1290,8 @@ def daily_report(
     - Điểm tính lúc xem (không lưu), từ số liệu repo và hồ sơ chủ đang có trong kho.
     - `audience` / `aspects` (F-010): chỉ giữ repo có ít nhất một nhãn đã chọn ở mỗi lớp được chọn
       (HOẶC trong một lớp, VÀ giữa hai lớp) — như trang Kho repo.
+    - Bảng rising và mục chưa xác minh chia trang riêng (`page`, `unverified_page`): mỗi trang
+      `RISING_PAGE_SIZE` / `UNVERIFIED_PAGE_SIZE` dòng. Dòng bị ẩn không chia trang (thường ít).
     """
     checks = RisingCheck.objects.filter(daily_run=run).select_related("repository")
     all_verified = list(checks.filter(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk"))
@@ -1300,14 +1336,20 @@ def daily_report(
         for check in all_verified
         if check.is_rising and scores[check.repository_id].suspicion.is_hidden
     )
+    rising, rising_page = _paginate(
+        [row for row in rows if not row.scores.suspicion.is_hidden], page, RISING_PAGE_SIZE
+    )
+    shown_unverified, unverified_info = _paginate(unverified, unverified_page, UNVERIFIED_PAGE_SIZE)
     return DailyReport(
         run=run,
-        rising=[row for row in rows if not row.scores.suspicion.is_hidden],
+        rising=rising,
+        rising_page=rising_page,
         hidden=[row for row in rows if row.scores.suspicion.is_hidden],
         unverified=[
             UnverifiedRow(check, _estimated_potential(scores[check.repository_id]))
-            for check in unverified
+            for check in shown_unverified
         ],
+        unverified_page=unverified_info,
         scans=list(run.scans.select_related("scan_run", "watch_query").order_by("position", "pk")),
         verified_count=len(all_verified),
         hidden_rising_count=hidden_rising,

@@ -253,3 +253,59 @@ def test_group_filters_or_within_axis_and_between_axes() -> None:
     assert ids(services.daily_report(run, audience=("creator", "marketer")).rising) == [1, 2]
     assert ids(services.daily_report(run, audience=("creator",), aspects=("ads",)).rising) == []
     assert ids(services.daily_report(run, aspects=("ads",)).rising) == [2]
+
+
+# --- Chia trang: trang mặc định nhẹ dù lượt có hàng trăm dòng ---------------------------------
+
+
+def test_rising_table_is_paged_and_page_is_clamped() -> None:
+    run = make_run()
+    for github_id in range(1, services.RISING_PAGE_SIZE + 3):
+        make_check(run, github_id, stars=300, gain_7d=100 + github_id, is_rising=True)
+    total = services.RISING_PAGE_SIZE + 2
+
+    first = services.daily_report(run, sort="gain")
+    second = services.daily_report(run, sort="gain", page=2)
+    beyond = services.daily_report(run, sort="gain", page=99)
+    below = services.daily_report(run, sort="gain", page=0)
+
+    assert len(first.rising) == services.RISING_PAGE_SIZE
+    assert (first.rising_page.total, first.rising_page.page, first.rising_page.pages) == (
+        total,
+        1,
+        2,
+    )
+    # Tăng ít nhất nằm cuối, ở trang 2 (giữ đúng thứ tự, không sắp lại).
+    assert [row.repository.github_id for row in second.rising] == [2, 1]
+    assert second.rising_page.first_index == services.RISING_PAGE_SIZE + 1
+    assert beyond.rising_page.page == 2
+    assert below.rising_page.page == 1
+
+
+def test_unverified_section_is_paged_apart_from_rising_table() -> None:
+    run = make_run()
+    make_check(run, 1, stars=300, gain_7d=100, is_rising=True)
+    for github_id in range(2, services.UNVERIFIED_PAGE_SIZE + 4):
+        make_check(run, github_id, stars=300, gain_7d=github_id, source=Source.SNAPSHOT)
+    total = services.UNVERIFIED_PAGE_SIZE + 2
+
+    first = services.daily_report(run)
+    second = services.daily_report(run, page=5, unverified_page=2)
+
+    assert len(first.unverified) == services.UNVERIFIED_PAGE_SIZE
+    assert (first.unverified_page.total, first.unverified_page.pages) == (total, 2)
+    assert [row.check.repository.github_id for row in second.unverified] == [3, 2]
+    assert ids(second.rising) == [1]  # trang rising quá cuối → trang cuối, không ảnh hưởng mục kia
+    assert second.rising_page.page == 1
+
+
+def test_hidden_rows_are_not_counted_in_rising_pages() -> None:
+    run = make_run()
+    suspicious_repo(1)
+    make_check(run, 1, stars=613, gain_7d=300, is_rising=True)
+    make_check(run, 2, stars=300, gain_7d=100, is_rising=True)
+
+    report = services.daily_report(run)
+
+    assert report.rising_page.total == 1
+    assert [row.repository.github_id for row in report.hidden] == [1]

@@ -89,11 +89,10 @@ def _report_context(
     max_stars, min_gain, day = form.values()
     sort = form.sort_order()
     audience, aspects = form.groups()
+    page, unverified_page = form.pages()
     run = services.report_run_for(day) if day is not None else services.latest_report_run()
-    return {
-        "status": status,
-        "form": form,
-        "report": None
+    report = (
+        None
         if run is None
         else services.daily_report(
             run,
@@ -102,7 +101,20 @@ def _report_context(
             sort=sort,
             audience=audience,
             aspects=aspects,
-        ),
+            page=page,
+            unverified_page=unverified_page,
+        )
+    )
+    return {
+        "status": status,
+        "form": form,
+        "report": report,
+        "rising_pager": None if report is None else _pager(query, "page", report.rising_page),
+        "unverified_pager": None
+        if report is None
+        else _pager(query, "upage", report.unverified_page),
+        # Mục chưa xác minh gập sẵn (đỡ rối mắt); đang lật trang của nó thì mở sẵn.
+        "unverified_open": "upage" in query,
         "days": services.report_days(),
         "selected_day": day,
         "missing_day": day if run is None else None,
@@ -117,6 +129,24 @@ def _report_context(
         "refresh_url": refresh_url if status.is_live else None,
         "busy_label": background.busy_label(),
     }
+
+
+def _pager(query: QueryDict, name: str, info: services.PageInfo) -> dict[str, Any] | None:
+    """Thanh chuyển trang của một mục; `None` khi chỉ có một trang."""
+    if info.pages <= 1:
+        return None
+    return {
+        "info": info,
+        "previous_url": _page_url(query, name, info.page - 1) if info.page > 1 else None,
+        "next_url": _page_url(query, name, info.page + 1) if info.page < info.pages else None,
+    }
+
+
+def _page_url(query: QueryDict, name: str, page: int) -> str:
+    """Địa chỉ trang `page` của một mục, giữ nguyên mọi ô lọc và trang đang xem của mục kia."""
+    params = query.copy()
+    params[name] = str(page)
+    return f"?{params.urlencode()}"
 
 
 def _watch_context(form: WatchQueryForm, *, refresh_url: str | None) -> dict[str, Any]:
