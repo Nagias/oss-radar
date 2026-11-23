@@ -24,6 +24,7 @@ nhận, khi nào trả, quên trả thì sao.
 | D-007 | Trang kết quả lần quét chỉ hiện 500 repo nhiều star nhất | Đã trả (2026-10-27) | F-010: trang Kho repo `/repos/?scan=<id>` |
 | D-008 | 5 điểm nhỏ còn lại từ rà soát F-002 (tính dư lượt khi Dừng lúc chờ, lệch đồng hồ, lệnh in "0/None", lát gốc lỗi báo "còn sót", trạng thái `queued` cũ) | Đã trả (2026-10-23) | PR `fix/d008-diem-nho-f002` |
 | D-009 | 4 điểm để sau của F-005 (services.py rising ~1.400 dòng, ngày của bước lọc thô, nhãn "Mới vào danh sách" theo ngưỡng mặc định, "35 ngày" viết cứng) | Mở | PR `fix/` riêng ngay sau F-006 |
+| D-010 | `static/js/app.js` chưa có test tự động (dự án không có trình chạy JS) | Mở | Khi JS vượt 150 dòng, hoặc có QĐ duyệt công cụ test trình duyệt |
 
 ## Chi tiết
 
@@ -163,3 +164,13 @@ nhận, khi nào trả, quên trả thì sao.
   một ngày (ngày sau vẫn được xét); nhãn "Mới" hơi lệch khi lọc.
 - **Vị trí:** `features/rising/services.py` (đầu file, `_screen`, `daily_report`),
   `features/discovery/templates/discovery/scan_detail.html`.
+
+### D-010 — JS tăng cường dần chưa có test tự động
+- **Nợ gì:** `static/js/app.js` (tự lọc khi đổi ô, bỏ ô rỗng khỏi đường dẫn, phím `/` vào ô tìm, hỏi lại trước khi
+  gửi) không có test tự động: dự án chỉ có pytest, không có trình chạy JS hay trình duyệt trong CI.
+- **Vì sao chấp nhận:** file nhỏ (≤ 150 dòng, lính gác kiểm), chỉ tăng cường — tắt JS trang vẫn dùng đủ, test Django
+  kiểm mọi form tự gửi đều còn nút gửi. Thêm Playwright/Node lúc này là thêm cả một bộ công cụ cho ~60 dòng.
+- **Khi nào trả:** khi JS vượt 150 dòng, hoặc khi có QĐ duyệt công cụ test trình duyệt (vd Playwright cho Python).
+- **Quên trả thì sao:** sửa JS làm hỏng thao tác nhanh (vd tự lọc gửi hai lần) mà CI vẫn xanh; người dùng vẫn lọc
+  được bằng nút. Bù lại: mỗi PR đụng giao diện phải kiểm bằng trình duyệt và ghi kết quả vào mô tả PR.
+- **Vị trí:** `static/js/app.js`.

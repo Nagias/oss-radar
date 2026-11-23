@@ -120,3 +120,17 @@
 - [x] PR Nagias/oss-radar#7, CI xanh, chủ dự án duyệt → squash-merge vào `main`
 - [x] Kiểm thêm sau khi mở PR: giả lập lượt đang chạy trên bản sao CSDL → trang tự tải lại mỗi 10 giây,
       mỗi lần ~130 KB, giữ đúng trang và bộ lọc
+
+## Khám phá + trending + giao diện mới (2026-11-23) — thiết kế `docs/designs/2026-11-23-f011-f012-kham-pha-trending.md`
+
+- [x] Chủ dự án chốt: trending mọi cỡ (≥ 200 star/7 ngày và ≥ 2%), góc nhìn đã lưu, gộp trang Khám phá (tab đầu
+      Trending), nền trắng-đen tự tối, phông Be Vietnam Pro, JS tự viết, giữ báo cáo lượt làm trang chi tiết
+- [ ] PR A `chore/giao-dien-nen` — kế hoạch `docs/plans/2026-11-23-pr-a-giao-dien-nen.md`
+  - [x] Bộ đọc HTML cho test; test điều hướng và nút đọc theo ý nghĩa
+  - [x] Phông Be Vietnam Pro đóng gói sẵn (12 file, 189.656 byte), lính gác cấm tải tài nguyên từ mạng
+  - [x] Khung trang mới (thanh bên trái, token sáng/tối), `app.js` tăng cường dần
+  - [x] Áp lên mọi trang; form lọc tự gửi; ô tìm có phím `/`; số `?v=` chống trình duyệt giữ CSS cũ
+  - [x] Sổ sách: QĐ-20, CLAUDE.md, FEATURE_MAP, D-010
+  - [ ] Kiểm chứng: `poe check`, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
+- [ ] PR B `feat/f011-trending` (trả D-009 trước)
+- [ ] PR C `feat/f012-kham-pha`

@@ -1,4 +1,5 @@
 // OSS Radar — JS tăng cường dần (QĐ-20). Trang dùng đủ khi tắt JS; file này chỉ làm thao tác nhanh hơn.
+// DEBT(D-010): chưa có test tự động (dự án không có trình chạy JS) — kiểm bằng trình duyệt mỗi PR.
 (function () {
   "use strict";
 

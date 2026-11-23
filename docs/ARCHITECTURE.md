@@ -32,6 +32,7 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 | QĐ-18 | AI (thay QĐ-12) | Client `integrations/llm` gọi 9router (chuẩn OpenAI, `stream: false`); AI **chỉ phân loại** repo vào bộ nhóm cố định, đầu ra kiểm theo danh sách mã; ngân sách, giãn nhịp 10 lượt/phút | Đã duyệt 2026-10-27 (thiết kế F-010), đã dùng |
 | QĐ-19 | Điểm lưu sẵn (sửa QĐ-17) | Điểm Chất lượng + mức nghi star giả lưu ở `ScoreCache` để lọc / sắp cả kho; phần giải thích vẫn tính trực tiếp | Đã duyệt 2026-10-27 (đo: 3,2 giây cho 32.412 repo), đã dùng |
 | QĐ-17 | Chấm điểm, lọc star giả | Hàm thuần tính lúc hiển thị (không lưu điểm); "Nghi cao" ẩn chứ không xoá; hồ sơ chủ repo lưu ở kho, làm mới sau 30 ngày | Đã duyệt 2026-10-23 (thiết kế F-006), đã dùng (F-006) |
+| QĐ-20 | Giao diện (sửa QĐ-05) | Hệ thiết kế một file CSS (token sáng + tối tự động), JS tự viết `static/js/app.js` ≤ 150 dòng chỉ tăng cường dần, phông Be Vietnam Pro đóng gói sẵn | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng |
 
 ---
 
@@ -87,8 +88,7 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 ### QĐ-05 — Template Django render phía máy chủ
 - **Được:** không cần Node, không có bước build, không phải làm API riêng cho giao diện. Mọi trang là HTML
   do Django trả về, test được bằng test client của Django.
-- **Khi cần tương tác** (lọc tại chỗ, cập nhật trạng thái quét không tải lại trang): thêm HTMX (một file JS),
-  ghi thành quyết định mới trước khi thêm.
+- **Khi cần tương tác:** xem QĐ-20 (JS tự viết tăng cường dần, không HTMX).
 - **Đã loại:** React/Vue dạng SPA — gấp đôi lượng code (API + giao diện), gấp đôi chỗ để sai.
 
 ### QĐ-06 — httpx, một cửa ra ngoài `integrations/`
@@ -172,6 +172,25 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
   lần quét tay; lệnh `manage.py rescore` khi đổi công thức (`FORMULA_VERSION`).
 - Phần giải thích điểm trên trang vẫn tính trực tiếp từ `rules.py` cho các dòng đang hiện → luôn khớp công thức.
 - Repo mới vào kho chưa có điểm lưu sẵn: không bị ẩn, xếp cuối khi sắp theo Chất lượng.
+
+### QĐ-20 — Giao diện kiểu ElevenLabs: một CSS, JS tăng cường dần, phông đóng gói sẵn (sửa QĐ-05)
+- **Chọn:** vẫn render phía máy chủ (QĐ-05). `static/css/app.css` một file theo token (nền trắng, chữ và nút đen;
+  token tối tự bật theo `prefers-color-scheme`). `static/js/app.js` viết tay, ≤ 150 dòng, chỉ làm thao tác nhanh
+  hơn: form `data-autosubmit` tự gửi khi đổi ô chọn/ô tick/ô số, `data-clean-query` bỏ ô rỗng khỏi đường dẫn, phím
+  `/` vào ô `data-search`, `data-confirm` hỏi lại trước khi gửi. Tắt JS thì trang vẫn dùng đủ (form luôn có nút).
+- **Phông Be Vietnam Pro** (SIL OFL 1.1) đóng gói trong `static/fonts/be-vietnam-pro/`: 4 độ đậm 400/500/600/700 × 3
+  bộ ký tự latin, latin-ext, vietnamese = 12 file woff2, tổng 189.656 byte (lấy từ bản Google Fonts phục vụ ngày
+  2026-11-23, khai `unicode-range` nên trang chỉ tải bộ cần dùng). Mã SHA-256 từng file nằm trong
+  `static/fonts/be-vietnam-pro/SHA256SUMS` (kiểm lại bằng `sha256sum -c SHA256SUMS` trong thư mục đó).
+- **Bộ nhớ đệm trình duyệt:** `base.html` gắn `?v=<ngày>` vào `fonts.css`, `app.css`, `app.js`. Đổi các file này thì
+  đổi số `?v=` — không thì trình duyệt có thể dùng file cũ vài ngày và trang vỡ bố cục.
+- **Được:** giao diện hiện đại, gọn; không bước build, không thư viện, không phụ thuộc mạng ngoài khi mở app.
+- **Tốn:** ~190 KB phông trong git (tải một lần, trình duyệt giữ lại); JS chưa có test tự động (D-010) — kiểm bằng
+  trình duyệt mỗi PR.
+- **Đã loại:** HTMX (thêm thư viện, chưa cần thay một phần trang), Tailwind (cần bước build), Google Fonts tải trực
+  tuyến (gọi mạng mỗi lần mở, lộ việc dùng app ra ngoài), Inter (chủ dự án chọn Be Vietnam Pro).
+- **Lính gác:** `tests/test_guards.py` cấm tài nguyên tải từ mạng, kiểm đủ 12 file phông + giấy phép, `app.js` ≤ 150
+  dòng; `tests/test_layout.py` kiểm khung trang trên mọi trang.
 
 ### QĐ-13 — Exa, Tavily (dự kiến)
 - Nguồn khám phá phụ: tìm các link `github.com/...` xuất hiện trong bài viết, blog (kể cả blog Trung Quốc)
@@ -272,8 +291,10 @@ core/
   background.py          Chạy việc nền một luồng (QĐ-14).
   scheduler.py           Bộ nhịp gọi việc định kỳ trong settings.SCHEDULED_JOBS (QĐ-15).
   management/commands/   Lệnh runserver của dự án: bật bộ nhịp khi đã giữ cổng.
-templates/base.html      Khung trang chung
-static/css/app.css       CSS chung
+templates/base.html      Khung trang chung: thanh bên trái + nội dung (QĐ-20)
+static/css/app.css       CSS chung theo token sáng/tối; static/css/fonts.css khai phông
+static/js/app.js         JS tăng cường dần, ≤ 150 dòng (QĐ-20)
+static/fonts/            Phông đóng gói sẵn (Be Vietnam Pro, SIL OFL)
 tests/                   Test toàn dự án (lính gác quy tắc: sổ nợ, bản đồ tính năng…)
 docs/ARCHITECTURE.md     Tài liệu này
 docs/designs/            Thiết kế từng tính năng (chủ dự án duyệt trước khi code)
