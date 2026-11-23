@@ -110,3 +110,47 @@ def test_real_http_is_blocked_in_normal_tests() -> None:
     # Lưới an toàn: test thường không bao giờ lọt request ra Internet.
     with pytest.raises(AllMockedAssertionError):
         httpx.get("https://example.com/")
+
+
+FONT_DIR = ROOT / "static" / "fonts" / "be-vietnam-pro"
+FONT_WEIGHTS = ("400", "500", "600", "700")
+FONT_SUBSETS = ("latin", "latin-ext", "vietnamese")
+NETWORK_ASSET = re.compile(
+    r"<(?:script|link|img|iframe|source)\b[^>]*\b(?:src|href)\s*=\s*[\"']?(?:https?:)?//"
+    r"|url\(\s*[\"']?(?:https?:)?//"
+    r"|@import",
+    re.IGNORECASE,
+)
+
+
+def test_static_assets_never_load_from_the_network() -> None:
+    # App chạy local: trang không được kéo script, CSS, phông, ảnh từ máy chủ ngoài (QĐ-20).
+    # Link <a href="https://github.com/…"> tới repo thì vẫn được phép.
+    offenders = [
+        path.relative_to(ROOT).as_posix()
+        for path in _code_files()
+        if path.suffix in {".html", ".css", ".js"}
+        and NETWORK_ASSET.search(path.read_text(encoding="utf-8"))
+    ]
+    assert not offenders, f"Tài nguyên tải từ mạng (phải đóng gói trong static/): {offenders}"
+
+
+def test_bundled_font_has_license_and_all_subsets() -> None:
+    license_text = (FONT_DIR / "OFL.txt").read_text(encoding="utf-8")
+    assert "SIL Open Font License" in license_text
+    css = (ROOT / "static" / "css" / "fonts.css").read_text(encoding="utf-8")
+    blocks = re.findall(r"@font-face\s*\{([^}]*)\}", css)
+    assert len(blocks) == len(FONT_WEIGHTS) * len(FONT_SUBSETS)
+    declared = set()
+    for block in blocks:
+        weight = re.search(r"font-weight:\s*(\d+)", block)
+        source = re.search(r'url\("\.\./fonts/be-vietnam-pro/([^"]+)"\)', block)
+        assert weight, block
+        assert source, block
+        assert "unicode-range" in block
+        assert "font-display: swap" in block
+        assert (FONT_DIR / source.group(1)).is_file(), f"Thiếu file phông {source.group(1)}"
+        declared.add(source.group(1))
+        assert source.group(1).startswith(f"be-vietnam-pro-{weight.group(1)}-")
+    expected = {f"be-vietnam-pro-{w}-{s}.woff2" for w in FONT_WEIGHTS for s in FONT_SUBSETS}
+    assert declared == expected
