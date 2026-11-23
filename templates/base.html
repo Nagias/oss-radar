@@ -3,30 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>{% block title %}Trang chủ{% endblock %} · OSS Radar</title>
+  <link rel="preload" href="{% static 'fonts/be-vietnam-pro/be-vietnam-pro-400-vietnamese.woff2' %}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{% static 'css/fonts.css' %}">
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   {% block head_extra %}{% endblock %}
 </head>
 <body>
-  <header class="site-header">
-    <div class="container header-row">
-      <a class="brand" href="{% url 'discovery:home' %}">OSS Radar</a>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="brand" href="{% url 'discovery:home' %}"><span class="brand-mark" aria-hidden="true"></span>OSS Radar</a>
       {% with ns=request.resolver_match.namespace view=request.resolver_match.view_name %}
-      <nav class="site-nav" aria-label="Các trang chính">
-        <a href="{% url 'discovery:home' %}"{% if ns == 'discovery' %} aria-current="page"{% endif %}>Quét</a>
-        <a href="{% url 'rising:report' %}"{% if ns == 'rising' and view != 'rising:watch' and view != 'rising:watch_edit' %} aria-current="page"{% endif %}>Rising star</a>
-        <a href="{% url 'browse:repos' %}"{% if ns == 'browse' %} aria-current="page"{% endif %}>Kho repo</a>
-        <a href="{% url 'rising:watch' %}"{% if view == 'rising:watch' or view == 'rising:watch_edit' %} aria-current="page"{% endif %}>Theo dõi</a>
+      <nav class="sidebar-nav" aria-label="Các trang chính">
+        <a class="nav-item" href="{% url 'discovery:home' %}"{% if ns == 'discovery' %} aria-current="page"{% endif %}>Quét</a>
+        <a class="nav-item" href="{% url 'rising:report' %}"{% if ns == 'rising' and view != 'rising:watch' and view != 'rising:watch_edit' %} aria-current="page"{% endif %}>Rising star</a>
+        <a class="nav-item" href="{% url 'browse:repos' %}"{% if ns == 'browse' %} aria-current="page"{% endif %}>Kho repo</a>
+        <a class="nav-item" href="{% url 'rising:watch' %}"{% if view == 'rising:watch' or view == 'rising:watch_edit' %} aria-current="page"{% endif %}>Theo dõi</a>
       </nav>
       {% endwith %}
-      <span class="tagline">Tìm đúng · tìm đủ · không trùng · không rác</span>
-    </div>
-  </header>
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
-  <footer class="site-footer container">
-    Chạy tại máy bạn · số liệu lấy trực tiếp từ GitHub API
-  </footer>
+      {% block sidebar_extra %}{% endblock %}
+      <p class="sidebar-foot">Chạy tại máy bạn · số liệu lấy trực tiếp từ GitHub API</p>
+    </aside>
+    <main class="main" id="main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script src="{% static 'js/app.js' %}" defer></script>
 </body>
 </html>

@@ -154,3 +154,14 @@ def test_bundled_font_has_license_and_all_subsets() -> None:
         assert source.group(1).startswith(f"be-vietnam-pro-{weight.group(1)}-")
     expected = {f"be-vietnam-pro-{w}-{s}.woff2" for w in FONT_WEIGHTS for s in FONT_SUBSETS}
     assert declared == expected
+
+
+APP_JS_MAX_LINES = 150
+
+
+def test_app_js_stays_small() -> None:
+    # JS chỉ tăng cường dần, không có test tự động (D-010): giữ nhỏ để đọc là hiểu hết.
+    lines = (ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8").splitlines()
+    assert len(lines) <= APP_JS_MAX_LINES, (
+        f"app.js dài {len(lines)} dòng (tối đa {APP_JS_MAX_LINES})"
+    )
