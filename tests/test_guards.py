@@ -168,7 +168,8 @@ def test_app_js_stays_small() -> None:
 
 
 def test_checkboxes_keep_a_visible_keyboard_focus_ring() -> None:
-    # Luật "input:focus { outline: none }" mạnh hơn ":focus-visible" → ô tick mất viền khi đi bằng bàn phím.
+    # Luật "input:focus { outline: none }" mạnh hơn ":focus-visible": ô tick mất viền khi
+    # người dùng đi bằng bàn phím.
     css = (ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
     for selectors, body in re.findall(r"([^{}]+)\{([^}]*)\}", css):
         if "outline: none" not in body:
@@ -182,7 +183,8 @@ def test_checkboxes_keep_a_visible_keyboard_focus_ring() -> None:
 
 
 def test_number_inputs_do_not_submit_on_blur() -> None:
-    # Ô số tự gửi khi rời ô làm trang tải lại giữa lúc đang sửa cặp tối thiểu/tối đa: chỉ gửi khi Enter hoặc nút Lọc.
+    # Ô số tự gửi khi rời ô làm trang tải lại giữa lúc đang sửa cặp tối thiểu/tối đa:
+    # chỉ gửi khi bấm Enter hoặc nút Lọc.
     js = (ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8")
     auto_fields = re.search(r'AUTO_FIELDS = "([^"]+)"', js)
     assert auto_fields
