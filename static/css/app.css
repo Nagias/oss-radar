@@ -311,14 +311,16 @@ details > summary { cursor: pointer; }
 .score { position: relative; display: inline-block; }
 .score summary { white-space: nowrap; list-style: none; text-decoration: underline dotted var(--faint); text-underline-offset: 4px; }
 .score summary::-webkit-details-marker { display: none; }
-/* Phần giải thích nổi lên trên bảng, căn trái, được xuống dòng, không đẩy bảng giãn ra. */
-.score-parts {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
-  min-width: 290px; margin: 0; padding: 12px 14px 12px 30px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow-pop); font-size: 12.5px; text-align: left; white-space: normal; color: var(--text);
-}
+/* Danh sách thành phần điểm / lý do: căn trái, được xuống dòng (cả khi nằm trong cột số). */
+.score-parts { margin: 0; padding-left: 18px; font-size: 12.5px; text-align: left; white-space: normal; }
 .score-parts li { margin: 3px 0; }
+/* Trong ô điểm bấm mở: nổi lên trên bảng, không đẩy bảng giãn ra. */
+.score > .score-parts {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
+  min-width: 290px; padding: 12px 14px 12px 30px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-pop); color: var(--text);
+}
 .hidden-repos { margin-top: 16px; }
 .hidden-repos summary { color: var(--muted); font-weight: 500; }
 
