@@ -4,12 +4,15 @@
 {% block title %}Quét GitHub{% endblock %}
 
 {% block content %}
-<section class="card">
+<header class="page-header">
   <h1>Quét GitHub theo truy vấn</h1>
-  <p class="muted">
+  <p>
     Quét lấy đủ repo (vượt giới hạn 1.000 kết quả của GitHub bằng cách chia nhỏ theo ngày tạo),
     lưu vào kho không trùng lặp, sắp theo số star. Quét chạy nền — bấm xong là xem được tiến độ.
   </p>
+</header>
+
+<section class="card">
 
   {% if live_scan %}
     <p class="notice">

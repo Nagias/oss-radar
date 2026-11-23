@@ -1,4 +1,5 @@
 {% load static %}<!doctype html>
+{# Đổi app.css, fonts.css hoặc app.js thì đổi số ?v= bên dưới: trình duyệt giữ file cũ vài ngày nếu đường dẫn không đổi. #}
 <html lang="vi">
 <head>
   <meta charset="utf-8">
@@ -6,8 +7,8 @@
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}Trang chủ{% endblock %} · OSS Radar</title>
   <link rel="preload" href="{% static 'fonts/be-vietnam-pro/be-vietnam-pro-400-vietnamese.woff2' %}" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="{% static 'css/fonts.css' %}">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'css/fonts.css' %}?v=2026-11-23">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=2026-11-23">
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -29,6 +30,6 @@
       {% block content %}{% endblock %}
     </main>
   </div>
-  <script src="{% static 'js/app.js' %}" defer></script>
+  <script src="{% static 'js/app.js' %}?v=2026-11-23" defer></script>
 </body>
 </html>

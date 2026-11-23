@@ -331,6 +331,19 @@ details > summary { cursor: pointer; }
 .label:hover { text-decoration: none; border-color: var(--text); }
 .label-audience { background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); }
 .label-aspect { background: var(--surface-3); color: var(--muted); border: 1px solid transparent; }
-.group-filter { border: 0; padding: 0; margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.group-filter { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .group-filter legend { font-weight: 500; font-size: 13px; color: var(--muted); padding: 0; margin-bottom: 8px; }
 .browse-filters .checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+.back-link { margin: 0 0 16px; font-size: 13px; }
+.back-link a { color: var(--muted); }
+.back-link a:hover { color: var(--text); }
+/* Ô tên repo trong bảng: đủ rộng để mô tả không bị bóp thành cột chữ hẹp. */
+td:has(> a > strong) { min-width: 300px; }
+
+/* ---------- Màn hình hẹp: đặt cuối file để thắng các khai báo thành phần ở trên ---------- */
+@media (max-width: 768px) {
+  .card { padding: 16px; }
+  /* Nhãn lọc dài được xuống dòng thay vì tràn khỏi thẻ. */
+  .chip, .chip-check { white-space: normal; height: auto; min-height: 30px; padding: 4px 12px; }
+}
