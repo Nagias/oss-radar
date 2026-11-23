@@ -5,9 +5,10 @@
 
   document.documentElement.classList.add("js");
 
-  var AUTO_FIELDS = "select, input[type=checkbox], input[type=radio], input[type=number]";
+  // Ô số không tự gửi: đang sửa cặp tối thiểu/tối đa mà trang tải lại giữa chừng thì rất phiền.
+  var AUTO_FIELDS = "select, input[type=checkbox], input[type=radio]";
 
-  // Form lọc tự gửi khi đổi ô chọn, ô tick, ô số. Ô chữ vẫn chờ Enter để không gửi theo từng phím.
+  // Form lọc tự gửi khi đổi ô chọn, ô tick. Ô chữ, ô số chờ Enter hoặc nút Lọc.
   document.addEventListener("change", function (event) {
     var field = event.target;
     if (!(field instanceof Element) || !field.matches(AUTO_FIELDS)) return;

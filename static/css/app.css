@@ -184,7 +184,7 @@ input:not([type]), select, textarea {
 }
 textarea { height: auto; padding: 8px 12px; }
 select { padding-right: 28px; }
-input:focus, select:focus, textarea:focus {
+input:not([type=checkbox]):not([type=radio]):focus, select:focus, textarea:focus {
   outline: none; border-color: var(--text); box-shadow: 0 0 0 3px var(--focus);
 }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); width: 15px; height: 15px; margin: 0; }
@@ -234,6 +234,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); widt
 .chip:hover, .chip-check:hover { border-color: var(--border-strong); background: var(--surface-2); text-decoration: none; }
 .chip-check:has(input:checked) { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 .chip-check:has(input:checked) input { accent-color: var(--primary-text); }
+/* Ô tick nằm trong chip: viền bàn phím vẽ quanh cả chip cho dễ thấy. */
+.chip-check:has(input:focus-visible) { outline: 2px solid var(--text); outline-offset: 2px; }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; overflow-x: auto; }
 .tabs a {

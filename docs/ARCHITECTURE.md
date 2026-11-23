@@ -176,7 +176,7 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 ### QĐ-20 — Giao diện kiểu ElevenLabs: một CSS, JS tăng cường dần, phông đóng gói sẵn (sửa QĐ-05)
 - **Chọn:** vẫn render phía máy chủ (QĐ-05). `static/css/app.css` một file theo token (nền trắng, chữ và nút đen;
   token tối tự bật theo `prefers-color-scheme`). `static/js/app.js` viết tay, ≤ 150 dòng, chỉ làm thao tác nhanh
-  hơn: form `data-autosubmit` tự gửi khi đổi ô chọn/ô tick/ô số, `data-clean-query` bỏ ô rỗng khỏi đường dẫn, phím
+  hơn: form `data-autosubmit` tự gửi khi đổi ô chọn/ô tick (ô chữ, ô số chờ Enter hoặc nút Lọc), `data-clean-query` bỏ ô rỗng khỏi đường dẫn, phím
   `/` vào ô `data-search`, `data-confirm` hỏi lại trước khi gửi. Tắt JS thì trang vẫn dùng đủ (form luôn có nút).
 - **Phông Be Vietnam Pro** (SIL OFL 1.1) đóng gói trong `static/fonts/be-vietnam-pro/`: 4 độ đậm 400/500/600/700 × 3
   bộ ký tự latin, latin-ext, vietnamese = 12 file woff2, tổng 189.656 byte (lấy từ bản Google Fonts phục vụ ngày
