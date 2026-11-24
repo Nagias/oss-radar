@@ -64,6 +64,9 @@ REASON_VERIFY_AUTH = (
 VERIFY_BUDGET_NOTE = "Hết ngân sách xác minh — {count} ứng viên chưa xác minh."
 TRENDING_BUDGET_NOTE = "Hết ngân sách xác minh trending — {count} ứng viên trending chưa xác minh."
 TRENDING_SKIPPED_NOTE = "Không có GITHUB_TOKEN — bỏ qua xác minh {count} ứng viên trending."
+TRENDING_BLOCKED_NOTE = (
+    "Xác minh trending bị ngắt ({detail}) — {count} ứng viên trending chưa xác minh."
+)
 UNREADABLE_HISTORY_NOTE = (
     "Không xác minh được {repo}: GitHub trả lịch sử star không đọc được — repo nằm ở mục chưa "
     "xác minh. (Chi tiết: {detail})"

@@ -134,7 +134,7 @@
   - [ ] Kiểm chứng: `poe check`, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
 - [x] PR A merge vào `main` (Nagias/oss-radar#9, commit `11d0dcb`, 2026-11-24)
 - [ ] PR B `feat/f011-trending` — kế hoạch `docs/plans/2026-11-24-pr-b-f011-trending.md`
-  - [x] Trả D-009: tách `services.py` rising (1.670 dòng → 5 module, lớn nhất ~700), lọc thô theo ngày của lượt, nhãn
+  - [x] Trả D-009: tách `services.py` rising (1.670 dòng → 5 module, lớn nhất `_runner.py` ~790), lọc thô theo ngày của lượt, nhãn
         "Mới" theo ngưỡng đang lọc, số ngày dọn là một hằng ở catalog
   - [x] Quy tắc trending (≥ 200 star và ≥ 2%), cột `pool` / `is_trending`, migration `rising/0005_trending`
   - [x] Lượt hằng ngày: lọc thô 2 nhóm, bước 7 xác minh trending ngân sách riêng, số đếm báo cáo không lẫn

@@ -41,7 +41,9 @@ test ở đâu, đang nợ gì.
 - **Luồng chạy:** bước 2 lọc thô (`_runner._DailyRunner._screen`) bỏ trần 1.000 star: dưới 1.000 → nhóm `rising`
   (luật cũ), từ 1.000 → nhóm `trending` nếu `growth.is_trending_candidate` (ước lượng ≥ 100 và ≥ 1%) → bước 3 xác
   minh rising (chỉ nhóm `rising`) → **bước 7 xác minh trending** (`_verify_trending`, dùng chung `_verify_rows`,
-  ngân sách `TRENDING_BUDGET_WITH_TOKEN = 300`, không token thì bỏ qua và ghi chú) → `_save_history` gán
+  ngân sách `TRENDING_BUDGET_WITH_TOKEN = 300`, không token thì bỏ qua và ghi chú; bị Dừng / GitHub chặn /
+  từ chối token thì chỉ ghi chú rồi đi tiếp như bước hồ sơ chủ — không làm mất báo cáo rising của ngày) →
+  `_save_history` gán
   `is_trending` (≥ 200 và ≥ 2%) cho cả hai nhóm → lập báo cáo ghi `trending_count`.
 - **Thành phần:** `growth.is_trending`, `is_trending_candidate` (hàm thuần); `RisingCheck.pool`, `is_trending`;
   `DailyRun.trending_budget`, `trending_calls_used`, `trending_candidate_count`, `trending_count`,
@@ -52,7 +54,7 @@ test ở đâu, đang nợ gì.
   trending), `test_growth.py` (mốc biên 200 star / 2%), `test_report.py` (báo cáo `/rising/` không lẫn dòng
   trending), `features/browse/tests/`. Gọi GitHub thật: `uv run poe test-live` (lịch sử star của repo > 100.000 star).
 - **Kiểm chứng tay:** chạy `manage.py daily` rồi mở `/repos/?trending_only=on&sort=gain`.
-- **Nợ liên quan:** không có. `RisingCheck` không được dọn theo ngày (tăng ~300 dòng/ngày) — xem rủi ro QĐ-22.
+- **Nợ liên quan:** không có. `RisingCheck` không được dọn theo ngày (tăng ~950 dòng/ngày cả hai nhóm) — xem rủi ro QĐ-22.
 
 ### F-010 — Phân loại repo theo nhóm bằng AI, trang Kho repo
 - **Phục vụ vế nào của mục tiêu:** tìm đúng (lọc đúng mảng mình cần thay vì một danh sách trộn lẫn), không rác
@@ -149,8 +151,10 @@ test ở đâu, đang nợ gì.
   `execute_daily_run`: bước 1 quét lại từng `WatchQuery` bằng `discovery.services.start_scan/execute_scan`
   (nguồn "hằng ngày") → bước 2 lọc thô bằng `catalog.services.baseline_snapshots` + `growth.estimate_gain_7d`
   → bước 3 xác minh bằng `GitHubClient.star_history` (ngân sách 300 lượt có token / 50 không token) →
-  bước 7 xác minh trending (F-011) → bước 4 lấy hồ sơ chủ repo của rising star (F-006) → bước 5 đếm, dọn
-  ảnh chụp và kết quả quét hằng ngày cũ hơn `catalog.services.SNAPSHOT_RETENTION_DAYS` (35) ngày.
+  bước 7 xác minh trending (F-011) → bước 5 lấy hồ sơ chủ repo của rising star (F-006) → bước 6 phân
+  loại repo của lượt bằng AI (F-010) → bước 4 lập báo cáo: đếm, dọn ảnh chụp và kết quả quét hằng ngày
+  cũ hơn `catalog.services.SNAPSHOT_RETENTION_DAYS` (35) ngày (số bước là mã `DailyRun.Step`, không
+  phải thứ tự chạy).
   Code nằm ở `_common.py`, `_runner.py`, `daily_run.py`, `report.py`, `overview.py`; `services.py` chỉ xuất lại
   tên và là cửa công khai duy nhất (QĐ-21).
 - **Thành phần:**

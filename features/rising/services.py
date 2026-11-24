@@ -1,14 +1,14 @@
 """Nghiệp vụ của Rising star: lượt quét hằng ngày theo danh sách theo dõi.
 
-Mỗi ngày (giờ Việt Nam) có tối đa một lượt, gồm 6 bước: quét lại danh sách theo dõi → lọc thô →
-xác minh → lấy hồ sơ chủ của rising star (F-006) → phân loại repo của lượt bằng AI (F-010) →
-lập báo cáo. Việc định kỳ `classify_backlog_if_due` phân loại dần phần còn lại của kho. Bước đang
-làm lưu trong CSDL: bị gián đoạn thì lần sau làm tiếp từ bước dở.
+Mỗi ngày (giờ Việt Nam) có tối đa một lượt, gồm 7 bước: quét lại danh sách theo dõi → lọc thô →
+xác minh rising → xác minh trending (F-011) → lấy hồ sơ chủ của rising star (F-006) → phân loại
+repo của lượt bằng AI (F-010) → lập báo cáo. Việc định kỳ `classify_backlog_if_due` phân loại dần
+phần còn lại của kho. Bước đang làm lưu trong CSDL: bị gián đoạn thì lần sau làm tiếp từ bước dở.
 Lượt tự bắt đầu sau 7:00 (`run_daily_if_due`, việc định kỳ của bộ nhịp), hoặc khi bấm "Chạy ngay" /
 lệnh `daily` (`prepare_daily_run` rồi `execute_daily_run`).
 
-Phần cuối file là các hàm đọc cho trang web: báo cáo (`daily_report`, `latest_report_run`…), trạng
-thái hôm nay (`today_status`), danh sách theo dõi (`watch_overview`), ước lượng lượt gọi mỗi ngày
+Hàm đọc cho trang web: báo cáo (`daily_report`, `latest_report_run`…), trạng thái hôm nay
+(`today_status`), danh sách theo dõi (`watch_overview`), ước lượng lượt gọi mỗi ngày
 (`daily_estimate`) và lịch sử các lượt (`recent_daily_runs`).
 
 Đây là cửa công khai duy nhất (QĐ-21): code nằm ở các module con `_common`, `_runner`,
@@ -74,6 +74,9 @@ from features.rising._common import (
 )
 from features.rising._common import (
     RETRY_LATER_AFTER as RETRY_LATER_AFTER,
+)
+from features.rising._common import (
+    TRENDING_BLOCKED_NOTE as TRENDING_BLOCKED_NOTE,
 )
 from features.rising._common import (
     TRENDING_BUDGET_ANONYMOUS as TRENDING_BUDGET_ANONYMOUS,

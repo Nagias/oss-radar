@@ -30,6 +30,7 @@ from features.rising._common import (
     REASON_STOPPED,
     REASON_VERIFY_AUTH,
     REASON_VERIFY_BLOCKED,
+    TRENDING_BLOCKED_NOTE,
     TRENDING_BUDGET_NOTE,
     TRENDING_SKIPPED_NOTE,
     UNREADABLE_HISTORY_NOTE,
@@ -96,8 +97,7 @@ class _DailyRunner:
                 return
             run = self._load()
         if run.step == DailyRun.Step.TRENDING:
-            if not self._verify_trending():
-                return
+            self._verify_trending()
             run = self._load()
         if run.step == DailyRun.Step.OWNERS:
             if not self._owners():
@@ -339,29 +339,33 @@ class _DailyRunner:
         self._check_in(step=DailyRun.Step.TRENDING)
         return True
 
-    def _verify_trending(self) -> bool:
-        """Xác minh ứng viên trending (F-011) bằng lịch sử star, ngân sách riêng. `False` = dừng.
+    def _verify_trending(self) -> None:
+        """Xác minh ứng viên trending (F-011) bằng lịch sử star, ngân sách riêng.
 
-        Không có token thì bỏ qua hẳn (ghi chú số ứng viên bị bỏ), lượt vẫn đi tiếp tới báo cáo.
+        Chỉ làm giàu dữ liệu, như bước hồ sơ chủ (nguyên tắc 8): bấm Dừng, GitHub chặn hay từ chối
+        token thì ghi chú số ứng viên còn lại rồi đi tiếp tới lập báo cáo — không để lượt kẹt ở đây
+        rồi mất cả báo cáo rising của ngày khi hết ngày. Ngân sách 0 (mặc định khi không token) thì
+        bỏ qua hẳn.
         """
         run = self._check_in()
         if run.trending_budget == 0:
             # Chốt ngân sách một lần lúc bắt đầu bước: chạy tiếp vẫn giữ ngân sách ban đầu.
             run = self._check_in(trending_budget=_trending_budget())
         pending = self._unverified(RisingCheck.Pool.TRENDING)
-        if pending and not settings.GITHUB_TOKEN:
-            self._add_problem(TRENDING_SKIPPED_NOTE.format(count=len(pending)))
-        elif pending and not self._verify_rows(
-            run,
-            pending,
-            pool=RisingCheck.Pool.TRENDING,
-            budget_total=run.trending_budget,
-            calls_field="trending_calls_used",
-            budget_note=TRENDING_BUDGET_NOTE,
-        ):
-            return False
+        if pending and run.trending_budget == 0:
+            note = TRENDING_BUDGET_NOTE if settings.GITHUB_TOKEN else TRENDING_SKIPPED_NOTE
+            self._add_problem(note.format(count=len(pending)))
+        elif pending:
+            self._verify_rows(
+                run,
+                pending,
+                pool=RisingCheck.Pool.TRENDING,
+                budget_total=run.trending_budget,
+                calls_field="trending_calls_used",
+                budget_note=TRENDING_BUDGET_NOTE,
+                blocked_note=TRENDING_BLOCKED_NOTE,
+            )
         self._check_in(step=DailyRun.Step.OWNERS)
-        return True
 
     def _unverified(self, pool: str) -> list[int]:
         """Dòng chưa xác minh của một nhóm, ước lượng lớn trước."""
@@ -381,7 +385,13 @@ class _DailyRunner:
         budget_total: int,
         calls_field: str,
         budget_note: str,
+        blocked_note: str | None = None,
     ) -> bool:
+        """Xác minh lần lượt `pending`. `False` = lượt đã tạm dừng hoặc lỗi.
+
+        Có `blocked_note` (bước chỉ làm giàu dữ liệu): bị Dừng, bị GitHub chặn hay từ chối token thì
+        chỉ ghi chú số dòng còn lại và trả `True` để lượt đi tiếp.
+        """
         window_end = run.window_end
         if window_end is None:
             raise RuntimeError(f"Lượt #{self.run_id} ở bước xác minh mà chưa chốt cửa sổ ngày UTC.")
@@ -412,17 +422,27 @@ class _DailyRunner:
         except CallBudgetExhaustedError:
             self._add_problem(budget_note.format(count=len(self._unverified(pool))))
         except _DailyStopRequestedError:
+            if blocked_note is not None:
+                return self._note_left(blocked_note, pool, _OWNERS_STOPPED)
             self.pause(DailyRun.PauseKind.STOPPED, REASON_STOPPED)
             return False
         except (GitHubRateLimitError, GitHubUnavailableError) as exc:
             logger.warning("Lượt hằng ngày #%s: GitHub chặn lúc xác minh: %r", self.run_id, exc)
+            if blocked_note is not None:
+                return self._note_left(blocked_note, pool, _OWNERS_BLOCKED)
             reason = REASON_VERIFY_BLOCKED.format(minutes=_RETRY_MINUTES)
             self.pause(DailyRun.PauseKind.RETRY_LATER, reason)
             return False
         except GitHubAuthError as exc:
             logger.warning("Lượt hằng ngày #%s: GitHub từ chối token: %r", self.run_id, exc)
+            if blocked_note is not None:
+                return self._note_left(blocked_note, pool, _OWNERS_AUTH)
             self.fail(REASON_VERIFY_AUTH.format(detail=exc))
             return False
+        return True
+
+    def _note_left(self, note: str, pool: str, detail: str) -> bool:
+        self._add_problem(note.format(detail=detail, count=len(self._unverified(pool))))
         return True
 
     def _verify_one(

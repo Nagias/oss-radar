@@ -240,8 +240,11 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 - **Chọn:** tách theo nhóm việc ngay trong thư mục tính năng (`_common.py` hằng số và hàm phụ, `_runner.py` luồng
   chạy lượt, `daily_run.py` vòng đời và lịch, `report.py` đọc báo cáo, `overview.py` trạng thái và ước lượng).
   `services.py` chỉ còn `from … import X as X`: tính năng khác, view, lệnh vẫn chỉ import `services` (nguyên tắc 5).
-- **Luật kèm theo:** test vá hằng số (`monkeypatch`) phải vá đúng module **đọc** hằng số đó (vd `_common`), không vá
-  `services` — vá `services` thì test vẫn xanh mà không kiểm gì.
+- **Luật kèm theo:** test vá hằng số (`monkeypatch`) phải vá đúng module **dùng** hằng số đó, không vá `services` — vá
+  `services` thì test vẫn xanh mà không kiểm gì. Hằng được import theo tên (`from features.rising._common import X`,
+  như `daily_run.py` với `MAX_AUTO_CONTINUES`) thì vá ở module import nó; muốn vá một chỗ ở `_common` thì module dùng
+  phải đọc `_common.X` (như `_runner.py` với `DAILY_RUN_CLASSIFY_CALLS`). Ngưỡng tách: service dài quá ~1.000 dòng;
+  sau khi tách, `_runner.py` ~790 dòng (một lớp chạy lượt) được chấp nhận.
 - **Đã loại:** tách thành nhiều tính năng (`features/trending/`…) — lượt hằng ngày là một luồng, tách tính năng thì
   phải gọi chéo qua `services` ở mọi bước.
 
@@ -252,10 +255,13 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
   Repo ngoài các chủ đề đó không có ảnh chụp mới nên không vào trending (nguồn ngoài như OSS Insight: chưa làm).
 - **Ngân sách:** 300 lượt xác minh mỗi ngày khi có token (thêm ~10 phút cho lượt, ~700 lượt "core"/ngày trên hạn mức
   5.000/giờ); không token thì 0 — bỏ qua và ghi chú, vì 60 lượt/giờ đã dành cho rising (50) và hồ sơ chủ (10).
+- **Hỏng ở bước trending không chặn lượt** (như bước hồ sơ chủ): bị Dừng, GitHub chặn hay từ chối token thì ghi chú số
+  ứng viên còn lại rồi đi tiếp tới báo cáo. Trending chỉ làm giàu dữ liệu; để lượt kẹt ở đây tới hết ngày thì mất cả
+  báo cáo rising đã xác minh xong.
 - **Chung bảng `RisingCheck`** thêm cột `pool` (`rising` / `trending`, chốt theo số star lúc lọc thô) và
   `is_trending`: dùng lại vòng xác minh, biểu đồ, lời giải thích; `latest_gain_subquery` tự có số tăng của repo lớn.
   Mọi chỗ đếm/hiện báo cáo rising lọc `pool=rising` (có test chặn).
-- **Rủi ro:** `RisingCheck` không được dọn theo ngày → tăng ~300 dòng/ngày (~110.000 dòng/năm, vài chục MB) — quyết
+- **Rủi ro:** `RisingCheck` không được dọn theo ngày → tăng ~950 dòng/ngày cả hai nhóm (~350.000 dòng/năm, vài chục MB) — quyết
   dọn khi cần; endpoint lịch sử star chưa từng thử trên repo cực lớn trước F-011 (có test gọi thật).
 
 ### QĐ-16 — Số star tăng lấy từ lịch sử star chính thức; ảnh chụp chỉ làm radar

@@ -166,7 +166,7 @@ nhận, khi nào trả, quên trả thì sao.
   `features/discovery/templates/discovery/scan_detail.html`.
 - **Đã trả (2026-11-24, PR `feat/f011-trending`, trước khi thêm trending):**
   1. `services.py` (1.670 dòng) tách thành `_common.py`, `_runner.py`, `daily_run.py`, `report.py`, `overview.py`
-     (file lớn nhất ~700 dòng); `services.py` chỉ còn xuất lại tên, vẫn là cửa công khai duy nhất (QĐ-21);
+     (file lớn nhất `_runner.py` ~790 dòng, một lớp chạy lượt); `services.py` chỉ còn xuất lại tên, vẫn là cửa công khai duy nhất (QĐ-21);
   2. bước lọc thô lấy ngày của lượt (`run.day`), không lấy đồng hồ;
   3. nhãn "Mới vào danh sách" so với danh sách hôm trước theo đúng ngưỡng star tối đa / mức tăng đang lọc;
   4. số ngày giữ ảnh chụp và kết quả quét là một hằng `catalog.services.SNAPSHOT_RETENTION_DAYS`, trang lần quét

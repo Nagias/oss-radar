@@ -152,9 +152,10 @@ def test_trending_budget_runs_out_with_a_note(
     assert run.problems == ["Hết ngân sách xác minh trending — 1 ứng viên trending chưa xác minh."]
 
 
-def test_stop_during_trending_then_continue_makes_no_repeat_call(
+def test_stop_during_trending_still_reports_the_day(
     watch_list: list[WatchQuery], use_fake: UseFake, token: None
 ) -> None:
+    # Trending chỉ làm giàu dữ liệu: bấm Dừng ở bước này không được làm mất báo cáo rising của ngày.
     fake = watched(use_fake)
 
     def press_stop(repo_id: int) -> int | None:
@@ -166,16 +167,46 @@ def test_stop_during_trending_then_continue_makes_no_repeat_call(
 
     run = run_daily_now()
 
-    assert (run.status, run.step) == (Status.PAUSED, DailyRun.Step.TRENDING)
-    assert run.stop_reason == services.REASON_STOPPED
     assert fake.history.requested == [SMALL, BIG]
+    assert (run.status, run.step) == (Status.SUCCEEDED_PARTIAL, DailyRun.Step.REPORT)
+    assert services.latest_report_run() == run
+    assert run.rising_count == 1
+    assert check_of(MID_BIG).source == Source.SNAPSHOT
+    assert (
+        "Xác minh trending bị ngắt (bạn bấm Dừng) — 1 ứng viên trending chưa xác minh."
+        in run.problems
+    )
 
-    fake.history.fail_when = None
-    continued = run_daily_now()  # bấm "Chạy tiếp"
 
-    assert continued.status == Status.SUCCEEDED
-    assert fake.history.requested == [SMALL, BIG, MID_BIG]
-    assert continued.trending_calls_used == 2
+@pytest.mark.parametrize(
+    ("status", "detail"),
+    [(429, "GitHub hoặc mạng đang chặn"), (401, "GitHub từ chối token")],
+)
+def test_github_trouble_during_trending_still_reports_the_day(
+    watch_list: list[WatchQuery], use_fake: UseFake, token: None, status: int, detail: str
+) -> None:
+    fake = watched(use_fake)
+    fake.history.fail_when = lambda repo_id: status if repo_id == BIG else None
+
+    run = run_daily_now()
+
+    assert (run.status, run.step) == (Status.SUCCEEDED_PARTIAL, DailyRun.Step.REPORT)
+    assert run.rising_count == 1
+    assert MID_BIG not in fake.history.requested  # thôi gọi tiếp khi GitHub đã chặn
+    assert any(note.startswith(f"Xác minh trending bị ngắt ({detail}") for note in run.problems)
+
+
+def test_anonymous_trending_budget_setting_is_honoured(
+    watch_list: list[WatchQuery], use_fake: UseFake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Ngân sách không token là cấu hình thật: đặt 1 thì máy không token cũng xác minh 1 repo.
+    monkeypatch.setattr(_common, "TRENDING_BUDGET_ANONYMOUS", 1)
+    fake = watched(use_fake)
+
+    run = run_daily_now()
+
+    assert fake.history.requested == [SMALL, BIG]
+    assert (run.trending_budget, run.trending_calls_used) == (1, 1)
 
 
 def test_trending_repo_gone_404_is_dropped(
