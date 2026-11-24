@@ -125,13 +125,13 @@
 
 - [x] Chủ dự án chốt: trending mọi cỡ (≥ 200 star/7 ngày và ≥ 2%), góc nhìn đã lưu, gộp trang Khám phá (tab đầu
       Trending), nền trắng-đen tự tối, phông Be Vietnam Pro, JS tự viết, giữ báo cáo lượt làm trang chi tiết
-- [ ] PR A `chore/giao-dien-nen` — kế hoạch `docs/plans/2026-11-23-pr-a-giao-dien-nen.md`
+- [x] PR A `chore/giao-dien-nen` — kế hoạch `docs/plans/2026-11-23-pr-a-giao-dien-nen.md`
   - [x] Bộ đọc HTML cho test; test điều hướng và nút đọc theo ý nghĩa
   - [x] Phông Be Vietnam Pro đóng gói sẵn (12 file, 189.656 byte), lính gác cấm tải tài nguyên từ mạng
   - [x] Khung trang mới (thanh bên trái, token sáng/tối), `app.js` tăng cường dần
   - [x] Áp lên mọi trang; form lọc tự gửi; ô tìm có phím `/`; số `?v=` chống trình duyệt giữ CSS cũ
   - [x] Sổ sách: QĐ-20, CLAUDE.md, FEATURE_MAP, D-010
-  - [ ] Kiểm chứng: `poe check`, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
+  - [x] Kiểm chứng: `poe check`, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
 - [x] PR A merge vào `main` (Nagias/oss-radar#9, commit `11d0dcb`, 2026-11-24)
 - [ ] PR B `feat/f011-trending` — kế hoạch `docs/plans/2026-11-24-pr-b-f011-trending.md`
   - [x] Trả D-009: tách `services.py` rising (1.670 dòng → 5 module, lớn nhất `_runner.py` ~790), lọc thô theo ngày của lượt, nhãn
@@ -139,5 +139,7 @@
   - [x] Quy tắc trending (≥ 200 star và ≥ 2%), cột `pool` / `is_trending`, migration `rising/0005_trending`
   - [x] Lượt hằng ngày: lọc thô 2 nhóm, bước 7 xác minh trending ngân sách riêng, số đếm báo cáo không lẫn
   - [x] Ô "Chỉ trending" ở Kho repo, cột Trending ở Theo dõi, lệnh `daily` in số trending; sổ sách QĐ-21, QĐ-22
-  - [ ] Kiểm chứng: `poe check`, `poe test-live`, chạy thật trên bản sao CSDL, trình duyệt, rà soát độc lập, mở PR
+  - [x] Kiểm chứng: `poe check`, `poe test-live`, chạy thật trên bản sao CSDL, trình duyệt, rà soát độc lập, mở PR
+  - [x] Chạy thật `daily` trên bản sao CSDL (2026-11-24): 87,5 phút, 380 ứng viên trending, xác minh 300/300, 229 repo
+        trending (176 từ 1.000 star), 108 rising; số star top 10 khớp GitHub
 - [ ] PR C `feat/f012-kham-pha`
