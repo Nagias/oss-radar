@@ -14,7 +14,7 @@ from pytest_django.fixtures import Settings
 from features.catalog import services as catalog
 from features.catalog.models import Repository, StarSnapshot
 from features.discovery.models import ScanResult, ScanRun
-from features.rising import services
+from features.rising import _common, services
 from features.rising.models import DailyRun, RisingCheck, WatchQuery
 from features.rising.tests.conftest import (
     AppKilledError,
@@ -79,8 +79,8 @@ def test_screen_picks_candidates_from_snapshot_and_age_estimates(
     watch_list: list[WatchQuery], use_fake: UseFake, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Ngân sách xác minh 0: giữ nguyên kết quả lọc thô để xem (không dòng nào được nâng cấp).
-    monkeypatch.setattr(services, "VERIFY_BUDGET_WITH_TOKEN", 0)
-    monkeypatch.setattr(services, "VERIFY_BUDGET_ANONYMOUS", 0)
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_WITH_TOKEN", 0)
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_ANONYMOUS", 0)
     snapshot(RISER, stars=100)  # +60 trong 3 ngày → ước lượng 140
     snapshot(SLOW, stars=200)  # +2 trong 3 ngày → ước lượng 5
     snapshot(BIG, stars=900)
@@ -167,7 +167,7 @@ def test_verify_budget_exhausted_leaves_rest_unverified_and_run_partial(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings.GITHUB_TOKEN = "test-token"
-    monkeypatch.setattr(services, "VERIFY_BUDGET_WITH_TOKEN", 2)
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_WITH_TOKEN", 2)
     fake = three_candidates(use_fake, all_histories())
 
     run = run_daily_now()

@@ -12,7 +12,7 @@ from django.utils import timezone
 from pytest_django.fixtures import Settings
 
 from features.catalog.services import upsert_repositories
-from features.rising import services
+from features.rising import _common, services
 from features.rising.models import DailyRun, WatchQuery
 from features.rising.tests.conftest import UseFake, days_ago, history, item, snapshot
 from features.taxonomy import services as taxonomy
@@ -93,7 +93,7 @@ def test_rising_repos_are_labelled_first(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(taxonomy, "BATCH_SIZE", 1)
-    monkeypatch.setattr(services, "DAILY_RUN_CLASSIFY_CALLS", 2)
+    monkeypatch.setattr(_common, "DAILY_RUN_CLASSIFY_CALLS", 2)
     three_repos(use_fake)
 
     run = run_daily_now()
