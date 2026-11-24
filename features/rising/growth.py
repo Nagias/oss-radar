@@ -23,6 +23,15 @@ RISING_MIN_GAIN_7D = 50
 
 # Lọc thô trước khi xác minh: ước lượng từ 25 (một nửa ngưỡng vì ước lượng còn thô) là ứng viên.
 CANDIDATE_MIN_ESTIMATE_7D = 25
+
+# Trending (F-011, QĐ-22): mọi cỡ repo, tăng từ 200 star VÀ từ 2% trong 7 ngày. Mức % loại repo
+# khổng lồ tăng chậm so với cỡ của nó (200.000 star mà +500 chỉ 0,25%); repo khổng lồ tăng thật
+# nhanh vẫn có mặt.
+TRENDING_MIN_GAIN_7D = 200
+TRENDING_MIN_PERCENT_7D = 2.0
+# Ứng viên để xác minh: một nửa hai ngưỡng (ước lượng từ ảnh chụp còn thô), như rising 25/50.
+TRENDING_CANDIDATE_MIN_ESTIMATE_7D = 100
+TRENDING_CANDIDATE_MIN_PERCENT_7D = 1.0
 YOUNG_REPO_DAYS = 30
 
 # Cờ cảnh giác (chỉ gắn nhãn, không loại repo).
@@ -127,6 +136,35 @@ def is_rising(
 ) -> bool:
     """Rising star: star nhỏ hơn `max_stars` và tăng từ `min_gain` trở lên trong 7 ngày."""
     return stars_now < max_stars and gain_7d >= min_gain
+
+
+def is_trending(stars_now: int, gain_7d: int) -> bool:
+    """Trending: tăng từ `TRENDING_MIN_GAIN_7D` star và `TRENDING_MIN_PERCENT_7D`% trong 7 ngày."""
+    return _grows_enough(
+        stars_now, gain_7d, min_gain=TRENDING_MIN_GAIN_7D, min_percent=TRENDING_MIN_PERCENT_7D
+    )
+
+
+def is_trending_candidate(stars_now: int, estimate_7d: int) -> bool:
+    """Ứng viên trending ở bước lọc thô: ước lượng đạt một nửa hai ngưỡng trending."""
+    return _grows_enough(
+        stars_now,
+        estimate_7d,
+        min_gain=TRENDING_CANDIDATE_MIN_ESTIMATE_7D,
+        min_percent=TRENDING_CANDIDATE_MIN_PERCENT_7D,
+    )
+
+
+def _grows_enough(stars_now: int, gain_7d: int, *, min_gain: int, min_percent: float) -> bool:
+    """Tăng đủ cả số tuyệt đối lẫn phần trăm so với 7 ngày trước.
+
+    So bằng phép nhân (không chia) để mốc đúng 2% không bị lệch vì số thực. Chưa có star nào 7 ngày
+    trước (repo rất mới) thì coi như đạt mức phần trăm.
+    """
+    if gain_7d < min_gain:
+        return False
+    stars_before = stars_now - gain_7d
+    return stars_before <= 0 or gain_7d * 100 >= min_percent * stars_before
 
 
 def warning_flags(*, series: Sequence[int], age_days: int, description: str) -> tuple[Flag, ...]:

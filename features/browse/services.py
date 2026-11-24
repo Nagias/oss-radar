@@ -60,6 +60,7 @@ class BrowseFilters:
     max_stars: int | None = None
     created_days: int | None = None
     rising_only: bool = False
+    trending_only: bool = False
     show_suspicious: bool = False
     unclassified: bool = False
     commercial: bool = False
@@ -146,6 +147,8 @@ def _filtered(filters: BrowseFilters) -> QuerySet[Repository]:
         )
     if filters.rising_only:
         repos = repos.filter(pk__in=rising.latest_rising_repository_ids())
+    if filters.trending_only:
+        repos = repos.filter(pk__in=rising.latest_trending_repository_ids())
     if filters.commercial:
         repos = repos.filter(license_spdx__in=COMMERCIAL_LICENSES)
     if filters.scan is not None:

@@ -10,6 +10,10 @@ from django.utils import timezone
 from features.catalog.models import OwnerProfile, Repository, StarSnapshot
 from integrations.github.schemas import GitHubRepo, GitHubUser
 
+# Ảnh chụp star và danh sách repo của lần quét hằng ngày chỉ giữ chừng này ngày (thiết kế F-005
+# mục 8): ảnh chụp chỉ làm radar cho 7 tới 30 ngày, lịch sử dài hạn đã có ở GitHub.
+SNAPSHOT_RETENTION_DAYS = 35
+
 # SQLite giới hạn số tham số mỗi câu lệnh (~999): danh sách dài phải chia lô khi lọc `__in`.
 _IN_BATCH = 500
 

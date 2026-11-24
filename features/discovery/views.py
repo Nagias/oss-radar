@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from core import background
+from features.catalog import services as catalog
 from features.discovery import services
 from features.discovery.forms import ResumeForm, ScanForm
 from features.discovery.models import ScanRun
@@ -88,6 +89,7 @@ def _detail_context(scan: ScanRun, *, resume_form: ResumeForm | None = None) -> 
         "resume_form": resume_form,
         "auto_refresh": scan.is_live,
         "busy_label": background.busy_label(),
+        "retention_days": catalog.SNAPSHOT_RETENTION_DAYS,
     }
 
 

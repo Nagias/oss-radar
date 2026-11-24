@@ -376,6 +376,27 @@ def test_watch_page_lists_queries_estimate_history_and_buttons(
     assert '<td class="small">Truy vấn «topic:x» lỗi.<br>Hết ngân sách xác minh.</td>' in page
 
 
+def test_watch_history_shows_trending_count_and_calls(client: Client) -> None:
+    run = make_run(timezone.localdate() - timedelta(days=1))
+    DailyRun.objects.filter(pk=run.pk).update(
+        trending_count=17, trending_calls_used=123, trending_budget=300
+    )
+
+    page = client.get(WATCH_URL).text
+
+    assert '<th class="num">Trending</th>' in page
+    assert '<td class="num">17 <span class="muted small">· 123/300 lượt gọi</span></td>' in page
+
+
+def test_report_stats_show_trending_count(client: Client) -> None:
+    run = make_run()
+    DailyRun.objects.filter(pk=run.pk).update(trending_count=17)
+
+    page = client.get(REPORT_URL).text
+
+    assert "<strong>17</strong> repo trending (mọi cỡ, xem ở Kho repo)" in page
+
+
 def test_watch_page_shows_live_run_with_stop_button(client: Client) -> None:
     run = today_run()
 

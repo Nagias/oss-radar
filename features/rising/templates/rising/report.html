@@ -36,6 +36,7 @@
     <li>Ứng viên: <strong>{{ report.run.candidate_count|intcomma }}</strong> — đã xác minh <strong>{{ report.verified_count|intcomma }}</strong>, chưa xác minh <strong>{{ report.unverified_page.total|intcomma }}</strong></li>
     <li><strong>{{ report.run.insufficient_count|intcomma }}</strong> chưa đủ dữ liệu</li>
     <li><strong>{{ report.run.rising_count|intcomma }}</strong> rising star{% if report.hidden_rising_count %} (đã ẩn {{ report.hidden_rising_count }} nghi star giả){% endif %}</li>
+    <li><strong>{{ report.run.trending_count|intcomma }}</strong> repo trending (mọi cỡ, xem ở Kho repo)</li>
   </ul>
 
   {% if report.run.problems and report.run.pk != status.run.pk %}

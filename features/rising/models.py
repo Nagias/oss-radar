@@ -35,10 +35,11 @@ class DailyRun(models.Model):
         FAILED = "failed", "Lỗi"
 
     class Step(models.IntegerChoices):
-        """Thứ tự chạy: quét lại → lọc thô → xác minh → lấy hồ sơ chủ → phân loại → lập báo cáo.
+        """Thứ tự chạy: quét lại → lọc thô → xác minh → xác minh trending → lấy hồ sơ chủ →
+        phân loại → lập báo cáo.
 
-        `OWNERS` (5) và `CLASSIFY` (6) chạy trước `REPORT` (4): lượt cũ đã lập báo cáo lưu `step=4`.
-        Code chỉ so bằng, không so lớn nhỏ giữa các bước.
+        `TRENDING` (7), `OWNERS` (5) và `CLASSIFY` (6) chạy trước `REPORT` (4): lượt cũ đã lập báo
+        cáo lưu `step=4`. Code chỉ so bằng, không so lớn nhỏ giữa các bước.
         """
 
         RESCAN = 1, "Quét lại danh sách theo dõi"
@@ -47,6 +48,7 @@ class DailyRun(models.Model):
         REPORT = 4, "Lập báo cáo"
         OWNERS = 5, "Lấy hồ sơ chủ repo"
         CLASSIFY = 6, "Phân loại repo"
+        TRENDING = 7, "Xác minh trending"
 
     class PauseKind(models.TextChoices):
         STOPPED = "stopped", "Người dùng bấm Dừng"
@@ -82,6 +84,12 @@ class DailyRun(models.Model):
     owner_budget = models.PositiveIntegerField("Ngân sách hồ sơ chủ repo", default=0)
     owner_calls_used = models.PositiveIntegerField("Lượt gọi hồ sơ chủ đã dùng", default=0)
     ai_calls_used = models.PositiveIntegerField("Lượt gọi AI đã dùng", default=0)
+    trending_budget = models.PositiveIntegerField("Ngân sách xác minh trending", default=0)
+    trending_calls_used = models.PositiveIntegerField(
+        "Lượt gọi xác minh trending đã dùng", default=0
+    )
+    trending_candidate_count = models.PositiveIntegerField("Số ứng viên trending", default=0)
+    trending_count = models.PositiveIntegerField("Số repo trending", default=0)
     candidate_count = models.PositiveIntegerField("Số ứng viên", default=0)
     unverified_count = models.PositiveIntegerField("Ứng viên chưa xác minh", default=0)
     insufficient_count = models.PositiveIntegerField("Chưa đủ dữ liệu", default=0)
@@ -139,6 +147,12 @@ class RisingCheck(models.Model):
         SNAPSHOT = "snapshot", "Ước lượng từ ảnh chụp"
         AGE = "age", "Ước lượng theo tuổi repo"
 
+    class Pool(models.TextChoices):
+        """Nhóm xét, chốt theo số star lúc lọc thô: mỗi nhóm có luật và ngân sách xác minh riêng."""
+
+        RISING = "rising", "Đang lên (dưới 1.000 star)"
+        TRENDING = "trending", "Trending (từ 1.000 star)"
+
     daily_run = models.ForeignKey(DailyRun, on_delete=models.CASCADE, related_name="checks")
     repository = models.ForeignKey(
         Repository, on_delete=models.CASCADE, related_name="rising_checks"
@@ -152,6 +166,10 @@ class RisingCheck(models.Model):
     window_end = models.DateField("Ngày UTC cuối của cửa sổ", null=True, blank=True)
     baseline_day = models.DateField("Ngày của ảnh chụp mốc", null=True, blank=True)
     is_rising = models.BooleanField("Là rising star", default=False)
+    pool = models.CharField(
+        "Nhóm xét", max_length=10, choices=Pool.choices, default=Pool.RISING, db_index=True
+    )
+    is_trending = models.BooleanField("Là trending", default=False)
     flags = models.JSONField("Cờ cảnh giác", default=list, blank=True)
 
     class Meta:

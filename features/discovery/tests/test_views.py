@@ -11,6 +11,7 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
+from features.catalog import services as catalog_services
 from features.catalog.models import Repository
 from features.discovery import services
 from features.discovery.models import ScanRun
@@ -366,6 +367,18 @@ def test_scan_detail_shows_auto_resume_and_pruned_notes(
     assert "Hằng ngày" in page
     assert f"Tự chạy tiếp lần 2 lúc {timezone.localtime(resumed_at):%H:%M}" in page
     assert "Danh sách repo đã dọn sau 35 ngày" in page
+
+
+def test_pruned_note_uses_the_retention_constant(
+    client: Client, github_search: respx.Route, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(catalog_services, "SNAPSHOT_RETENTION_DAYS", 40)
+    scan = run_scan_now(origin=ScanRun.Origin.DAILY)
+    ScanRun.objects.filter(pk=scan.pk).update(results_pruned=True)
+
+    page = client.get(detail_url(scan)).text
+
+    assert "Danh sách repo đã dọn sau 40 ngày" in page
 
 
 def test_manual_scan_detail_has_no_daily_or_auto_resume_notes(

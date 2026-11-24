@@ -95,7 +95,7 @@
           <tr>
             <th>Ngày</th><th>Trạng thái</th><th class="num">Lượt gọi Search</th>
             <th class="num">Lượt gọi xác minh</th><th class="num">Lượt gọi hồ sơ chủ</th><th class="num">Lượt gọi AI</th>
-            <th class="num">Rising star</th><th>Ghi chú</th>
+            <th class="num">Rising star</th><th class="num">Trending</th><th>Ghi chú</th>
           </tr>
         </thead>
         <tbody>
@@ -108,6 +108,7 @@
               <td class="num">{{ run.owner_calls_used|intcomma }}</td>
               <td class="num">{{ run.ai_calls_used|intcomma }}</td>
               <td class="num">{{ run.rising_count }}</td>
+              <td class="num">{{ run.trending_count }} <span class="muted small">· {{ run.trending_calls_used }}/{{ run.trending_budget }} lượt gọi</span></td>
               <td class="small">{{ run.error_message|default:run.stop_reason|linebreaksbr }}</td>
             </tr>
           {% endfor %}

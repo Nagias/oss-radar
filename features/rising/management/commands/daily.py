@@ -32,10 +32,11 @@ class Command(BaseCommand):
     def _print_summary(self, run: DailyRun) -> None:
         self.stdout.write(f"Lượt hằng ngày {run.day:%d/%m/%Y} — {run.get_status_display()}.")
         verify = f"{run.verify_calls_used}/{run.verify_budget}"
+        trending = f"{run.trending_calls_used}/{run.trending_budget}"
         owners = f"{run.owner_calls_used}/{run.owner_budget}"
         self.stdout.write(
-            f"Lượt gọi: Search {run.search_calls_used}, xác minh {verify}, hồ sơ chủ {owners},"
-            f" AI {run.ai_calls_used}."
+            f"Lượt gọi: Search {run.search_calls_used}, xác minh {verify}, xác minh trending "
+            f"{trending}, hồ sơ chủ {owners}, AI {run.ai_calls_used}."
         )
         for note in run.stop_reason.splitlines():
             self.stdout.write(f"Ghi chú: {note}")
@@ -44,6 +45,7 @@ class Command(BaseCommand):
             return
         report = services.daily_report(run)
         self.stdout.write(f"Rising star: {run.rising_count}")
+        self.stdout.write(f"Trending: {run.trending_count}")
         for row in report.rising[:TOP_TO_PRINT]:
             gain = _vietnamese_number(row.check.gain_7d)
             stars = _vietnamese_number(row.check.stars)

@@ -13,6 +13,7 @@ import respx
 from pytest_django.fixtures import Settings
 
 from features.catalog.services import StarPoint
+from features.rising import growth
 from features.rising.growth import (
     FLAG_LABELS,
     Flag,
@@ -378,3 +379,38 @@ def test_sparkline_points_x_is_evenly_spaced() -> None:
 def test_sparkline_points_of_single_value_and_empty_series() -> None:
     assert sparkline_points((7,), width=100, height=20) == "0.0,0.0"
     assert sparkline_points((), width=100, height=20) == ""
+
+
+# --- Trending (F-011): mọi cỡ repo, tăng ≥ 200 star/7 ngày và ≥ 2% ---------------------------
+
+
+@pytest.mark.parametrize(
+    ("stars_now", "gain_7d", "expected"),
+    [
+        (10_199, 199, False),  # dưới 200 star
+        (10_200, 200, True),  # 200 / 10.000 = đúng 2%
+        (20_399, 399, False),  # 399 / 20.000 = 1,995% — dưới 2%
+        (20_400, 400, True),  # 400 / 20.000 = đúng 2%
+        (250, 250, True),  # 7 ngày trước chưa có star nào: coi như đạt mức %
+        (800, 250, True),  # repo nhỏ tăng mạnh: vừa rising vừa trending
+    ],
+)
+def test_is_trending_needs_both_absolute_and_relative_growth(
+    stars_now: int, gain_7d: int, expected: bool
+) -> None:
+    assert growth.is_trending(stars_now, gain_7d) is expected
+
+
+@pytest.mark.parametrize(
+    ("stars_now", "estimate_7d", "expected"),
+    [
+        (10_099, 99, False),  # dưới 100
+        (10_100, 100, True),  # 100 / 10.000 = đúng 1%
+        (20_199, 199, False),  # 199 / 20.000 = 0,995%
+        (20_200, 200, True),  # 200 / 20.000 = đúng 1%
+    ],
+)
+def test_trending_candidate_uses_half_thresholds(
+    stars_now: int, estimate_7d: int, expected: bool
+) -> None:
+    assert growth.is_trending_candidate(stars_now, estimate_7d) is expected

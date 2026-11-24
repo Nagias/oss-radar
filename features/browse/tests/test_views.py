@@ -87,6 +87,7 @@ def test_form_filters_keep_valid_fields_when_others_are_wrong() -> None:
             "min_stars": "-5",
             "max_stars": "1000",
             "rising_only": "on",
+            "trending_only": "on",
             "page": "0",
         }
     )
@@ -97,6 +98,7 @@ def test_form_filters_keep_valid_fields_when_others_are_wrong() -> None:
     assert filters.aspects == ("video",)
     assert (filters.min_stars, filters.max_stars) == (None, 1000)
     assert filters.rising_only is True
+    assert filters.trending_only is True
     assert filters.page == 1
     assert BrowseForm().filters() == BrowseFilters()
 

@@ -4,7 +4,7 @@ GitHub giả có Search (bước quét lại) và lịch sử star (bước xác
 đều thấy mọi repo giả, nên mỗi repo nằm trong cả ba lần quét con.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 import pytest
@@ -14,7 +14,7 @@ from pytest_django.fixtures import Settings
 from features.catalog import services as catalog
 from features.catalog.models import Repository, StarSnapshot
 from features.discovery.models import ScanResult, ScanRun
-from features.rising import services
+from features.rising import _common, services
 from features.rising.models import DailyRun, RisingCheck, WatchQuery
 from features.rising.tests.conftest import (
     AppKilledError,
@@ -79,11 +79,11 @@ def test_screen_picks_candidates_from_snapshot_and_age_estimates(
     watch_list: list[WatchQuery], use_fake: UseFake, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Ngân sách xác minh 0: giữ nguyên kết quả lọc thô để xem (không dòng nào được nâng cấp).
-    monkeypatch.setattr(services, "VERIFY_BUDGET_WITH_TOKEN", 0)
-    monkeypatch.setattr(services, "VERIFY_BUDGET_ANONYMOUS", 0)
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_WITH_TOKEN", 0)
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_ANONYMOUS", 0)
     snapshot(RISER, stars=100)  # +60 trong 3 ngày → ước lượng 140
     snapshot(SLOW, stars=200)  # +2 trong 3 ngày → ước lượng 5
-    snapshot(BIG, stars=900)
+    snapshot(BIG, stars=900)  # từ 1.000 star: sang nhóm trending (F-011), ước lượng 233
     snapshot(FORK, stars=100)
     snapshot(ARCHIVED, stars=100)
     fake = use_fake(
@@ -107,14 +107,37 @@ def test_screen_picks_candidates_from_snapshot_and_age_estimates(
     assert checks == {
         RISER: (Source.SNAPSHOT, 140, days_ago(3), 160),
         YOUNG: (Source.AGE, 35, None, 50),
+        BIG: (Source.SNAPSHOT, 233, days_ago(3), 1000),
     }
+    assert check_of(BIG).pool == RisingCheck.Pool.TRENDING
     assert not RisingCheck.objects.filter(is_rising=True).exists()
     assert (run.candidate_count, run.insufficient_count) == (2, 1)
+    assert run.trending_candidate_count == 1
     assert run.window_end == window_end()
     assert run.unverified_count == 2
     assert fake.history.requested == []
-    assert run.problems == ["Hết ngân sách xác minh — 2 ứng viên chưa xác minh."]
+    assert run.problems == [
+        "Hết ngân sách xác minh — 2 ứng viên chưa xác minh.",
+        "Không có GITHUB_TOKEN — bỏ qua xác minh 1 ứng viên trending.",
+    ]
     assert run.status == Status.SUCCEEDED_PARTIAL
+
+
+def test_screen_uses_the_run_day_not_the_clock(
+    watch_list: list[WatchQuery], use_fake: UseFake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Bấm Chạy ngay lúc 23:50 hôm qua, bước lọc thô chạy sau 0:00: so mốc theo ngày của lượt.
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_WITH_TOKEN", 0)
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_ANONYMOUS", 0)
+    snapshot(RISER, stars=100)  # 3 ngày trước hôm nay = 2 ngày trước ngày của lượt
+    use_fake([item(RISER, stars=160)])
+    late_yesterday = timezone.make_aware(datetime.combine(days_ago(1), time(23, 50)))
+
+    run = services.prepare_daily_run(now=late_yesterday)
+    services.execute_daily_run(run.pk)
+
+    assert run.day == days_ago(1)
+    assert check_of(RISER).gain_7d == 210  # +60 trong 2 ngày tính tới ngày của lượt, không phải 3
 
 
 def test_repo_in_two_watch_queries_checked_once(
@@ -167,7 +190,7 @@ def test_verify_budget_exhausted_leaves_rest_unverified_and_run_partial(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings.GITHUB_TOKEN = "test-token"
-    monkeypatch.setattr(services, "VERIFY_BUDGET_WITH_TOKEN", 2)
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_WITH_TOKEN", 2)
     fake = three_candidates(use_fake, all_histories())
 
     run = run_daily_now()

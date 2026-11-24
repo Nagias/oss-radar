@@ -75,6 +75,38 @@ def test_new_entry_compares_with_previous_run() -> None:
     assert [row.is_new_entry for row in services.daily_report(oldest).rising] == [True]
 
 
+def test_new_entry_badge_follows_the_chosen_thresholds() -> None:
+    # Hôm qua repo đã đạt ngưỡng đang lọc (tăng từ 30), dù chưa là rising star theo ngưỡng 50.
+    previous = make_run(DAY - timedelta(days=1))
+    make_check(previous, 1, stars=700, gain_7d=40)
+    make_check(previous, 2, stars=700, gain_7d=20)  # hôm qua dưới cả ngưỡng đang lọc
+    run = make_run()
+    make_check(run, 1, stars=720, gain_7d=45)
+    make_check(run, 2, stars=720, gain_7d=45)
+
+    report = services.daily_report(run, min_gain=30)
+
+    new = {row.repository.github_id: row.is_new_entry for row in report.rising}
+    assert new == {1: False, 2: True}
+
+
+def test_report_counts_ignore_trending_rows() -> None:
+    # Dòng trending (repo từ 1.000 star) nằm cùng bảng RisingCheck nhưng không thuộc /rising/.
+    run = make_run()
+    make_check(run, 1, stars=300, gain_7d=90, is_rising=True)
+    big = make_check(run, 2, stars=5_000, gain_7d=400)
+    big_estimate = make_check(run, 3, stars=8_000, gain_7d=500, source=RisingCheck.Source.SNAPSHOT)
+    RisingCheck.objects.filter(pk__in=[big.pk, big_estimate.pk]).update(
+        pool=RisingCheck.Pool.TRENDING, is_trending=True
+    )
+
+    report = services.daily_report(run, max_stars=10_000)
+
+    assert [row.repository.github_id for row in report.rising] == [1]
+    assert report.verified_count == 1
+    assert report.unverified_page.total == 0
+
+
 def test_reason_text_has_threshold_and_utc_window() -> None:
     run = make_run()
     make_check(run, 1, stars=340, gain_7d=120, is_rising=True)
