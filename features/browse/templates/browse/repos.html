@@ -69,6 +69,7 @@
 
     <div class="checks">
       <label class="chip-check"><input type="checkbox" name="rising_only"{% if filters.rising_only %} checked{% endif %}> Chỉ rising star (báo cáo mới nhất)</label>
+      <label class="chip-check"><input type="checkbox" name="trending_only"{% if filters.trending_only %} checked{% endif %}> Chỉ trending (báo cáo mới nhất)</label>
       <label class="chip-check"><input type="checkbox" name="commercial"{% if filters.commercial %} checked{% endif %}> Giấy phép cho phép dùng thương mại (MIT, Apache, BSD…)</label>
       <label class="chip-check"><input type="checkbox" name="unclassified"{% if filters.unclassified %} checked{% endif %}> Chỉ repo chưa phân loại <span class="muted small">{{ unclassified_count|intcomma }}</span></label>
       <label class="chip-check"><input type="checkbox" name="show_suspicious"{% if filters.show_suspicious %} checked{% endif %}> Hiện cả repo nghi star giả</label>

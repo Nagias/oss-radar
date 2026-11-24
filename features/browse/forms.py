@@ -30,6 +30,7 @@ class BrowseForm(forms.Form):
         label="Tạo trong (ngày)", required=False, min_value=1, max_value=36500
     )
     rising_only = forms.BooleanField(label="Chỉ rising star (báo cáo mới nhất)", required=False)
+    trending_only = forms.BooleanField(label="Chỉ trending (báo cáo mới nhất)", required=False)
     commercial = forms.BooleanField(label="Giấy phép cho phép dùng thương mại", required=False)
     unclassified = forms.BooleanField(label="Chỉ repo chưa phân loại", required=False)
     show_suspicious = forms.BooleanField(label="Hiện cả repo nghi star giả", required=False)
@@ -63,6 +64,7 @@ class BrowseForm(forms.Form):
             max_stars=data.get("max_stars"),
             created_days=data.get("created_days"),
             rising_only=bool(data.get("rising_only")),
+            trending_only=bool(data.get("trending_only")),
             commercial=bool(data.get("commercial")),
             unclassified=bool(data.get("unclassified")),
             show_suspicious=bool(data.get("show_suspicious")),

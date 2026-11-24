@@ -95,6 +95,50 @@ def test_rising_only_uses_latest_report() -> None:
     assert names(replace(DEFAULT, rising_only=True)) == ["chu/repo-2"]
 
 
+def test_trending_only_uses_latest_report() -> None:
+    small, big = add_repo(1), add_repo(2, stars=50_000)
+    add_repo(3)
+    run = DailyRun.objects.create(day=timezone.localdate(), status="succeeded", step=4)
+    RisingCheck.objects.create(
+        daily_run=run,
+        repository=big,
+        stars=50_000,
+        source="history",
+        gain_7d=2_000,
+        pool="trending",
+        is_trending=True,
+    )
+    RisingCheck.objects.create(
+        daily_run=run, repository=small, stars=100, source="history", gain_7d=90, is_rising=True
+    )
+
+    assert names(replace(DEFAULT, trending_only=True)) == ["chu/repo-2"]
+
+
+def test_gain_sort_shows_big_repo_gain() -> None:
+    small, big = add_repo(1, stars=500), add_repo(2, stars=50_000)
+    run = DailyRun.objects.create(day=timezone.localdate(), status="succeeded", step=4)
+    RisingCheck.objects.create(
+        daily_run=run,
+        repository=big,
+        stars=50_000,
+        source="history",
+        gain_7d=2_000,
+        pool="trending",
+        is_trending=True,
+    )
+    RisingCheck.objects.create(
+        daily_run=run, repository=small, stars=500, source="history", gain_7d=90, is_rising=True
+    )
+
+    rows = services.browse(replace(DEFAULT, sort="gain")).rows
+
+    assert [(row.repository.full_name, row.gain_7d) for row in rows] == [
+        ("chu/repo-2", 2_000),
+        ("chu/repo-1", 90),
+    ]
+
+
 def test_rising_only_without_any_report_is_empty() -> None:
     add_repo(1)
 

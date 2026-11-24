@@ -132,5 +132,12 @@
   - [x] Áp lên mọi trang; form lọc tự gửi; ô tìm có phím `/`; số `?v=` chống trình duyệt giữ CSS cũ
   - [x] Sổ sách: QĐ-20, CLAUDE.md, FEATURE_MAP, D-010
   - [ ] Kiểm chứng: `poe check`, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
-- [ ] PR B `feat/f011-trending` (trả D-009 trước)
+- [x] PR A merge vào `main` (Nagias/oss-radar#9, commit `11d0dcb`, 2026-11-24)
+- [ ] PR B `feat/f011-trending` — kế hoạch `docs/plans/2026-11-24-pr-b-f011-trending.md`
+  - [x] Trả D-009: tách `services.py` rising (1.670 dòng → 5 module, lớn nhất ~700), lọc thô theo ngày của lượt, nhãn
+        "Mới" theo ngưỡng đang lọc, số ngày dọn là một hằng ở catalog
+  - [x] Quy tắc trending (≥ 200 star và ≥ 2%), cột `pool` / `is_trending`, migration `rising/0005_trending`
+  - [x] Lượt hằng ngày: lọc thô 2 nhóm, bước 7 xác minh trending ngân sách riêng, số đếm báo cáo không lẫn
+  - [x] Ô "Chỉ trending" ở Kho repo, cột Trending ở Theo dõi, lệnh `daily` in số trending; sổ sách QĐ-21, QĐ-22
+  - [ ] Kiểm chứng: `poe check`, `poe test-live`, chạy thật trên bản sao CSDL, trình duyệt, rà soát độc lập, mở PR
 - [ ] PR C `feat/f012-kham-pha`

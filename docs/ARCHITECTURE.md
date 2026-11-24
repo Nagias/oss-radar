@@ -33,6 +33,8 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 | QĐ-19 | Điểm lưu sẵn (sửa QĐ-17) | Điểm Chất lượng + mức nghi star giả lưu ở `ScoreCache` để lọc / sắp cả kho; phần giải thích vẫn tính trực tiếp | Đã duyệt 2026-10-27 (đo: 3,2 giây cho 32.412 repo), đã dùng |
 | QĐ-17 | Chấm điểm, lọc star giả | Hàm thuần tính lúc hiển thị (không lưu điểm); "Nghi cao" ẩn chứ không xoá; hồ sơ chủ repo lưu ở kho, làm mới sau 30 ngày | Đã duyệt 2026-10-23 (thiết kế F-006), đã dùng (F-006) |
 | QĐ-20 | Giao diện (sửa QĐ-05) | Hệ thiết kế một file CSS (token sáng + tối tự động), JS tự viết `static/js/app.js` ≤ 150 dòng chỉ tăng cường dần, phông Be Vietnam Pro đóng gói sẵn | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng |
+| QĐ-21 | Service lớn | Tách thành module trong thư mục tính năng; `services.py` chỉ xuất lại tên và vẫn là cửa công khai duy nhất | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng (`features/rising`) |
+| QĐ-22 | Trending (sửa QĐ-16) | Mọi cỡ repo, ≥ 200 star và ≥ 2% trong 7 ngày; ngân sách xác minh riêng 300 (0 khi không token); chung bảng `RisingCheck` (cột `pool`) | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng |
 
 ---
 
@@ -232,6 +234,29 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
   `manage.py daily`.
 - **Đã loại:** Task Scheduler của Windows (lịch nằm ngoài app, phải đăng ký bằng tay; chủ dự án chọn trong
   app); Huey (QĐ-11 cũ).
+
+### QĐ-21 — Service lớn tách module, `services.py` vẫn là cửa duy nhất
+- `features/rising/services.py` dài 1.670 dòng (nợ D-009): khó đọc, agent dễ sửa nhầm chỗ.
+- **Chọn:** tách theo nhóm việc ngay trong thư mục tính năng (`_common.py` hằng số và hàm phụ, `_runner.py` luồng
+  chạy lượt, `daily_run.py` vòng đời và lịch, `report.py` đọc báo cáo, `overview.py` trạng thái và ước lượng).
+  `services.py` chỉ còn `from … import X as X`: tính năng khác, view, lệnh vẫn chỉ import `services` (nguyên tắc 5).
+- **Luật kèm theo:** test vá hằng số (`monkeypatch`) phải vá đúng module **đọc** hằng số đó (vd `_common`), không vá
+  `services` — vá `services` thì test vẫn xanh mà không kiểm gì.
+- **Đã loại:** tách thành nhiều tính năng (`features/trending/`…) — lượt hằng ngày là một luồng, tách tính năng thì
+  phải gọi chéo qua `services` ở mọi bước.
+
+### QĐ-22 — Trending mọi cỡ: ngưỡng, ngân sách, chung bảng (sửa QĐ-16)
+- **Ngưỡng** (chủ dự án chốt 2026-11-23): tăng ≥ 200 star **và** ≥ 2% so với 7 ngày trước, theo lịch sử star chính
+  thức. Ứng viên để xác minh: ước lượng từ ảnh chụp ≥ 100 và ≥ 1%. Repo nhỏ tăng mạnh vừa rising vừa trending.
+- **Nguồn ứng viên:** chỉ repo trong kho được lượt hằng ngày quét lại (16 chủ đề theo dõi) — không thêm lượt Search.
+  Repo ngoài các chủ đề đó không có ảnh chụp mới nên không vào trending (nguồn ngoài như OSS Insight: chưa làm).
+- **Ngân sách:** 300 lượt xác minh mỗi ngày khi có token (thêm ~10 phút cho lượt, ~700 lượt "core"/ngày trên hạn mức
+  5.000/giờ); không token thì 0 — bỏ qua và ghi chú, vì 60 lượt/giờ đã dành cho rising (50) và hồ sơ chủ (10).
+- **Chung bảng `RisingCheck`** thêm cột `pool` (`rising` / `trending`, chốt theo số star lúc lọc thô) và
+  `is_trending`: dùng lại vòng xác minh, biểu đồ, lời giải thích; `latest_gain_subquery` tự có số tăng của repo lớn.
+  Mọi chỗ đếm/hiện báo cáo rising lọc `pool=rising` (có test chặn).
+- **Rủi ro:** `RisingCheck` không được dọn theo ngày → tăng ~300 dòng/ngày (~110.000 dòng/năm, vài chục MB) — quyết
+  dọn khi cần; endpoint lịch sử star chưa từng thử trên repo cực lớn trước F-011 (có test gọi thật).
 
 ### QĐ-16 — Số star tăng lấy từ lịch sử star chính thức; ảnh chụp chỉ làm radar
 - Từ 7/2026 GitHub khoá danh sách người bấm star; từ 2026-09-04 có endpoint lịch sử star

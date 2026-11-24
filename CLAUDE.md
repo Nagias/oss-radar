@@ -42,6 +42,7 @@ tắc phải biến thành luật kiểm được, không để làm khẩu hi�
 |---|---|---|
 | Thêm tính năng | thư mục `features/<tên>/` theo cấu trúc F-001 + mục mới trong `FEATURE_MAP.md` (cùng PR) | `features/discovery/` |
 | Nghiệp vụ | hàm trong `features/<tên>/services.py` | `features/discovery/services.py` |
+| Service quá dài (> ~700 dòng) | tách module con trong thư mục tính năng, `services.py` chỉ `from … import X as X`; test vá hằng số thì vá module con đọc nó (QĐ-21) | `features/rising/services.py` |
 | Trang web | function-based view mỏng + `templates/<tên>/` + `urls.py` có `app_name` | `features/discovery/views.py` |
 | Kiểm tra dữ liệu nhập | Django Form (dùng chung cho web và dòng lệnh) | `features/discovery/forms.py` |
 | Lệnh dòng lệnh / để agent tự kiểm chứng | management command gọi service | `features/discovery/management/commands/scan.py` |
