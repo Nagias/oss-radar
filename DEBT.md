@@ -23,7 +23,7 @@ nhận, khi nào trả, quên trả thì sao.
 | D-006 | Tắt app giữa chừng thì lần quét chỉ chuyển sang Tạm dừng; phải bấm Tiếp tục bằng tay | Đã trả (2026-10-23) | F-005: bộ nhịp tự chạy tiếp lần quét bị gián đoạn |
 | D-007 | Trang kết quả lần quét chỉ hiện 500 repo nhiều star nhất | Đã trả (2026-10-27) | F-010: trang Kho repo `/repos/?scan=<id>` |
 | D-008 | 5 điểm nhỏ còn lại từ rà soát F-002 (tính dư lượt khi Dừng lúc chờ, lệch đồng hồ, lệnh in "0/None", lát gốc lỗi báo "còn sót", trạng thái `queued` cũ) | Đã trả (2026-10-23) | PR `fix/d008-diem-nho-f002` |
-| D-009 | 4 điểm để sau của F-005 (services.py rising ~1.400 dòng, ngày của bước lọc thô, nhãn "Mới vào danh sách" theo ngưỡng mặc định, "35 ngày" viết cứng) | Mở | PR `fix/` riêng ngay sau F-006 |
+| D-009 | 4 điểm để sau của F-005 (services.py rising ~1.400 dòng, ngày của bước lọc thô, nhãn "Mới vào danh sách" theo ngưỡng mặc định, "35 ngày" viết cứng) | Đã trả (2026-11-24) | PR `feat/f011-trending` |
 | D-010 | `static/js/app.js` chưa có test tự động (dự án không có trình chạy JS) | Mở | Khi JS vượt 150 dòng, hoặc có QĐ duyệt công cụ test trình duyệt |
 
 ## Chi tiết
@@ -164,6 +164,13 @@ nhận, khi nào trả, quên trả thì sao.
   một ngày (ngày sau vẫn được xét); nhãn "Mới" hơi lệch khi lọc.
 - **Vị trí:** `features/rising/services.py` (đầu file, `_screen`, `daily_report`),
   `features/discovery/templates/discovery/scan_detail.html`.
+- **Đã trả (2026-11-24, PR `feat/f011-trending`, trước khi thêm trending):**
+  1. `services.py` (1.670 dòng) tách thành `_common.py`, `_runner.py`, `daily_run.py`, `report.py`, `overview.py`
+     (file lớn nhất ~700 dòng); `services.py` chỉ còn xuất lại tên, vẫn là cửa công khai duy nhất (QĐ-21);
+  2. bước lọc thô lấy ngày của lượt (`run.day`), không lấy đồng hồ;
+  3. nhãn "Mới vào danh sách" so với danh sách hôm trước theo đúng ngưỡng star tối đa / mức tăng đang lọc;
+  4. số ngày giữ ảnh chụp và kết quả quét là một hằng `catalog.services.SNAPSHOT_RETENTION_DAYS`, trang lần quét
+     đọc từ đó.
 
 ### D-010 — JS tăng cường dần chưa có test tự động
 - **Nợ gì:** `static/js/app.js` (tự lọc khi đổi ô, bỏ ô rỗng khỏi đường dẫn, phím `/` vào ô tìm, hỏi lại trước khi

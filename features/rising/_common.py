@@ -33,9 +33,6 @@ OWNER_BUDGET_ANONYMOUS = 10
 DAILY_RUN_CLASSIFY_CALLS = 5
 BACKLOG_CALLS_PER_TICK = 3  # ~40 giây mỗi nhịp: không giữ luồng nền lâu (bấm Quét không phải chờ)
 BACKLOG_PAUSE_AFTER_ERROR = timedelta(minutes=30)
-# Ảnh chụp star và danh sách repo của lần quét hằng ngày chỉ giữ chừng này ngày (thiết kế mục 8):
-# ảnh chụp chỉ làm radar cho 7 tới 30 ngày, lịch sử dài hạn đã có ở GitHub.
-RETENTION_DAYS = 35
 
 EMPTY_WATCH_LIST_NOTE = "Danh sách theo dõi trống — thêm truy vấn ở trang Theo dõi."
 REASON_STOPPED = "Bạn đã bấm Dừng — bấm Chạy tiếp để làm tiếp."

@@ -135,12 +135,14 @@ def daily_report(
         and check.gain_7d >= min_gain
         and _has_labels(labels.get(check.repository_id), audience=audience, aspects=aspects)
     ]
-    # DEBT(D-009): "Mới vào danh sách" so với ngưỡng mặc định của lượt trước, không theo bộ lọc.
+    # "Mới vào danh sách": hôm trước chưa nằm trong danh sách với CÙNG ngưỡng đang lọc.
     previous = _reported_runs().filter(day__lt=run.day).order_by("-day").first()
     previous_rising: set[int] = set()
     if previous is not None:
         previous_rising = set(
-            previous.checks.filter(is_rising=True).values_list("repository_id", flat=True)
+            previous.checks.filter(
+                source=RisingCheck.Source.HISTORY, stars__lt=max_stars, gain_7d__gte=min_gain
+            ).values_list("repository_id", flat=True)
         )
     rows = [
         _rising_row(

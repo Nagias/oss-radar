@@ -4,7 +4,7 @@ GitHub giả có Search (bước quét lại) và lịch sử star (bước xác
 đều thấy mọi repo giả, nên mỗi repo nằm trong cả ba lần quét con.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 import pytest
@@ -115,6 +115,23 @@ def test_screen_picks_candidates_from_snapshot_and_age_estimates(
     assert fake.history.requested == []
     assert run.problems == ["Hết ngân sách xác minh — 2 ứng viên chưa xác minh."]
     assert run.status == Status.SUCCEEDED_PARTIAL
+
+
+def test_screen_uses_the_run_day_not_the_clock(
+    watch_list: list[WatchQuery], use_fake: UseFake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Bấm Chạy ngay lúc 23:50 hôm qua, bước lọc thô chạy sau 0:00: so mốc theo ngày của lượt.
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_WITH_TOKEN", 0)
+    monkeypatch.setattr(_common, "VERIFY_BUDGET_ANONYMOUS", 0)
+    snapshot(RISER, stars=100)  # 3 ngày trước hôm nay = 2 ngày trước ngày của lượt
+    use_fake([item(RISER, stars=160)])
+    late_yesterday = timezone.make_aware(datetime.combine(days_ago(1), time(23, 50)))
+
+    run = services.prepare_daily_run(now=late_yesterday)
+    services.execute_daily_run(run.pk)
+
+    assert run.day == days_ago(1)
+    assert check_of(RISER).gain_7d == 210  # +60 trong 2 ngày tính tới ngày của lượt, không phải 3
 
 
 def test_repo_in_two_watch_queries_checked_once(

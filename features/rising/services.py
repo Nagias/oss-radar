@@ -73,9 +73,6 @@ from features.rising._common import (
     REASON_VERIFY_BLOCKED as REASON_VERIFY_BLOCKED,
 )
 from features.rising._common import (
-    RETENTION_DAYS as RETENTION_DAYS,
-)
-from features.rising._common import (
     RETRY_LATER_AFTER as RETRY_LATER_AFTER,
 )
 from features.rising._common import (

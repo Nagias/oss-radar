@@ -29,7 +29,6 @@ from features.rising._common import (
     REASON_STOPPED,
     REASON_VERIFY_AUTH,
     REASON_VERIFY_BLOCKED,
-    RETENTION_DAYS,
     UNREADABLE_HISTORY_NOTE,
     UNREADABLE_OWNER_NOTE,
     VERIFY_BUDGET_NOTE,
@@ -233,10 +232,11 @@ class _DailyRunner:
         Ghi ứng viên và chuyển bước trong cùng một transaction; sập giữa chừng thì lần sau lọc lại
         từ đầu, xoá dòng ước lượng cũ của lượt trước khi ghi mới (không sinh dòng trùng).
         """
-        self._check_in()
+        run = self._check_in()
         now = timezone.now()
-        # DEBT(D-009): ngày lấy theo đồng hồ, không theo run.day (lượt vắt qua 0:00 lệch một ngày).
-        today = timezone.localdate(now)
+        # Ngày của lượt, không phải đồng hồ: lượt bấm lúc 23:50 mà lọc thô chạy sau 0:00 vẫn so mốc
+        # đúng ngày của lượt.
+        today = run.day
         scan_ids = list(
             DailyRunScan.objects.filter(daily_run_id=self.run_id).values_list(
                 "scan_run_id", flat=True
@@ -599,9 +599,11 @@ class _DailyRunner:
         )
         now = timezone.now()
         snapshots = catalog.prune_snapshots(
-            before=timezone.localdate(now) - timedelta(days=RETENTION_DAYS)
+            before=timezone.localdate(now) - timedelta(days=catalog.SNAPSHOT_RETENTION_DAYS)
         )
-        results = discovery.prune_daily_results(before=now - timedelta(days=RETENTION_DAYS))
+        results = discovery.prune_daily_results(
+            before=now - timedelta(days=catalog.SNAPSHOT_RETENTION_DAYS)
+        )
         # Điểm lưu sẵn cho trang Kho repo (QĐ-19): cả kho mỗi ngày ~3 giây, sau khi đã có số liệu
         # mới của các lần quét và hồ sơ chủ của lượt.
         scored = scoring.refresh_scores()
@@ -611,7 +613,7 @@ class _DailyRunner:
             self.run_id,
             snapshots,
             results,
-            RETENTION_DAYS,
+            catalog.SNAPSHOT_RETENTION_DAYS,
         )
         self._finish()
 
