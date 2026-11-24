@@ -32,7 +32,6 @@ from features.browse.models import SavedView
 from features.catalog.models import Repository
 from features.discovery import services as discovery
 from features.rising import services as rising
-from features.rising.models import DailyRun
 from features.scoring import services as scoring
 from features.taxonomy import services as taxonomy
 from features.taxonomy.services import UNCLASSIFIED as UNCLASSIFIED
@@ -94,7 +93,7 @@ class ExplorePage:
     pages: int
     page_size: int
     # Báo cáo mới nhất (cả ba tab hiện ngày của nó); None = chưa có báo cáo nào.
-    run: DailyRun | None
+    run: rising.DailyRun | None
     window_start: date | None = None
     hidden_count: int = 0  # repo "Nghi cao" bị ẩn (tab Trending / Đang lên)
     unverified_count: int = 0  # ứng viên cùng nhóm chưa xác minh được ở báo cáo đó
@@ -108,7 +107,12 @@ class ExplorePage:
     @property
     def trending_skipped(self) -> bool:
         """Báo cáo mới nhất không xác minh trending (không token, hoặc lượt trước F-011)."""
-        return self.tab == TAB_TRENDING and self.run is not None and self.run.trending_budget == 0
+        return (
+            self.tab == TAB_TRENDING
+            and self.run is not None
+            and self.run.trending_budget == 0
+            and self.run.trending_count == 0
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -395,6 +399,8 @@ class SaveState:
     opened: SavedView | None = None
     changed: bool = False
     matching: SavedView | None = None
+    # Đang lọc theo một lần quét: góc nhìn không lưu lần quét → không cho lưu, không báo trùng.
+    scan_limited: bool = False
 
 
 def filters_from_query(query: str) -> BrowseFilters:
@@ -419,13 +425,13 @@ def saved_views(current: BrowseFilters | None = None) -> list[ViewLink]:
     """Mọi góc nhìn theo thứ tự; `current` (bộ lọc trang Khám phá đang mở) để đánh dấu góc đang xem.
 
     Đang mở một góc (`view=<id>`) thì đánh dấu góc đó dù bộ lọc đã đổi; không thì đánh dấu góc
-    có bộ lọc trùng. Trang khác (`current=None`) không đánh dấu góc nào.
+    có bộ lọc trùng. Trang khác (`current=None`) và trang lọc theo một lần quét không đánh dấu.
     """
     canonical = None if current is None else f.canonical_query(current)
     links = []
     for view in SavedView.objects.all():
         filters = filters_from_query(view.query)
-        if current is None:
+        if current is None or current.scan is not None:
             is_current = False
         elif current.view is not None:
             is_current = current.view == view.pk
@@ -444,6 +450,8 @@ def saved_views(current: BrowseFilters | None = None) -> list[ViewLink]:
 
 def save_state(filters: BrowseFilters) -> SaveState:
     query = f.canonical_query(filters)
+    if filters.scan is not None:
+        return SaveState(query=query, scan_limited=True)
     views = list(SavedView.objects.all())
     opened = next((view for view in views if view.pk == filters.view), None)
     if opened is not None:

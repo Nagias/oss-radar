@@ -77,14 +77,18 @@ def params(filters: BrowseFilters, *, saved_only: bool = False) -> list[tuple[st
     pairs: list[tuple[str, str]] = []
     if filters.tab != DEFAULT_TAB:
         pairs.append(("tab", filters.tab))
-    if filters.q:
-        pairs.append(("q", filters.q))
+    # Góc nhìn: viết gọn để hai bộ lọc lọc ra cùng kết quả có cùng một chuỗi (từ khoá chỉ dùng 5
+    # từ đầu, ngôn ngữ không phân biệt hoa thường, "từ 0 star" là không lọc).
+    q = " ".join(filters.search_words) if saved_only else filters.q
+    if q:
+        pairs.append(("q", q))
     pairs += [("audience", code) for code in sorted(set(filters.audience))]
     pairs += [("aspects", code) for code in sorted(set(filters.aspects))]
     if filters.language:
-        pairs.append(("language", filters.language))
+        pairs.append(("language", filters.language.lower() if saved_only else filters.language))
+    min_stars = None if saved_only and filters.min_stars == 0 else filters.min_stars
     for name, number in (
-        ("min_stars", filters.min_stars),
+        ("min_stars", min_stars),
         ("max_stars", filters.max_stars),
         ("created_days", filters.created_days),
     ):

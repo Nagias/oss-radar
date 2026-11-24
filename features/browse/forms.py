@@ -23,7 +23,9 @@ def _choices(axis: str) -> list[tuple[str, str]]:
 
 
 class BrowseForm(forms.Form):
-    tab = forms.ChoiceField(required=False, choices=list(TABS.items()), widget=forms.HiddenInput)
+    tab = forms.ChoiceField(
+        label="Tab danh sách", required=False, choices=list(TABS.items()), widget=forms.HiddenInput
+    )
     audience = forms.MultipleChoiceField(label="Dành cho ai", required=False, choices=())
     aspects = forms.MultipleChoiceField(label="Làm được gì", required=False, choices=())
     q = forms.CharField(label="Từ khoá", required=False, max_length=100)
@@ -42,14 +44,14 @@ class BrowseForm(forms.Form):
     unclassified = forms.BooleanField(label="Chỉ repo chưa phân loại", required=False)
     show_suspicious = forms.BooleanField(label="Hiện cả repo nghi star giả", required=False)
     scan = forms.IntegerField(
-        required=False, min_value=1, max_value=10**9, widget=forms.HiddenInput
+        label="Lần quét", required=False, min_value=1, max_value=10**9, widget=forms.HiddenInput
     )
     sort = forms.ChoiceField(label="Sắp theo", required=False, choices=list(SORT_LABELS.items()))
     page = forms.IntegerField(
-        required=False, min_value=1, max_value=10**6, widget=forms.HiddenInput
+        label="Trang", required=False, min_value=1, max_value=10**6, widget=forms.HiddenInput
     )
     view = forms.IntegerField(
-        required=False, min_value=1, max_value=10**9, widget=forms.HiddenInput
+        label="Góc nhìn", required=False, min_value=1, max_value=10**9, widget=forms.HiddenInput
     )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -103,9 +105,21 @@ class SavedViewForm(forms.Form):
     )
     query = forms.CharField(label="Bộ lọc", required=False, strip=False)
 
-    def __init__(self, *args: Any, instance: SavedView | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        instance: SavedView | None = None,
+        rename_only: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        """`rename_only`: chỉ đổi tên — giữ nguyên bộ lọc đã lưu, không kiểm lại.
+
+        Bộ nhóm có thể đổi sau khi lưu (sửa categories.toml): mã cũ thành lạ, nhưng vẫn phải đổi tên
+        được; mở góc đó thì trang bỏ mã lạ và gợi ý "Cập nhật".
+        """
         super().__init__(*args, **kwargs)
         self.instance = instance
+        self.rename_only = rename_only
 
     def clean_name(self) -> str:
         name: str = self.cleaned_data["name"]
@@ -121,6 +135,8 @@ class SavedViewForm(forms.Form):
 
     def clean_query(self) -> str:
         raw: str = self.cleaned_data.get("query") or ""
+        if self.rename_only and self.instance is not None:
+            return self.instance.query
         if len(raw) > MAX_QUERY_LENGTH:
             raise forms.ValidationError(_BAD_QUERY.format(fields="dài quá 1.000 ký tự"))
         browse = BrowseForm(QueryDict(raw))

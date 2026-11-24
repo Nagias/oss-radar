@@ -49,6 +49,12 @@ def explore(request: HttpRequest) -> HttpResponse:
         "clear_url": services.clear_url(filters),
         "show_suspicious_url": services.show_suspicious_url(filters),
         "is_live": rising.today_status().is_live,
+        "thresholds": {
+            "trending_gain": rising.TRENDING_MIN_GAIN_7D,
+            "trending_percent": rising.TRENDING_MIN_PERCENT_7D,
+            "rising_max_stars": rising.RISING_MAX_STARS,
+            "rising_gain": rising.RISING_MIN_GAIN_7D,
+        },
         "audience": [(c, page.counts.get(c.code, 0)) for c in taxonomy.audience],
         "aspects": [(c, page.counts.get(c.code, 0)) for c in taxonomy.aspects],
         "unclassified_count": page.counts.get(services.UNCLASSIFIED, 0),
@@ -78,7 +84,7 @@ def view_edit(request: HttpRequest, view_id: int) -> HttpResponse:
         "name": request.POST.get("name", view.name),
         "query": request.POST.get("query", view.query),
     }
-    form = SavedViewForm(data, instance=view)
+    form = SavedViewForm(data, instance=view, rename_only="query" not in request.POST)
     if not form.is_valid():
         return _render_views(request, form, status=400)
     services.update_view(view, name=form.cleaned_data["name"], query=form.cleaned_data["query"])

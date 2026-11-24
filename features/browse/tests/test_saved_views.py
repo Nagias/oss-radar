@@ -215,3 +215,31 @@ def test_explore_offers_to_update_the_open_view_after_filters_change(client: Cli
         '<input type="hidden" name="query" value="tab=rising&amp;q=ads&amp;aspects=video">' in page
     )
     assert '<input type="hidden" name="view" value="' in page  # đổi lọc tiếp vẫn nhớ góc đang mở
+
+
+def test_rename_works_even_when_the_stored_filter_has_a_removed_group(client: Client) -> None:
+    # Bộ nhóm đổi (sửa categories.toml) làm mã cũ thành lạ: vẫn phải đổi tên được.
+    view = make_view(query="tab=rising&audience=nhom_da_xoa")
+
+    response = client.post(edit_url(view), {"name": "Tên mới"})
+
+    view.refresh_from_db()
+    assert response.status_code == 302
+    assert (view.name, view.query) == ("Tên mới", "tab=rising&audience=nhom_da_xoa")
+
+
+def test_bad_hidden_fields_are_named_in_vietnamese(client: Client) -> None:
+    response = client.post(VIEWS_URL, {"name": "Thử", "query": "page=0&tab=lung_tung"})
+
+    assert response.status_code == 400
+    assert "Bộ lọc không hợp lệ (Tab danh sách, Trang)" in response.text
+
+
+def test_explore_filtered_by_one_scan_cannot_be_saved_as_a_view(client: Client) -> None:
+    make_view("Toàn kho", "tab=all")
+
+    page = client.get("/", {"tab": "all", "scan": "5"}).text
+
+    assert not [form for form in forms(page) if form.action == VIEWS_URL]
+    assert "Đang xem góc nhìn" not in page
+    assert "bỏ lọc theo lần quét để lưu góc nhìn" in page

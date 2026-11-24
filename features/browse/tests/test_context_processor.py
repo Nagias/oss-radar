@@ -60,3 +60,11 @@ def test_manage_page_marks_manage(client: Client) -> None:
     page = client.get("/views/").text
 
     assert views_in(page) == [("SEO", False), ("Quản lý", True)]
+
+
+def test_scan_limited_page_marks_no_view(client: Client) -> None:
+    SavedView.objects.create(name="Toàn kho", query="tab=all")
+
+    page = client.get("/", {"tab": "all", "scan": "5"}).text
+
+    assert views_in(page) == [("Toàn kho", False), ("Quản lý", False)]

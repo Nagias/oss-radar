@@ -167,7 +167,7 @@ test ở đâu, đang nợ gì.
   sơ chủ: mỗi chủ một lần, hết ngân sách, sập rồi chạy tiếp không gọi lại, 404, chặn, token sai, Dừng);
   `test_report.py`, `test_views.py` (sắp, ẩn sau bộ lọc); `features/discovery/tests/test_views.py`. Gọi
   GitHub thật: `uv run poe test-live` (thêm 1 lượt `get_user`).
-- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/rising/`, bấm vào điểm, bấm "Hiện" ở dòng
+- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/?tab=rising`, bấm vào điểm, bấm "Hiện" ở dòng
   đã ẩn; mở một lần quét bất kỳ.
 - **Nợ liên quan:** không có nợ mới. D-007 (trang lần quét 500 repo) vẫn giữ; D-009 xem sổ nợ.
 
@@ -218,7 +218,7 @@ test ở đâu, đang nợ gì.
   rồi chạy tiếp, Dừng, sang ngày mới, lỗi token rồi Chạy tiếp); lịch (trước/sau 7:00, chạy bù, tối đa 3
   lần tự chạy tiếp); trang và lệnh (gồm chia trang báo cáo); `test_e2e.py` chạy `manage.py daily` trên 300 repo giả rồi mở trang chi tiết lượt.
   `features/discovery/tests/test_auto_resume.py` cho phần trả D-006. Gọi GitHub thật: `uv run poe test-live`.
-- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/rising/` sau 7:00 (lượt tự chạy) hoặc
+- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/rising/watch/` sau 7:00 (lượt tự chạy) hoặc
   bấm Chạy ngay; sửa một file `.py` giữa lúc chạy để server khởi động lại → khoảng 5 phút sau lượt tự nối.
 - **Nợ liên quan:** D-009 đã trả (2026-11-24, cùng F-011).
 

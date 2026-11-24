@@ -138,6 +138,21 @@ from features.rising.daily_run import (
 from features.rising.daily_run import (
     run_daily_if_due as run_daily_if_due,
 )
+from features.rising.growth import (
+    RISING_MAX_STARS as RISING_MAX_STARS,
+)
+from features.rising.growth import (
+    RISING_MIN_GAIN_7D as RISING_MIN_GAIN_7D,
+)
+from features.rising.growth import (
+    TRENDING_MIN_GAIN_7D as TRENDING_MIN_GAIN_7D,
+)
+from features.rising.growth import (
+    TRENDING_MIN_PERCENT_7D as TRENDING_MIN_PERCENT_7D,
+)
+from features.rising.models import (
+    DailyRun as DailyRun,
+)
 from features.rising.overview import (
     HEADLINE_NO_RUN_EARLY as HEADLINE_NO_RUN_EARLY,
 )

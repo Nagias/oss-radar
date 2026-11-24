@@ -886,3 +886,11 @@ def test_report_with_invalid_page_falls_back_to_first_page(client: Client) -> No
 
     assert response.status_code == 200
     assert "gia-lap/repo-1<" in response.text
+
+
+def test_old_report_url_with_a_broken_day_goes_to_the_rising_tab(client: Client) -> None:
+    make_run()
+
+    response = client.get(REPORT_URL, {"day": "hôm qua"})
+
+    assert (response.status_code, response["Location"]) == (302, "/?tab=rising")

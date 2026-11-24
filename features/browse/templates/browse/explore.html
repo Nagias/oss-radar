@@ -113,7 +113,9 @@
 {% endif %}
 
 <div class="save-view">
-  {% if save.opened and not save.changed %}
+  {% if save.scan_limited %}
+    <p class="muted small">Góc nhìn không lưu lần quét — bỏ lọc theo lần quét để lưu góc nhìn.</p>
+  {% elif save.opened and not save.changed %}
     <p class="muted small">Đang xem góc nhìn «{{ save.opened.name }}».</p>
   {% elif save.opened %}
     <form method="post" action="{% url 'browse:view_edit' save.opened.pk %}" class="inline-form">

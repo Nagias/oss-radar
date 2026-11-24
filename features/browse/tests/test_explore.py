@@ -447,3 +447,41 @@ def test_more_filters_are_folded_until_one_of_them_is_used(client: Client) -> No
 
     assert '<details class="filter-more">' in plain  # chỉ tìm và sắp: phần lọc thêm gập
     assert '<details class="filter-more" open>' in grouped
+
+
+def test_no_token_message_only_when_the_report_has_no_trending_at_all(client: Client) -> None:
+    run = report(trending_budget=0, trending_count=1)
+    check(run, add_repo(1, stars=800), gain=300, trending=True, rising=True)
+
+    filtered_out = client.get("/", {"q": "khong_co_gi"}).text
+
+    assert "không xác minh repo trending" not in filtered_out
+    assert "Không có repo nào khớp bộ lọc" in filtered_out
+
+
+def test_tab_intro_uses_the_real_thresholds(client: Client) -> None:
+    mixed()
+
+    trending = client.get("/").text
+    rising = client.get("/", {"tab": "rising"}).text
+
+    assert "tăng từ 200 star và từ 2% trong 7 ngày" in trending
+    assert "dưới 1.000 star tăng từ 50 star trong 7 ngày" in rising
+
+
+@pytest.mark.parametrize("tab", ["trending", "rising", "all"])
+def test_whole_page_query_count_does_not_grow_with_rows(
+    client: Client, django_assert_max_num_queries: Any, tab: str
+) -> None:
+    run = report()
+    for github_id in range(1, 4):
+        check(run, add_repo(github_id, stars=800), gain=300, trending=True, rising=True)
+    with django_assert_max_num_queries(40) as few:
+        client.get("/", {"tab": tab})
+    for github_id in range(4, 40):
+        repo = add_repo(github_id, stars=800)
+        label(repo, audience=("creator",))
+        check(run, repo, gain=300, trending=True, rising=True)
+
+    with django_assert_max_num_queries(len(few.captured_queries)):
+        client.get("/", {"tab": tab})

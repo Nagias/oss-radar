@@ -1,11 +1,11 @@
 {% load humanize %}
-{% comment %}Tab Trending / Đang lên của trang Khám phá. Biến: page (ExplorePage), clear_url, show_suspicious_url, previous_url, next_url.{% endcomment %}
+{% comment %}Tab Trending / Đang lên của trang Khám phá. Biến: page (ExplorePage), thresholds, clear_url, show_suspicious_url, previous_url, next_url.{% endcomment %}
 <h2>{{ page.total|intcomma }} repo {% if page.tab == "trending" %}trending{% else %}đang lên{% endif %}{% if page.pages > 1 %} <span class="muted small">· Trang {{ page.page }}/{{ page.pages }}</span>{% endif %}</h2>
 <p class="muted small">
   {% if page.tab == "trending" %}
-    Mọi cỡ repo tăng từ 200 star và từ 2% trong 7 ngày, theo lịch sử star chính thức của GitHub.
+    Mọi cỡ repo tăng từ {{ thresholds.trending_gain|intcomma }} star và từ {{ thresholds.trending_percent|floatformat:"-1" }}% trong 7 ngày, theo lịch sử star chính thức của GitHub.
   {% else %}
-    Repo dưới 1.000 star tăng từ 50 star trong 7 ngày, theo lịch sử star chính thức của GitHub; mặc định xếp theo điểm Tiềm năng.
+    Repo dưới {{ thresholds.rising_max_stars|intcomma }} star tăng từ {{ thresholds.rising_gain|intcomma }} star trong 7 ngày, theo lịch sử star chính thức của GitHub; mặc định xếp theo điểm Tiềm năng.
   {% endif %}
   {% if page.hidden_count %}Đã ẩn {{ page.hidden_count }} repo nghi star giả — <a href="{{ show_suspicious_url }}">hiện cả những repo này</a>.{% endif %}
   {% if page.unverified_count %}
