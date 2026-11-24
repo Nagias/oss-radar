@@ -220,14 +220,11 @@ from features.rising.report import (
     latest_report_run as latest_report_run,
 )
 from features.rising.report import (
-    latest_rising_repository_ids as latest_rising_repository_ids,
-)
-from features.rising.report import (
-    latest_trending_repository_ids as latest_trending_repository_ids,
-)
-from features.rising.report import (
     report_days as report_days,
 )
 from features.rising.report import (
     report_run_for as report_run_for,
+)
+from features.rising.report import (
+    reported_run as reported_run,
 )

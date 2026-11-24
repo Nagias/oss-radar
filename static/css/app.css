@@ -237,6 +237,14 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); widt
 /* Ô tick nằm trong chip: viền bàn phím vẽ quanh cả chip cho dễ thấy. */
 .chip-check:has(input:focus-visible) { outline: 2px solid var(--text); outline-offset: 2px; }
 
+/* Bộ lọc đang bật của trang Khám phá: mỗi chip là một link gỡ riêng ô đó (không cần JS). */
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 16px 0 0; }
+.chip-remove { background: var(--surface-3); }
+.chip-remove span { color: var(--muted); font-size: 11px; }
+.search-field { margin-bottom: 16px; }
+.search-field input { height: 44px; font-size: 15px; border-radius: 12px; }
+.report-line { margin: -8px 0 16px; }
+
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; overflow-x: auto; }
 .tabs a {
   padding: 10px 12px; margin-bottom: -1px; border-bottom: 2px solid transparent;

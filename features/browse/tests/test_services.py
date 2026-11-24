@@ -1,4 +1,7 @@
-"""Duyệt kho: lọc theo nhãn (HOẶC trong lớp, VÀ giữa hai lớp), số liệu, sắp, trang, ẩn Nghi cao."""
+"""Tab Toàn kho (`browse`): lọc theo nhãn (HOẶC trong lớp, VÀ giữa hai lớp), số liệu, sắp, trang.
+
+Repo "Nghi cao" bị ẩn theo điểm lưu sẵn.
+"""
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -80,41 +83,6 @@ def test_number_and_text_filters() -> None:
     assert names(replace(DEFAULT, commercial=True)) == ["chu/repo-2", "chu/repo-1"]
 
 
-def test_rising_only_uses_latest_report() -> None:
-    old_star, new_star = add_repo(1), add_repo(2)
-    add_repo(3)
-    older = DailyRun.objects.create(
-        day=timezone.localdate() - timedelta(days=1), status="succeeded", step=4
-    )
-    newest = DailyRun.objects.create(day=timezone.localdate(), status="succeeded", step=4)
-    for run, repo in ((older, old_star), (newest, new_star)):
-        RisingCheck.objects.create(
-            daily_run=run, repository=repo, stars=100, source="history", gain_7d=90, is_rising=True
-        )
-
-    assert names(replace(DEFAULT, rising_only=True)) == ["chu/repo-2"]
-
-
-def test_trending_only_uses_latest_report() -> None:
-    small, big = add_repo(1), add_repo(2, stars=50_000)
-    add_repo(3)
-    run = DailyRun.objects.create(day=timezone.localdate(), status="succeeded", step=4)
-    RisingCheck.objects.create(
-        daily_run=run,
-        repository=big,
-        stars=50_000,
-        source="history",
-        gain_7d=2_000,
-        pool="trending",
-        is_trending=True,
-    )
-    RisingCheck.objects.create(
-        daily_run=run, repository=small, stars=100, source="history", gain_7d=90, is_rising=True
-    )
-
-    assert names(replace(DEFAULT, trending_only=True)) == ["chu/repo-2"]
-
-
 def test_gain_sort_shows_big_repo_gain() -> None:
     small, big = add_repo(1, stars=500), add_repo(2, stars=50_000)
     run = DailyRun.objects.create(day=timezone.localdate(), status="succeeded", step=4)
@@ -137,12 +105,6 @@ def test_gain_sort_shows_big_repo_gain() -> None:
         ("chu/repo-2", 2_000),
         ("chu/repo-1", 90),
     ]
-
-
-def test_rising_only_without_any_report_is_empty() -> None:
-    add_repo(1)
-
-    assert names(replace(DEFAULT, rising_only=True)) == []
 
 
 def test_scan_filter_lists_every_repo_of_that_scan() -> None:

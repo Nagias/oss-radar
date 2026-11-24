@@ -1,4 +1,6 @@
-"""Trang Kho repo `/repos/`: ô lọc lấy từ địa chỉ trang, ô sai không hỏng trang, link an toàn."""
+"""Trang Khám phá `/`: ô lọc lấy từ địa chỉ trang, ô sai không hỏng trang, link an toàn."""
+
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from django.test import Client
@@ -10,14 +12,15 @@ from features.browse.tests.conftest import add_repo, label
 
 pytestmark = pytest.mark.django_db
 
-URL = reverse("browse:repos")
+URL = reverse("browse:explore")
+ALL = {"tab": "all"}
 
 
 def test_page_lists_repos_with_labels_scores_and_safe_links(client: Client) -> None:
     repo = add_repo(1, description="<script>alert(1)</script>")
     label(repo, audience=("creator",), aspects=("video",))
 
-    page = client.get(URL).text
+    page = client.get(URL, ALL).text
 
     assert (
         '<a href="https://github.com/chu/repo-1" target="_blank" rel="noopener noreferrer">' in page
@@ -25,7 +28,7 @@ def test_page_lists_repos_with_labels_scores_and_safe_links(client: Client) -> N
     assert "<script>alert(1)</script>" not in page
     assert "&lt;script&gt;" in page
     assert "Nhà sáng tạo nội dung (video, YouTube, ảnh)" in page
-    assert f'href="{URL}?audience=creator"' in page  # bấm nhãn = lọc theo nhãn đó
+    assert f'href="{URL}?tab=all&amp;audience=creator"' in page  # bấm nhãn = lọc theo nhãn đó
     assert 'title="lý do 1"' in page
     assert "Phổ biến <strong>" in page  # điểm Chất lượng mở được từng thành phần
     assert "1 repo" in page
@@ -36,7 +39,7 @@ def test_filters_come_from_query_string_and_are_kept_in_form(client: Client) -> 
     label(video, audience=("creator",), aspects=("video",))
     add_repo(2, stars=900)
 
-    page = client.get(URL, {"aspects": "video", "sort": "forks", "min_stars": "100"}).text
+    page = client.get(URL, {**ALL, "aspects": "video", "sort": "forks", "min_stars": "100"}).text
 
     assert "chu/repo-1" in page
     assert "chu/repo-2" not in page
@@ -50,7 +53,14 @@ def test_bad_values_fall_back_to_defaults_without_error(client: Client) -> None:
 
     response = client.get(
         URL,
-        {"page": "abc", "min_stars": "-1", "aspects": "khong_co", "sort": "lung_tung", "scan": "x"},
+        {
+            **ALL,
+            "page": "abc",
+            "min_stars": "-1",
+            "aspects": "khong_co",
+            "sort": "lung_tung",
+            "scan": "x",
+        },
     )
 
     assert response.status_code == 200
@@ -61,19 +71,19 @@ def test_pagination_links_keep_filters(client: Client) -> None:
     for github_id in range(1, 53):
         add_repo(github_id, stars=1000 - github_id, language="Go")
 
-    page = client.get(URL, {"language": "Go"}).text
+    page = client.get(URL, {**ALL, "language": "Go"}).text
 
     assert "Trang 1/2" in page
-    assert f'href="{URL}?language=Go&amp;page=2"' in page
+    assert f'href="{URL}?tab=all&amp;language=Go&amp;page=2"' in page
 
 
 def test_empty_result_says_so(client: Client) -> None:
-    page = client.get(URL, {"q": "khong-ton-tai"}).text
+    page = client.get(URL, {**ALL, "q": "khong-ton-tai"}).text
 
     assert "Không có repo nào khớp bộ lọc" in page
 
 
-def test_nav_has_link_to_browse(client: Client) -> None:
+def test_nav_has_link_to_explore(client: Client) -> None:
     page = client.get(reverse("discovery:home")).text
 
     assert f'href="{URL}"' in page
@@ -86,8 +96,8 @@ def test_form_filters_keep_valid_fields_when_others_are_wrong() -> None:
             "aspects": ["video"],
             "min_stars": "-5",
             "max_stars": "1000",
-            "rising_only": "on",
-            "trending_only": "on",
+            "tab": "lung_tung",
+            "sort": "forks",
             "page": "0",
         }
     )
@@ -97,8 +107,9 @@ def test_form_filters_keep_valid_fields_when_others_are_wrong() -> None:
     assert filters.audience == ()  # có mã lạ → cả ô bị coi là sai → không lọc ô đó
     assert filters.aspects == ("video",)
     assert (filters.min_stars, filters.max_stars) == (None, 1000)
-    assert filters.rising_only is True
-    assert filters.trending_only is True
+    assert filters.tab == "trending"  # tab lạ → tab mặc định
+    assert filters.sort == "forks"  # tab Trending không có cách sắp này: trang dùng mặc định
+    assert filters.effective_sort == "gain"
     assert filters.page == 1
     assert BrowseForm().filters() == BrowseFilters()
 
@@ -114,6 +125,26 @@ def test_form_filters_keep_valid_fields_when_others_are_wrong() -> None:
 def test_huge_numbers_do_not_break_the_page(client: Client, query: dict[str, str]) -> None:
     add_repo(1)
 
-    response = client.get(URL, query)
+    response = client.get(URL, {**ALL, **query})
 
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("", {"tab": ["all"]}),
+        ("language=Go&sort=forks", {"tab": ["all"], "language": ["Go"], "sort": ["forks"]}),
+        ("rising_only=on&audience=creator", {"tab": ["rising"], "audience": ["creator"]}),
+        ("trending_only=on&rising_only=on", {"tab": ["trending"]}),
+        ("scan=12&tab=lung_tung", {"tab": ["all"], "scan": ["12"]}),
+    ],
+)
+def test_old_repos_url_redirects_to_explore_keeping_filters(
+    client: Client, query: str, expected: dict[str, list[str]]
+) -> None:
+    response = client.get(f"{reverse('browse:repos')}?{query}")
+
+    assert response.status_code == 302
+    location = urlsplit(response["Location"])
+    assert (location.path, parse_qs(location.query)) == ("/", expected)

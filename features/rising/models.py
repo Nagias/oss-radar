@@ -105,6 +105,14 @@ class DailyRun(models.Model):
     def __str__(self) -> str:
         return f"Lượt {self.day:%d/%m/%Y} ({self.get_status_display()})"
 
+    @property
+    def has_report(self) -> bool:
+        """Lượt đã lập xong báo cáo: mở được trang chi tiết lượt (`/rising/runs/<id>/`)."""
+        return self.step == self.Step.REPORT and self.status in (
+            self.Status.SUCCEEDED,
+            self.Status.SUCCEEDED_PARTIAL,
+        )
+
 
 class DailyRunScan(models.Model):
     """Lần quét của một truy vấn theo dõi trong một lượt hằng ngày.

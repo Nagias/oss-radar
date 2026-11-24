@@ -1,10 +1,10 @@
-"""Form lọc của trang Kho repo (GET). Ô sai thì bỏ qua ô đó (vẫn báo lỗi), trang không hỏng."""
+"""Form lọc của trang Khám phá (GET). Ô sai thì bỏ qua ô đó (vẫn báo lỗi), trang không hỏng."""
 
 from typing import Any
 
 from django import forms
 
-from features.browse.services import SORT_STARS, SORTS, BrowseFilters
+from features.browse.filters import DEFAULT_TAB, SORT_LABELS, TABS, BrowseFilters
 from features.taxonomy.services import load_taxonomy
 
 
@@ -15,6 +15,7 @@ def _choices(axis: str) -> list[tuple[str, str]]:
 
 
 class BrowseForm(forms.Form):
+    tab = forms.ChoiceField(required=False, choices=list(TABS.items()), widget=forms.HiddenInput)
     audience = forms.MultipleChoiceField(label="Dành cho ai", required=False, choices=())
     aspects = forms.MultipleChoiceField(label="Làm được gì", required=False, choices=())
     q = forms.CharField(label="Từ khoá", required=False, max_length=100)
@@ -29,17 +30,18 @@ class BrowseForm(forms.Form):
     created_days = forms.IntegerField(
         label="Tạo trong (ngày)", required=False, min_value=1, max_value=36500
     )
-    rising_only = forms.BooleanField(label="Chỉ rising star (báo cáo mới nhất)", required=False)
-    trending_only = forms.BooleanField(label="Chỉ trending (báo cáo mới nhất)", required=False)
     commercial = forms.BooleanField(label="Giấy phép cho phép dùng thương mại", required=False)
     unclassified = forms.BooleanField(label="Chỉ repo chưa phân loại", required=False)
     show_suspicious = forms.BooleanField(label="Hiện cả repo nghi star giả", required=False)
     scan = forms.IntegerField(
         required=False, min_value=1, max_value=10**9, widget=forms.HiddenInput
     )
-    sort = forms.ChoiceField(label="Sắp theo", required=False, choices=list(SORTS.items()))
+    sort = forms.ChoiceField(label="Sắp theo", required=False, choices=list(SORT_LABELS.items()))
     page = forms.IntegerField(
         required=False, min_value=1, max_value=10**6, widget=forms.HiddenInput
+    )
+    view = forms.IntegerField(
+        required=False, min_value=1, max_value=10**9, widget=forms.HiddenInput
     )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -56,6 +58,7 @@ class BrowseForm(forms.Form):
         self.is_valid()
         data = self.cleaned_data
         return BrowseFilters(
+            tab=data.get("tab") or DEFAULT_TAB,
             audience=tuple(data.get("audience") or ()),
             aspects=tuple(data.get("aspects") or ()),
             q=(data.get("q") or "").strip(),
@@ -63,12 +66,11 @@ class BrowseForm(forms.Form):
             min_stars=data.get("min_stars"),
             max_stars=data.get("max_stars"),
             created_days=data.get("created_days"),
-            rising_only=bool(data.get("rising_only")),
-            trending_only=bool(data.get("trending_only")),
             commercial=bool(data.get("commercial")),
             unclassified=bool(data.get("unclassified")),
             show_suspicious=bool(data.get("show_suspicious")),
             scan=data.get("scan"),
-            sort=data.get("sort") or SORT_STARS,
+            sort=data.get("sort") or "",
             page=data.get("page") or 1,
+            view=data.get("view"),
         )

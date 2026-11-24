@@ -6,6 +6,7 @@ app_name = "rising"
 
 urlpatterns = [
     path("", views.report, name="report"),
+    path("runs/<int:run_id>/", views.run_detail, name="run_detail"),
     path("watch/", views.watch, name="watch"),
     path("watch/<int:watch_id>/", views.watch_edit, name="watch_edit"),
     path("run/", views.run_now, name="run_now"),

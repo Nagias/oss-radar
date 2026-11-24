@@ -1,0 +1,61 @@
+{% load humanize %}
+{% comment %}Tab Trending / Đang lên của trang Khám phá. Biến: page (ExplorePage), clear_url, show_suspicious_url, previous_url, next_url.{% endcomment %}
+<h2>{{ page.total|intcomma }} repo {% if page.tab == "trending" %}trending{% else %}đang lên{% endif %}{% if page.pages > 1 %} <span class="muted small">· Trang {{ page.page }}/{{ page.pages }}</span>{% endif %}</h2>
+<p class="muted small">
+  {% if page.tab == "trending" %}
+    Mọi cỡ repo tăng từ 200 star và từ 2% trong 7 ngày, theo lịch sử star chính thức của GitHub.
+  {% else %}
+    Repo dưới 1.000 star tăng từ 50 star trong 7 ngày, theo lịch sử star chính thức của GitHub; mặc định xếp theo điểm Tiềm năng.
+  {% endif %}
+  {% if page.hidden_count %}Đã ẩn {{ page.hidden_count }} repo nghi star giả — <a href="{{ show_suspicious_url }}">hiện cả những repo này</a>.{% endif %}
+  {% if page.unverified_count %}
+    {{ page.unverified_count|intcomma }} ứng viên {% if page.tab == "trending" %}trending chưa xác minh (hết ngân sách xác minh của lượt){% else %}đang lên chưa xác minh — <a href="{% url 'rising:run_detail' page.run.pk %}#unverified">xem ở chi tiết lượt</a>{% endif %}.
+  {% endif %}
+</p>
+{% if page.report_rows %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="num">#</th><th>Repo</th>
+          <th class="num">Tiềm năng</th><th class="num">Chất lượng</th><th class="num">Nghi star giả</th>
+          <th class="num">Star</th><th class="num">+1 ngày</th><th class="num">+7 ngày</th><th class="num">+30 ngày</th>
+          <th class="num">Tăng 7 ngày</th><th>30 ngày qua</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in page.report_rows %}
+          {% with repo=row.repository check=row.check %}
+          <tr data-repo="{{ repo.full_name }}">
+            <td class="num">{{ forloop.counter0|add:page.first_index }}</td>
+            <td>
+              <a href="{{ repo.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ repo.full_name }}</strong></a>
+              {% if row.is_new_entry %}<span class="badge badge-new">Mới</span>{% endif %}
+              {% include "taxonomy/_labels.html" with labels=row.labels %}
+              {% for label in row.flag_labels %}<span class="badge badge-flag">{{ label }}</span>{% endfor %}
+              {% if repo.description %}<div class="desc">{{ repo.description|truncatechars:180 }}</div>{% endif %}
+              <div class="reason muted small">{{ row.reason }}</div>
+            </td>
+            <td class="num">{% include "scoring/_score.html" with score=row.scores.potential %}</td>
+            <td class="num">{% include "scoring/_score.html" with score=row.scores.quality %}</td>
+            <td class="num">{% include "scoring/_suspicion.html" with suspicion=row.scores.suspicion %}</td>
+            <td class="num">{{ check.stars|intcomma }}</td>
+            <td class="num">{% if check.gain_1d is not None %}+{{ check.gain_1d|intcomma }}{% else %}—{% endif %}</td>
+            <td class="num"><strong>+{{ check.gain_7d|intcomma }}</strong></td>
+            <td class="num">{% if check.gain_30d is not None %}+{{ check.gain_30d|intcomma }}{% else %}—{% endif %}</td>
+            <td class="num">{% if row.growth_percent is not None %}+{{ row.growth_percent|floatformat:"0" }}%{% else %}—{% endif %}</td>
+            <td>
+              <svg class="spark" viewBox="0 0 120 24" width="120" height="24" role="img" aria-label="Star mới mỗi ngày trong 30 ngày qua">
+                <polyline points="{{ row.sparkline }}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+              </svg>
+            </td>
+          </tr>
+          {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "browse/_pager.html" %}
+{% else %}
+  <p class="muted">Không có repo nào khớp bộ lọc. Thử bỏ bớt nhóm, hoặc <a href="{{ clear_url }}">xoá tất cả bộ lọc</a>.</p>
+{% endif %}

@@ -1,0 +1,8 @@
+{% comment %}Thanh chuyển trang của Khám phá. Biến: page, previous_url, next_url (đã giữ mọi ô lọc).{% endcomment %}
+{% if page.pages > 1 %}
+<nav class="pager" aria-label="Phân trang">
+  {% if previous_url %}<a href="{{ previous_url }}">← Trang trước</a>{% endif %}
+  <span>Trang {{ page.page }}/{{ page.pages }}</span>
+  {% if next_url %}<a href="{{ next_url }}">Trang sau →</a>{% endif %}
+</nav>
+{% endif %}

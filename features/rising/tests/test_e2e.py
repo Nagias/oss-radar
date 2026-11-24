@@ -88,12 +88,12 @@ def test_daily_e2e_rescan_verify_report(
     assert StarSnapshot.objects.filter(day=timezone.localdate()).count() == REPOS
     assert "Rising star: 5" in out.getvalue()
 
-    response = client.get(reverse("rising:report"))
+    assert "Xong lúc" in client.get(reverse("rising:watch")).text
+    response = client.get(reverse("rising:run_detail", args=[run.pk]))
 
     page = response.text
     assert response.status_code == 200
-    assert "Xong lúc" in page
-    assert "5 rising star" in page
+    assert "<strong>5</strong> rising star" in page
     names = re.findall(r"<strong>gia-lap/(repo-\d+)</strong>", page)
     assert names == ["repo-11", "repo-22", "repo-33", "repo-44", "repo-55"]
     assert "repo-66" not in page  # kẻ lừa: ước lượng cao, xác minh thấp → không vào bảng
@@ -112,7 +112,7 @@ def test_daily_e2e_rescan_verify_report(
     assert "Chạy ngay" not in page
 
     # Bộ lọc: nâng ngưỡng tăng lên 100 → chỉ còn 3 repo đầu.
-    filtered = client.get(reverse("rising:report"), {"min_gain": "100"}).text
+    filtered = client.get(reverse("rising:run_detail", args=[run.pk]), {"min_gain": "100"}).text
     assert re.findall(r"<strong>gia-lap/(repo-\d+)</strong>", filtered) == [
         "repo-11",
         "repo-22",

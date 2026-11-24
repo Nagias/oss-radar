@@ -205,6 +205,8 @@ class LatestRows:
     run: DailyRun | None
     rows: list[RisingRow]
     unverified_count: int
+    # Ngày UTC đầu của cửa sổ 7 ngày đã tính số tăng (ngày cuối là `run.window_end`).
+    window_start: date | None = None
 
 
 def latest_report_rows(kind: str, repositories: QuerySet[Repository] | None = None) -> LatestRows:
@@ -253,7 +255,12 @@ def latest_report_rows(kind: str, repositories: QuerySet[Repository] | None = No
         )
         for check in chosen
     ]
-    return LatestRows(run=run, rows=rows, unverified_count=unverified_count)
+    window_start = (
+        None if run.window_end is None else run.window_end - timedelta(days=growth.WINDOW_DAYS - 1)
+    )
+    return LatestRows(
+        run=run, rows=rows, unverified_count=unverified_count, window_start=window_start
+    )
 
 
 def latest_gain_subquery() -> Subquery:
@@ -268,29 +275,14 @@ def latest_gain_subquery() -> Subquery:
     )
 
 
-def latest_rising_repository_ids() -> QuerySet[RisingCheck, int]:
-    """Truy vấn con: id repo là rising star ở báo cáo mới nhất (rỗng khi chưa có báo cáo)."""
-    run = latest_report_run()
-    if run is None:
-        return RisingCheck.objects.none().values_list("repository_id", flat=True)
-    return RisingCheck.objects.filter(daily_run=run, is_rising=True).values_list(
-        "repository_id", flat=True
-    )
-
-
-def latest_trending_repository_ids() -> QuerySet[RisingCheck, int]:
-    """Truy vấn con: id repo là trending ở báo cáo mới nhất (rỗng khi chưa có báo cáo)."""
-    run = latest_report_run()
-    if run is None:
-        return RisingCheck.objects.none().values_list("repository_id", flat=True)
-    return RisingCheck.objects.filter(daily_run=run, is_trending=True).values_list(
-        "repository_id", flat=True
-    )
-
-
 def latest_report_run() -> DailyRun | None:
     """Lượt mới nhất đã lập xong báo cáo (trang Rising star mở báo cáo này mặc định)."""
     return _reported_runs().order_by("-day").first()
+
+
+def reported_run(run_id: int) -> DailyRun | None:
+    """Lượt `run_id` nếu đã lập xong báo cáo; chưa xong (đang chạy, lỗi, dừng) thì None."""
+    return _reported_runs().filter(pk=run_id).first()
 
 
 def report_run_for(day: date) -> DailyRun | None:

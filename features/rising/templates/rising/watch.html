@@ -15,7 +15,37 @@
 </header>
 
 <section class="card">
-  {% include "rising/_today.html" with stop_next="watch" %}
+  {% include "rising/_today.html" %}
+</section>
+
+<section class="card latest-report">
+  {% if latest_report %}
+    <h2>
+      Báo cáo mới nhất: ngày {{ latest_report.day|date:"d/m/Y" }}
+      <span class="status status-{{ latest_report.status }}">{{ latest_report.get_status_display }}</span>
+    </h2>
+    <p>
+      <strong>{{ latest_report.trending_count|intcomma }}</strong> repo trending ·
+      <strong>{{ latest_report.rising_count|intcomma }}</strong> rising star ·
+      <strong>{{ latest_report.unverified_count|intcomma }}</strong> ứng viên chưa xác minh
+    </p>
+    <p class="inline-form">
+      <a class="btn" href="{% url 'browse:explore' %}">Xem trending</a>
+      <a class="btn btn-secondary" href="{% url 'browse:explore' %}?tab=rising">Xem đang lên</a>
+      <a class="btn btn-ghost" href="{% url 'rising:run_detail' latest_report.pk %}">Chi tiết lượt</a>
+    </p>
+  {% else %}
+    <h2>Chưa có báo cáo nào</h2>
+    <p>
+      Lượt quét hằng ngày tự chạy sau 7:00 sáng khi app đang mở.
+      {% if status.can_run_now %}
+        Muốn có báo cáo đầu tiên ngay, bấm {{ status.run_now_label }} ở trên (khoảng 30 phút nếu có token, khoảng 1 giờ
+        nếu không có).
+      {% elif status.is_live %}
+        Lượt hôm nay đang chạy — báo cáo sẽ hiện ở đây khi nó xong.
+      {% endif %}
+    </p>
+  {% endif %}
 </section>
 
 <section>
@@ -101,7 +131,7 @@
         <tbody>
           {% for run in runs %}
             <tr>
-              <td>{{ run.day|date:"d/m/Y" }}</td>
+              <td>{% if run.has_report %}<a href="{% url 'rising:run_detail' run.pk %}">{{ run.day|date:"d/m/Y" }}</a>{% else %}{{ run.day|date:"d/m/Y" }}{% endif %}</td>
               <td><span class="status status-{{ run.status }}">{{ run.get_status_display }}</span></td>
               <td class="num">{{ run.search_calls_used|intcomma }}</td>
               <td class="num">{{ run.verify_calls_used|intcomma }}</td>
