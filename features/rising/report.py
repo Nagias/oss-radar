@@ -155,8 +155,7 @@ def daily_report(
             check,
             run=run,
             is_new_entry=check.repository_id not in previous_rising,
-            max_stars=max_stars,
-            min_gain=min_gain,
+            reason=_reason(check, max_stars=max_stars, min_gain=min_gain),
             scores=scores[check.repository_id],
             labels=labels.get(check.repository_id),
         )
@@ -188,6 +187,73 @@ def daily_report(
         verified_count=len(all_verified),
         hidden_rising_count=hidden_rising,
     )
+
+
+# Hai loại danh sách của trang Khám phá (F-012).
+KIND_TRENDING = "trending"
+KIND_RISING = "rising"
+
+
+@dataclass(frozen=True, slots=True)
+class LatestRows:
+    """Dòng trending hoặc rising của báo cáo mới nhất (đã xác minh), tăng nhiều trước.
+
+    `unverified_count`: số ứng viên cùng nhóm còn là ước lượng (hết ngân sách / GitHub lỗi), không
+    tính bộ lọc — để trang Khám phá nói rõ còn bao nhiêu repo chưa xét được.
+    """
+
+    run: DailyRun | None
+    rows: list[RisingRow]
+    unverified_count: int
+
+
+def latest_report_rows(kind: str, repositories: QuerySet[Repository] | None = None) -> LatestRows:
+    """Dòng `kind` ("trending" / "rising") của báo cáo mới nhất, chỉ repo thuộc `repositories`.
+
+    Trending lấy mọi dòng `is_trending` (cả repo nhỏ tăng ≥ 200 star); rising lấy dòng `is_rising`.
+    Điểm tính kèm số tăng (như `daily_report`) để mức nghi star giả có cả tín hiệu "dồn một ngày".
+    "Mới": cùng loại mà không có trong báo cáo liền trước. Số câu truy vấn không phụ thuộc số dòng.
+    """
+    run = latest_report_run()
+    if run is None:
+        return LatestRows(run=None, rows=[], unverified_count=0)
+    trending = kind == KIND_TRENDING
+    marker = {"is_trending": True} if trending else {"is_rising": True}
+    checks = RisingCheck.objects.filter(daily_run=run, source=RisingCheck.Source.HISTORY, **marker)
+    if repositories is not None:
+        checks = checks.filter(repository__in=repositories.values("pk"))
+    chosen = list(checks.select_related("repository").order_by("-gain_7d", "pk"))
+    pool = RisingCheck.Pool.TRENDING if trending else RisingCheck.Pool.RISING
+    unverified_count = (
+        RisingCheck.objects.filter(daily_run=run, pool=pool)
+        .exclude(source=RisingCheck.Source.HISTORY)
+        .count()
+    )
+    previous = _reported_runs().filter(day__lt=run.day).order_by("-day").first()
+    seen_before: set[int] = set()
+    if previous is not None:
+        seen_before = set(
+            previous.checks.filter(source=RisingCheck.Source.HISTORY, **marker).values_list(
+                "repository_id", flat=True
+            )
+        )
+    scores = scoring.score_repositories(
+        [check.repository for check in chosen],
+        growth={check.repository_id: _growth_facts(check) for check in chosen},
+    )
+    labels = taxonomy.labels_for(check.repository_id for check in chosen)
+    rows = [
+        _rising_row(
+            check,
+            run=run,
+            is_new_entry=check.repository_id not in seen_before,
+            reason=_trending_reason(check) if trending else None,
+            scores=scores[check.repository_id],
+            labels=labels.get(check.repository_id),
+        )
+        for check in chosen
+    ]
+    return LatestRows(run=run, rows=rows, unverified_count=unverified_count)
 
 
 def latest_gain_subquery() -> Subquery:
@@ -272,11 +338,11 @@ def _rising_row(
     *,
     run: DailyRun,
     is_new_entry: bool,
-    max_stars: int,
-    min_gain: int,
+    reason: str | None,
     scores: scoring.RepoScores,
     labels: taxonomy.RepoLabels | None,
 ) -> RisingRow:
+    """`reason=None`: dòng "Vì sao có mặt" theo ngưỡng rising mặc định."""
     repository = check.repository
     # Tuổi tính tới ngày của lượt (không phải hôm nay): xem lại báo cáo cũ vẫn khớp cờ
     # "Repo rất mới".
@@ -289,7 +355,9 @@ def _rising_row(
         age_days=age_days,
         flag_labels=tuple(growth.FLAG_LABELS[growth.Flag(flag)] for flag in check.flags),
         sparkline=growth.sparkline_points(check.series),
-        reason=_reason(check, max_stars=max_stars, min_gain=min_gain),
+        reason=reason
+        if reason is not None
+        else _reason(check, max_stars=growth.RISING_MAX_STARS, min_gain=growth.RISING_MIN_GAIN_7D),
         scores=scores,
         labels=labels,
     )
@@ -297,16 +365,29 @@ def _rising_row(
 
 def _reason(check: RisingCheck, *, max_stars: int, min_gain: int) -> str:
     """Dòng "Vì sao có mặt" (thiết kế mục 4): con số, ngưỡng, nguồn và khoảng ngày UTC đã dùng."""
+    return (
+        f"+{_number(check.gain_7d)} star trong 7 ngày (ngưỡng {_number(min_gain)}) · "
+        f"đang {_number(check.stars)} star (dưới {_number(max_stars)}) · {_source(check)}"
+    )
+
+
+def _trending_reason(check: RisingCheck) -> str:
+    """Dòng "Vì sao có mặt" của trending: ngưỡng là số star VÀ phần trăm (QĐ-22), mọi cỡ repo."""
+    min_gain = _number(growth.TRENDING_MIN_GAIN_7D)
+    return (
+        f"+{_number(check.gain_7d)} star trong 7 ngày (ngưỡng {min_gain} star và "
+        f"{growth.TRENDING_MIN_PERCENT_7D:g}%) · đang {_number(check.stars)} star · "
+        f"{_source(check)}"
+    )
+
+
+def _source(check: RisingCheck) -> str:
     window_end = check.window_end
     if window_end is None:
         raise ValueError(f"Dòng xét #{check.pk} đã xác minh mà thiếu ngày UTC cuối của cửa sổ")
     window_start = window_end - timedelta(days=growth.WINDOW_DAYS - 1)
-    return (
-        f"+{_number(check.gain_7d)} star trong 7 ngày (ngưỡng {_number(min_gain)}) · "
-        f"đang {_number(check.stars)} star (dưới {_number(max_stars)}) · "
-        # Gạch nối khoảng ngày giữ đúng mẫu ở mục 4 của thiết kế.
-        f"nguồn: lịch sử star GitHub, ngày UTC {window_start:%d/%m}–{window_end:%d/%m}"  # noqa: RUF001
-    )
+    # Gạch nối khoảng ngày giữ đúng mẫu ở mục 4 của thiết kế.
+    return f"nguồn: lịch sử star GitHub, ngày UTC {window_start:%d/%m}–{window_end:%d/%m}"  # noqa: RUF001
 
 
 def _number(value: int) -> str:

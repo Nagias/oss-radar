@@ -179,6 +179,8 @@ def make_check(
     gain_7d: int,
     source: str = RisingCheck.Source.HISTORY,
     is_rising: bool = False,
+    is_trending: bool = False,
+    pool: str = RisingCheck.Pool.RISING,
     flags: list[str] | None = None,
 ) -> RisingCheck:
     """Một dòng xét của lượt; dòng đã xác minh có đủ +1/+7/+30 ngày và chuỗi 30 ngày."""
@@ -196,6 +198,8 @@ def make_check(
         window_end=WINDOW_END if verified else None,
         baseline_day=DAY - timedelta(days=3) if source == RisingCheck.Source.SNAPSHOT else None,
         is_rising=is_rising,
+        is_trending=is_trending,
+        pool=pool,
         flags=flags or [],
     )
 

@@ -175,6 +175,12 @@ from features.rising.overview import (
     watch_overview as watch_overview,
 )
 from features.rising.report import (
+    KIND_RISING as KIND_RISING,
+)
+from features.rising.report import (
+    KIND_TRENDING as KIND_TRENDING,
+)
+from features.rising.report import (
     RISING_PAGE_SIZE as RISING_PAGE_SIZE,
 )
 from features.rising.report import (
@@ -190,6 +196,9 @@ from features.rising.report import (
     DailyReport as DailyReport,
 )
 from features.rising.report import (
+    LatestRows as LatestRows,
+)
+from features.rising.report import (
     PageInfo as PageInfo,
 )
 from features.rising.report import (
@@ -203,6 +212,9 @@ from features.rising.report import (
 )
 from features.rising.report import (
     latest_gain_subquery as latest_gain_subquery,
+)
+from features.rising.report import (
+    latest_report_rows as latest_report_rows,
 )
 from features.rising.report import (
     latest_report_run as latest_report_run,
