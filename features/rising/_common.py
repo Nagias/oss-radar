@@ -24,6 +24,10 @@ _RETRY_MINUTES = int(RETRY_LATER_AFTER.total_seconds() // 60)
 # Xác minh: 1 lượt gọi lịch sử star cho mỗi ứng viên. Không token thì hạn mức core chỉ 60 lượt/giờ.
 VERIFY_BUDGET_WITH_TOKEN = 300
 VERIFY_BUDGET_ANONYMOUS = 50
+# Xác minh trending (F-011, QĐ-22): ngân sách riêng, không lấy của rising. Không token thì bỏ
+# qua hẳn: 60 lượt/giờ đã dành cho xác minh rising (50) và hồ sơ chủ (10).
+TRENDING_BUDGET_WITH_TOKEN = 300
+TRENDING_BUDGET_ANONYMOUS = 0
 # Hồ sơ chủ repo (F-006): 1 lượt gọi mỗi chủ của rising star. Không token thì hạn mức core (60 lượt
 # /giờ) dùng chung với bước xác minh, nên chỉ lấy ít.
 OWNER_BUDGET_WITH_TOKEN = 100
@@ -58,6 +62,8 @@ REASON_VERIFY_AUTH = (
     "(Chi tiết: {detail})"
 )
 VERIFY_BUDGET_NOTE = "Hết ngân sách xác minh — {count} ứng viên chưa xác minh."
+TRENDING_BUDGET_NOTE = "Hết ngân sách xác minh trending — {count} ứng viên trending chưa xác minh."
+TRENDING_SKIPPED_NOTE = "Không có GITHUB_TOKEN — bỏ qua xác minh {count} ứng viên trending."
 UNREADABLE_HISTORY_NOTE = (
     "Không xác minh được {repo}: GitHub trả lịch sử star không đọc được — repo nằm ở mục chưa "
     "xác minh. (Chi tiết: {detail})"
@@ -124,6 +130,10 @@ def _summary(problems: list[str]) -> str:
 
 def _verify_budget() -> int:
     return VERIFY_BUDGET_WITH_TOKEN if settings.GITHUB_TOKEN else VERIFY_BUDGET_ANONYMOUS
+
+
+def _trending_budget() -> int:
+    return TRENDING_BUDGET_WITH_TOKEN if settings.GITHUB_TOKEN else TRENDING_BUDGET_ANONYMOUS
 
 
 def _owner_budget() -> int:

@@ -83,7 +83,7 @@ def test_screen_picks_candidates_from_snapshot_and_age_estimates(
     monkeypatch.setattr(_common, "VERIFY_BUDGET_ANONYMOUS", 0)
     snapshot(RISER, stars=100)  # +60 trong 3 ngày → ước lượng 140
     snapshot(SLOW, stars=200)  # +2 trong 3 ngày → ước lượng 5
-    snapshot(BIG, stars=900)
+    snapshot(BIG, stars=900)  # từ 1.000 star: sang nhóm trending (F-011), ước lượng 233
     snapshot(FORK, stars=100)
     snapshot(ARCHIVED, stars=100)
     fake = use_fake(
@@ -107,13 +107,19 @@ def test_screen_picks_candidates_from_snapshot_and_age_estimates(
     assert checks == {
         RISER: (Source.SNAPSHOT, 140, days_ago(3), 160),
         YOUNG: (Source.AGE, 35, None, 50),
+        BIG: (Source.SNAPSHOT, 233, days_ago(3), 1000),
     }
+    assert check_of(BIG).pool == RisingCheck.Pool.TRENDING
     assert not RisingCheck.objects.filter(is_rising=True).exists()
     assert (run.candidate_count, run.insufficient_count) == (2, 1)
+    assert run.trending_candidate_count == 1
     assert run.window_end == window_end()
     assert run.unverified_count == 2
     assert fake.history.requested == []
-    assert run.problems == ["Hết ngân sách xác minh — 2 ứng viên chưa xác minh."]
+    assert run.problems == [
+        "Hết ngân sách xác minh — 2 ứng viên chưa xác minh.",
+        "Không có GITHUB_TOKEN — bỏ qua xác minh 1 ứng viên trending.",
+    ]
     assert run.status == Status.SUCCEEDED_PARTIAL
 
 

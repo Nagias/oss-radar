@@ -3,6 +3,7 @@
 import logging
 from datetime import date, timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F, Max, QuerySet, Sum
 from django.utils import timezone
@@ -29,6 +30,8 @@ from features.rising._common import (
     REASON_STOPPED,
     REASON_VERIFY_AUTH,
     REASON_VERIFY_BLOCKED,
+    TRENDING_BUDGET_NOTE,
+    TRENDING_SKIPPED_NOTE,
     UNREADABLE_HISTORY_NOTE,
     UNREADABLE_OWNER_NOTE,
     VERIFY_BUDGET_NOTE,
@@ -41,6 +44,7 @@ from features.rising._common import (
     _needs_new_scan,
     _owner_budget,
     _summary,
+    _trending_budget,
     _verify_budget,
 )
 from features.rising.models import DailyRun, DailyRunScan, RisingCheck, WatchQuery
@@ -89,6 +93,10 @@ class _DailyRunner:
             run = self._load()
         if run.step == DailyRun.Step.VERIFY:
             if not self._verify():
+                return
+            run = self._load()
+        if run.step == DailyRun.Step.TRENDING:
+            if not self._verify_trending():
                 return
             run = self._load()
         if run.step == DailyRun.Step.OWNERS:
@@ -243,14 +251,16 @@ class _DailyRunner:
             )
         )
         baselines = catalog.baseline_snapshots(today=today)
-        # Fork, repo đã lưu trữ, repo từ 1.000 star không thể là rising star → không xét.
+        # Fork và repo đã lưu trữ không xét. Dưới 1.000 star là nhóm rising (luật cũ); từ 1.000 star
+        # là nhóm trending (F-011): chỉ xét theo luật trending, ngân sách xác minh riêng.
         seen = (
             discovery.repositories_seen_in(scan_ids)
-            .filter(stars__lt=growth.RISING_MAX_STARS, is_fork=False, is_archived=False)
+            .filter(is_fork=False, is_archived=False)
             .order_by("pk")
             .values_list("pk", "stars", "gh_created_at")
         )
         candidates: list[RisingCheck] = []
+        trending: list[RisingCheck] = []
         insufficient = 0
         for repository_id, stars, created_at in seen.iterator():
             baseline = baselines.get(repository_id)
@@ -260,38 +270,47 @@ class _DailyRunner:
                 today=today,
                 created_on=timezone.localdate(created_at),
             )
+            small = stars < growth.RISING_MAX_STARS
             if estimate is None:
-                insufficient += 1
-            elif estimate >= growth.CANDIDATE_MIN_ESTIMATE_7D:
-                candidates.append(
-                    RisingCheck(
-                        daily_run_id=self.run_id,
-                        repository_id=repository_id,
-                        stars=stars,
-                        source=(
-                            RisingCheck.Source.AGE
-                            if baseline is None
-                            else RisingCheck.Source.SNAPSHOT
-                        ),
-                        gain_7d=estimate,
-                        baseline_day=None if baseline is None else baseline.day,
-                    )
+                insufficient += small  # "chưa đủ dữ liệu" giữ nghĩa cũ: chỉ đếm nhóm rising
+                continue
+            if small and estimate >= growth.CANDIDATE_MIN_ESTIMATE_7D:
+                pool, bucket = RisingCheck.Pool.RISING, candidates
+            elif not small and growth.is_trending_candidate(stars, estimate):
+                pool, bucket = RisingCheck.Pool.TRENDING, trending
+            else:
+                continue
+            bucket.append(
+                RisingCheck(
+                    daily_run_id=self.run_id,
+                    repository_id=repository_id,
+                    stars=stars,
+                    source=(
+                        RisingCheck.Source.AGE if baseline is None else RisingCheck.Source.SNAPSHOT
+                    ),
+                    gain_7d=estimate,
+                    baseline_day=None if baseline is None else baseline.day,
+                    pool=pool,
                 )
+            )
         with transaction.atomic():
             RisingCheck.objects.filter(daily_run_id=self.run_id).exclude(
                 source=RisingCheck.Source.HISTORY
             ).delete()
-            RisingCheck.objects.bulk_create(candidates)
+            RisingCheck.objects.bulk_create([*candidates, *trending])
             self._check_in(
                 step=DailyRun.Step.VERIFY,
                 candidate_count=len(candidates),
+                trending_candidate_count=len(trending),
                 insufficient_count=insufficient,
                 window_end=growth.last_complete_utc_day(now),
             )
         logger.info(
-            "Lượt hằng ngày #%s: lọc thô xong — %s ứng viên, %s repo chưa đủ dữ liệu",
+            "Lượt hằng ngày #%s: lọc thô xong — %s ứng viên, %s ứng viên trending, %s repo chưa đủ "
+            "dữ liệu",
             self.run_id,
             len(candidates),
+            len(trending),
             insufficient,
         )
 
@@ -307,23 +326,67 @@ class _DailyRunner:
         if run.verify_budget == 0:
             # Chốt ngân sách một lần lúc bắt đầu xác minh: chạy tiếp vẫn giữ ngân sách ban đầu.
             run = self._check_in(verify_budget=_verify_budget())
-        pending = list(
-            RisingCheck.objects.filter(daily_run_id=self.run_id)
-            .exclude(source=RisingCheck.Source.HISTORY)
-            .order_by("-gain_7d", "pk")
-            .values_list("pk", flat=True)
-        )
-        if pending and not self._verify_rows(run, pending):
+        pending = self._unverified(RisingCheck.Pool.RISING)
+        if pending and not self._verify_rows(
+            run,
+            pending,
+            pool=RisingCheck.Pool.RISING,
+            budget_total=run.verify_budget,
+            calls_field="verify_calls_used",
+            budget_note=VERIFY_BUDGET_NOTE,
+        ):
+            return False
+        self._check_in(step=DailyRun.Step.TRENDING)
+        return True
+
+    def _verify_trending(self) -> bool:
+        """Xác minh ứng viên trending (F-011) bằng lịch sử star, ngân sách riêng. `False` = dừng.
+
+        Không có token thì bỏ qua hẳn (ghi chú số ứng viên bị bỏ), lượt vẫn đi tiếp tới báo cáo.
+        """
+        run = self._check_in()
+        if run.trending_budget == 0:
+            # Chốt ngân sách một lần lúc bắt đầu bước: chạy tiếp vẫn giữ ngân sách ban đầu.
+            run = self._check_in(trending_budget=_trending_budget())
+        pending = self._unverified(RisingCheck.Pool.TRENDING)
+        if pending and not settings.GITHUB_TOKEN:
+            self._add_problem(TRENDING_SKIPPED_NOTE.format(count=len(pending)))
+        elif pending and not self._verify_rows(
+            run,
+            pending,
+            pool=RisingCheck.Pool.TRENDING,
+            budget_total=run.trending_budget,
+            calls_field="trending_calls_used",
+            budget_note=TRENDING_BUDGET_NOTE,
+        ):
             return False
         self._check_in(step=DailyRun.Step.OWNERS)
         return True
 
-    def _verify_rows(self, run: DailyRun, pending: list[int]) -> bool:
+    def _unverified(self, pool: str) -> list[int]:
+        """Dòng chưa xác minh của một nhóm, ước lượng lớn trước."""
+        return list(
+            RisingCheck.objects.filter(daily_run_id=self.run_id, pool=pool)
+            .exclude(source=RisingCheck.Source.HISTORY)
+            .order_by("-gain_7d", "pk")
+            .values_list("pk", flat=True)
+        )
+
+    def _verify_rows(
+        self,
+        run: DailyRun,
+        pending: list[int],
+        *,
+        pool: str,
+        budget_total: int,
+        calls_field: str,
+        budget_note: str,
+    ) -> bool:
         window_end = run.window_end
         if window_end is None:
             raise RuntimeError(f"Lượt #{self.run_id} ở bước xác minh mà chưa chốt cửa sổ ngày UTC.")
-        calls_before = run.verify_calls_used
-        budget = CallBudget(max(0, run.verify_budget - calls_before))
+        calls_before = getattr(run, calls_field)
+        budget = CallBudget(max(0, budget_total - calls_before))
         sleep = _HeartbeatSleep(self._beat_or_stop)
         try:
             with get_github_client(sleep=sleep, budget=budget) as github:
@@ -334,23 +397,20 @@ class _DailyRunner:
                         check_id,
                         budget=budget,
                         calls_before=calls_before,
+                        calls_field=calls_field,
                         window_end=window_end,
                     )
                     logger.info(
-                        "Lượt hằng ngày #%s: đã xét %s/%s ứng viên, lượt gọi xác minh %s/%s",
+                        "Lượt hằng ngày #%s: đã xét %s/%s ứng viên %s, lượt gọi xác minh %s/%s",
                         self.run_id,
                         index,
                         len(pending),
+                        pool,
                         calls_before + budget.used,
-                        run.verify_budget,
+                        budget_total,
                     )
         except CallBudgetExhaustedError:
-            left = (
-                RisingCheck.objects.filter(daily_run_id=self.run_id)
-                .exclude(source=RisingCheck.Source.HISTORY)
-                .count()
-            )
-            self._add_problem(VERIFY_BUDGET_NOTE.format(count=left))
+            self._add_problem(budget_note.format(count=len(self._unverified(pool))))
         except _DailyStopRequestedError:
             self.pause(DailyRun.PauseKind.STOPPED, REASON_STOPPED)
             return False
@@ -372,6 +432,7 @@ class _DailyRunner:
         *,
         budget: CallBudget,
         calls_before: int,
+        calls_field: str,
         window_end: date,
     ) -> None:
         check = (
@@ -385,7 +446,11 @@ class _DailyRunner:
         repository = check.repository
         try:
             history = self._fetch_history(
-                github, repository.github_id, budget=budget, calls_before=calls_before
+                github,
+                repository.github_id,
+                budget=budget,
+                calls_before=calls_before,
+                calls_field=calls_field,
             )
         except GitHubNotFoundError:
             logger.info(
@@ -409,14 +474,20 @@ class _DailyRunner:
         self._save_history(check, history, window_end=window_end)
 
     def _fetch_history(
-        self, github: GitHubClient, github_id: int, *, budget: CallBudget, calls_before: int
+        self,
+        github: GitHubClient,
+        github_id: int,
+        *,
+        budget: CallBudget,
+        calls_before: int,
+        calls_field: str,
     ) -> StarHistory:
         try:
             return github.star_history(github_id)
         finally:
             # Ghi ngay sau mỗi lượt gọi, kể cả khi lỗi hay app sập: lượt gọi đã tiêu thì không được
             # "hoàn" vào ngân sách khi chạy tiếp. Không ném lỗi ở đây để không che lỗi gốc.
-            self._owned().update(verify_calls_used=calls_before + budget.used)
+            self._owned().update(**{calls_field: calls_before + budget.used})
 
     def _save_history(self, check: RisingCheck, history: StarHistory, *, window_end: date) -> None:
         gains = growth.growth_from_history(history, window_end=window_end)
@@ -435,6 +506,7 @@ class _DailyRunner:
                 series=list(gains.series),
                 window_end=window_end,
                 is_rising=growth.is_rising(check.stars, gains.gain_7d),
+                is_trending=growth.is_trending(check.stars, gains.gain_7d),
                 flags=[flag.value for flag in flags],
             )
 
@@ -541,7 +613,7 @@ class _DailyRunner:
             return
         order = list(
             RisingCheck.objects.filter(daily_run_id=self.run_id)
-            .order_by("-is_rising", "-gain_7d", "pk")
+            .order_by("-is_rising", "-is_trending", "-gain_7d", "pk")
             .values_list("repository_id", flat=True)
         )
         rank = {repository_id: index for index, repository_id in enumerate(order)}
@@ -593,9 +665,11 @@ class _DailyRunner:
         Dọn dữ liệu làm lại bao nhiêu lần cũng vậy: sập giữa chừng thì lần sau làm lại cả bước.
         """
         checks = RisingCheck.objects.filter(daily_run_id=self.run_id)
+        rising_pool = checks.filter(pool=RisingCheck.Pool.RISING)
         self._check_in(
-            rising_count=checks.filter(is_rising=True).count(),
-            unverified_count=checks.exclude(source=RisingCheck.Source.HISTORY).count(),
+            rising_count=rising_pool.filter(is_rising=True).count(),
+            unverified_count=rising_pool.exclude(source=RisingCheck.Source.HISTORY).count(),
+            trending_count=checks.filter(is_trending=True).count(),
         )
         now = timezone.now()
         snapshots = catalog.prune_snapshots(

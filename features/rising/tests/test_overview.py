@@ -269,3 +269,22 @@ def test_recent_daily_runs_are_newest_first_and_limited() -> None:
     recent = services.recent_daily_runs(limit=3)
 
     assert [run.day for run in recent] == [days[3], days[2], days[1]]
+
+
+def test_estimate_counts_trending_verification_calls() -> None:
+    run = make_run(timezone.localdate() - timedelta(days=1))
+    DailyRun.objects.filter(pk=run.pk).update(
+        search_calls_used=500, verify_calls_used=300, trending_calls_used=200
+    )
+
+    assert services.daily_estimate().calls == 1000
+
+
+def test_headline_while_verifying_trending_repos() -> None:
+    today_run(step=DailyRun.Step.TRENDING, trending_budget=300, trending_calls_used=42)
+
+    status = services.today_status()
+
+    assert status.headline == (
+        "Đang chạy: xác minh repo trending bằng lịch sử star — đã dùng 42/300 lượt gọi."
+    )

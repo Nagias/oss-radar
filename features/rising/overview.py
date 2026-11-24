@@ -134,6 +134,7 @@ def daily_estimate() -> DailyEstimate:
     calls = (
         latest.search_calls_used
         + latest.verify_calls_used
+        + latest.trending_calls_used
         + latest.owner_calls_used
         + latest.ai_calls_used
     )
@@ -173,6 +174,13 @@ def _running_headline(run: DailyRun) -> str:
             else ""
         )
         return f"Đang chạy: xác minh ứng viên bằng lịch sử star{used}."
+    if run.step == DailyRun.Step.TRENDING:
+        used = (
+            f" — đã dùng {run.trending_calls_used}/{run.trending_budget} lượt gọi"
+            if run.trending_budget
+            else ""
+        )
+        return f"Đang chạy: xác minh repo trending bằng lịch sử star{used}."
     if run.step == DailyRun.Step.OWNERS:
         used = (
             f" — đã dùng {run.owner_calls_used}/{run.owner_budget} lượt gọi"

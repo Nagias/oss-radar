@@ -119,7 +119,10 @@ def daily_report(
     - Bảng rising và mục chưa xác minh chia trang riêng (`page`, `unverified_page`): mỗi trang
       `RISING_PAGE_SIZE` / `UNVERIFIED_PAGE_SIZE` dòng. Dòng bị ẩn không chia trang (thường ít).
     """
-    checks = RisingCheck.objects.filter(daily_run=run).select_related("repository")
+    # Chỉ nhóm rising: dòng trending (repo từ 1.000 star, F-011) có trang riêng.
+    checks = RisingCheck.objects.filter(daily_run=run, pool=RisingCheck.Pool.RISING).select_related(
+        "repository"
+    )
     all_verified = list(checks.filter(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk"))
     unverified = list(checks.exclude(source=RisingCheck.Source.HISTORY).order_by("-gain_7d", "pk"))
     every = [*all_verified, *unverified]
@@ -141,7 +144,10 @@ def daily_report(
     if previous is not None:
         previous_rising = set(
             previous.checks.filter(
-                source=RisingCheck.Source.HISTORY, stars__lt=max_stars, gain_7d__gte=min_gain
+                pool=RisingCheck.Pool.RISING,
+                source=RisingCheck.Source.HISTORY,
+                stars__lt=max_stars,
+                gain_7d__gte=min_gain,
             ).values_list("repository_id", flat=True)
         )
     rows = [
@@ -202,6 +208,16 @@ def latest_rising_repository_ids() -> QuerySet[RisingCheck, int]:
     if run is None:
         return RisingCheck.objects.none().values_list("repository_id", flat=True)
     return RisingCheck.objects.filter(daily_run=run, is_rising=True).values_list(
+        "repository_id", flat=True
+    )
+
+
+def latest_trending_repository_ids() -> QuerySet[RisingCheck, int]:
+    """Truy vấn con: id repo là trending ở báo cáo mới nhất (rỗng khi chưa có báo cáo)."""
+    run = latest_report_run()
+    if run is None:
+        return RisingCheck.objects.none().values_list("repository_id", flat=True)
+    return RisingCheck.objects.filter(daily_run=run, is_trending=True).values_list(
         "repository_id", flat=True
     )
 

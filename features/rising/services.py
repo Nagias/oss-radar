@@ -76,6 +76,18 @@ from features.rising._common import (
     RETRY_LATER_AFTER as RETRY_LATER_AFTER,
 )
 from features.rising._common import (
+    TRENDING_BUDGET_ANONYMOUS as TRENDING_BUDGET_ANONYMOUS,
+)
+from features.rising._common import (
+    TRENDING_BUDGET_NOTE as TRENDING_BUDGET_NOTE,
+)
+from features.rising._common import (
+    TRENDING_BUDGET_WITH_TOKEN as TRENDING_BUDGET_WITH_TOKEN,
+)
+from features.rising._common import (
+    TRENDING_SKIPPED_NOTE as TRENDING_SKIPPED_NOTE,
+)
+from features.rising._common import (
     UNREADABLE_HISTORY_NOTE as UNREADABLE_HISTORY_NOTE,
 )
 from features.rising._common import (
@@ -194,6 +206,9 @@ from features.rising.report import (
 )
 from features.rising.report import (
     latest_rising_repository_ids as latest_rising_repository_ids,
+)
+from features.rising.report import (
+    latest_trending_repository_ids as latest_trending_repository_ids,
 )
 from features.rising.report import (
     report_days as report_days,
