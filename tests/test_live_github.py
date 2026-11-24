@@ -13,6 +13,7 @@ from django.utils import timezone
 from features.catalog.models import Repository
 from features.discovery import services
 from features.discovery.models import ScanRun
+from features.rising.growth import growth_from_history, last_complete_utc_day
 from integrations.github.client import get_github_client
 
 pytestmark = pytest.mark.live
@@ -40,6 +41,18 @@ def test_live_star_history_by_id() -> None:
     assert newest.start - previous.start == timedelta(days=7)
     assert 0 <= (timezone.now().date() - newest.start).days <= 6  # tuần mới nhất là tuần này
     assert all(len(week.days) == 7 and min(week.days) >= 0 for week in history.weeks)
+
+
+def test_live_star_history_of_a_very_big_repo() -> None:
+    # F-011: trending xét cả repo khổng lồ. 193215554 là n8n-io/n8n (hơn 200.000 star): lịch sử star
+    # phải đủ 30 ngày để tính +1/+7/+30, như với repo nhỏ.
+    with get_github_client() as github:
+        history = github.star_history(193215554)
+
+    gains = growth_from_history(history, window_end=last_complete_utc_day(timezone.now()))
+    assert len(gains.series) == 30
+    assert gains.gain_30d > 0
+    assert gains.gain_7d == sum(gains.series[-7:])
 
 
 @pytest.mark.django_db
