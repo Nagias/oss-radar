@@ -149,4 +149,5 @@
   - [x] Trang Khám phá 3 tab ở `/`, Quét chuyển sang `/scan/`; tìm nhiều từ cả trong chủ đề; chip gỡ từng ô lọc
   - [x] Góc nhìn đã lưu: model, form, trang quản lý, thanh bên (context processor, QĐ-23)
   - [x] Sổ sách: FEATURE_MAP F-012, QĐ-23, CLAUDE.md
-  - [ ] Kiểm chứng: `poe check`, tốc độ và độ nặng trang trên bản sao CSDL, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
+  - [x] Kiểm chứng: `poe check`, tốc độ và độ nặng trang trên bản sao CSDL, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
+  - [x] Đo trên bản sao CSDL thật: 24 trường hợp 105–241 ms, 12–15 truy vấn, trang ≤ 125 KB; sửa 1 mục quan trọng + 5 mục nhỏ của rà soát
