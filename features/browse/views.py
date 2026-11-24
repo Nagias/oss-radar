@@ -44,6 +44,7 @@ def explore(request: HttpRequest) -> HttpResponse:
         "tabs": services.tab_links(filters),
         "sorts": {key: SORT_LABELS[key] for key in TAB_SORTS[filters.tab]},
         "chips": services.active_chips(filters),
+        "filters_open": services.has_more_filters(filters),
         "save": services.save_state(filters),
         "clear_url": services.clear_url(filters),
         "show_suspicious_url": services.show_suspicious_url(filters),

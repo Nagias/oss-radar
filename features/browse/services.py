@@ -250,6 +250,23 @@ def active_chips(filters: BrowseFilters) -> list[Chip]:
     return chips
 
 
+def has_more_filters(filters: BrowseFilters) -> bool:
+    """Có ô nào trong phần "Lọc thêm" đang bật không (để mở sẵn phần đó)."""
+    return any(
+        (
+            filters.audience,
+            filters.aspects,
+            filters.language,
+            filters.min_stars is not None,
+            filters.max_stars is not None,
+            filters.created_days is not None,
+            filters.commercial,
+            filters.unclassified,
+            filters.show_suspicious,
+        )
+    )
+
+
 def clear_url(filters: BrowseFilters) -> str:
     """ "Xoá tất cả": giữ tab đang xem (và góc nhìn đang mở), bỏ mọi ô lọc."""
     return _link(BrowseFilters(tab=filters.tab, view=filters.view))

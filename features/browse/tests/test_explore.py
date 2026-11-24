@@ -437,3 +437,13 @@ def test_report_day_window_uses_utc_days() -> None:
 
     assert page.window_start == WINDOW_END - timedelta(days=6)
     assert page.run == run
+
+
+def test_more_filters_are_folded_until_one_of_them_is_used(client: Client) -> None:
+    mixed()
+
+    plain = client.get("/", {"q": "repo", "sort": "stars"}).text
+    grouped = client.get("/", {"aspects": "video"}).text
+
+    assert '<details class="filter-more">' in plain  # chỉ tìm và sắp: phần lọc thêm gập
+    assert '<details class="filter-more" open>' in grouped
