@@ -6,7 +6,7 @@
 {% block head_extra %}{% if auto_refresh %}<meta http-equiv="refresh" content="3; url={% url 'discovery:scan_detail' scan.pk %}">{% endif %}{% endblock %}
 
 {% block content %}
-<p><a href="{% url 'discovery:home' %}">← Quét truy vấn khác</a></p>
+<p class="back-link"><a href="{% url 'discovery:home' %}">← Quét truy vấn khác</a></p>
 
 <section class="card">
   <h1>

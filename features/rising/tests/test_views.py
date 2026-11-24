@@ -30,6 +30,7 @@ from features.rising.tests.conftest import (
     some_repos,
 )
 from tests.factories import label_repository
+from tests.html import Button, buttons, nav_links
 
 pytestmark = pytest.mark.django_db
 
@@ -259,7 +260,7 @@ def test_report_page_marks_a_stale_run_as_interrupted_and_offers_run_now(client:
 
     run.refresh_from_db()
     assert run.status == Status.PAUSED  # xem trang là biết lượt đã chết, như trang lần quét
-    assert ">Chạy tiếp</button>" in page
+    assert Button("Chạy tiếp", disabled=False) in buttons(page)
     assert "Chạy ngay" not in page
     assert 'http-equiv="refresh"' not in page
 
@@ -271,7 +272,7 @@ def test_report_empty_state_before_first_run(client: Client) -> None:
     assert response.status_code == 200
     assert "Chưa có báo cáo nào" in page
     assert "sau 7:00" in page
-    assert ">Chạy ngay</button>" in page
+    assert Button("Chạy ngay", disabled=False) in buttons(page)
     assert "bấm Chạy ngay" in page
     assert "Chạy tiếp" not in page
     assert 'action="/rising/run/"' in page
@@ -292,7 +293,7 @@ def test_run_now_button_says_continue_when_todays_run_exists(
     for url in (REPORT_URL, WATCH_URL):
         page = client.get(url).text
 
-        assert ">Chạy tiếp</button>" in page
+        assert Button("Chạy tiếp", disabled=False) in buttons(page)
         assert "Chạy ngay" not in page  # kể cả trong câu lý do và câu hướng dẫn
 
 
@@ -322,7 +323,7 @@ def test_report_page_disables_run_now_while_background_is_busy(
     page = client.get(REPORT_URL).text
 
     assert "Lần quét #3" in page
-    assert re.search(r"<button[^>]*disabled[^>]*>Chạy ngay", page)
+    assert Button("Chạy ngay", disabled=True) in buttons(page)
 
 
 def test_busy_hint_names_the_button_that_is_shown(
@@ -333,7 +334,7 @@ def test_busy_hint_names_the_button_that_is_shown(
 
     page = client.get(REPORT_URL).text
 
-    assert re.search(r"<button[^>]*disabled[^>]*>Chạy tiếp", page)
+    assert Button("Chạy tiếp", disabled=True) in buttons(page)
     assert "chờ xong rồi bấm Chạy tiếp" in page
     assert "Chạy ngay" not in page
 
@@ -369,7 +370,7 @@ def test_watch_page_lists_queries_estimate_history_and_buttons(
     assert "Lượt gọi hồ sơ chủ" in page
     assert '<td class="num">37</td>' in page
     assert "Token sai rồi." in page
-    assert ">Chạy tiếp</button>" in page  # hôm nay Lỗi → được chạy tiếp
+    assert Button("Chạy tiếp", disabled=False) in buttons(page)  # hôm nay Lỗi → được chạy tiếp
     assert reverse("rising:stop", args=[failed.pk]) not in page
     assert '<td class="num">14</td>' in page  # số rising star trong lịch sử các lượt
     assert '<td class="small">Truy vấn «topic:x» lỗi.<br>Hết ngân sách xác minh.</td>' in page
@@ -627,14 +628,14 @@ def test_nav_links_on_every_page(
 
     page = client.get(url).text
 
-    links = re.findall(r'<a href="([^"]+)"( aria-current="page")?>([^<]+)</a>', _nav(page))
-    assert [(href, label) for href, _, label in links] == [
+    links = nav_links(page)
+    assert [(link.href, link.text) for link in links] == [
         ("/", "Quét"),
         ("/rising/", "Rising star"),
         ("/repos/", "Kho repo"),
         ("/rising/watch/", "Theo dõi"),
     ]
-    assert [label for _, mark, label in links if mark] == [current]
+    assert [link.text for link in links if link.current] == [current]
 
 
 def test_nav_marks_rising_star_on_the_refused_run_now_page(client: Client) -> None:
@@ -642,7 +643,7 @@ def test_nav_marks_rising_star_on_the_refused_run_now_page(client: Client) -> No
 
     page = client.post(RUN_URL).text
 
-    assert 'aria-current="page">Rising star<' in page
+    assert [link.text for link in nav_links(page) if link.current] == ["Rising star"]
 
 
 def test_nav_ignores_a_same_named_view_of_another_namespace() -> None:
@@ -654,12 +655,9 @@ def test_nav_ignores_a_same_named_view_of_another_namespace() -> None:
 
     page = render_to_string("base.html", request=request)
 
-    assert 'aria-current="page"' not in _nav(page)
-
-
-def _nav(page: str) -> str:
-    start = page.index('<nav class="site-nav"')
-    return page[start : page.index("</nav>", start)]
+    links = nav_links(page)
+    assert len(links) == 4
+    assert not [link for link in links if link.current]
 
 
 def test_repository_links_have_no_unsafe_markup(client: Client) -> None:

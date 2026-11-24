@@ -4,15 +4,18 @@
 {% block title %}Kho repo{% endblock %}
 
 {% block content %}
-<section class="card">
+<header class="page-header">
   <h1>Kho repo</h1>
-  <p class="muted">
+  <p>
     Mọi repo app đã tìm thấy, lọc theo nhóm và sắp theo số liệu. Nhãn nhóm do AI (Gemini) gắn chỉ dựa trên mô tả và
     từ khoá của repo — AI chỉ phân loại, không chấm điểm; mọi con số lấy từ GitHub. Di chuột lên nhãn để xem vì sao
     AI xếp như vậy.
   </p>
+</header>
 
-  <form method="get" action="{% url 'browse:repos' %}" class="filter-form browse-filters">
+<section class="card">
+
+  <form method="get" action="{% url 'browse:repos' %}" class="filter-form browse-filters" data-autosubmit data-clean-query>
     {% for field in form %}
       {% if field.errors %}<p class="error" role="alert">{{ field.label }}: {{ field.errors|join:" " }} — đang bỏ qua ô này.</p>{% endif %}
     {% endfor %}
@@ -36,8 +39,8 @@
 
     <div class="field-grid compact">
       <div class="field">
-        <label for="id_q">Từ khoá trong tên / mô tả</label>
-        <input type="search" id="id_q" name="q" value="{{ filters.q }}" maxlength="100">
+        <label for="id_q">Từ khoá trong tên / mô tả <kbd title="Bấm phím / để nhảy vào ô này">/</kbd></label>
+        <input type="search" id="id_q" name="q" value="{{ filters.q }}" maxlength="100" data-search>
       </div>
       <div class="field">
         <label for="id_language">Ngôn ngữ</label>
@@ -65,10 +68,10 @@
     </div>
 
     <div class="checks">
-      <label><input type="checkbox" name="rising_only"{% if filters.rising_only %} checked{% endif %}> Chỉ rising star (báo cáo mới nhất)</label>
-      <label><input type="checkbox" name="commercial"{% if filters.commercial %} checked{% endif %}> Giấy phép cho phép dùng thương mại (MIT, Apache, BSD…)</label>
-      <label><input type="checkbox" name="unclassified"{% if filters.unclassified %} checked{% endif %}> Chỉ repo chưa phân loại <span class="muted small">{{ unclassified_count|intcomma }}</span></label>
-      <label><input type="checkbox" name="show_suspicious"{% if filters.show_suspicious %} checked{% endif %}> Hiện cả repo nghi star giả</label>
+      <label class="chip-check"><input type="checkbox" name="rising_only"{% if filters.rising_only %} checked{% endif %}> Chỉ rising star (báo cáo mới nhất)</label>
+      <label class="chip-check"><input type="checkbox" name="commercial"{% if filters.commercial %} checked{% endif %}> Giấy phép cho phép dùng thương mại (MIT, Apache, BSD…)</label>
+      <label class="chip-check"><input type="checkbox" name="unclassified"{% if filters.unclassified %} checked{% endif %}> Chỉ repo chưa phân loại <span class="muted small">{{ unclassified_count|intcomma }}</span></label>
+      <label class="chip-check"><input type="checkbox" name="show_suspicious"{% if filters.show_suspicious %} checked{% endif %}> Hiện cả repo nghi star giả</label>
     </div>
 
     {% if filters.scan %}
@@ -78,7 +81,7 @@
 
     <div class="inline-form">
       <button type="submit">Lọc</button>
-      <a href="{% url 'browse:repos' %}">Xoá bộ lọc</a>
+      <a class="btn btn-ghost" href="{% url 'browse:repos' %}">Xoá bộ lọc</a>
     </div>
   </form>
 </section>

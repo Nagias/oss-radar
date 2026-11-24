@@ -3,14 +3,17 @@
 {% block title %}Sửa truy vấn theo dõi{% endblock %}
 
 {% block content %}
-<p><a href="{% url 'rising:watch' %}">← Về danh sách theo dõi</a></p>
+<p class="back-link"><a href="{% url 'rising:watch' %}">← Về danh sách theo dõi</a></p>
 
-<section class="card">
+<header class="page-header">
   <h1>Sửa truy vấn theo dõi</h1>
-  <p class="muted">
+  <p>
     Bỏ dấu tick ở ô «Đang bật» để tạm không quét truy vấn này mỗi ngày (vẫn giữ lại trong danh sách).
     Thay đổi có hiệu lực từ lần quét kế tiếp.
   </p>
+</header>
+
+<section class="card">
   {% url 'rising:watch_edit' watch.pk as edit_url %}
   {% include "rising/_watch_form.html" with action=edit_url submit_label="Lưu thay đổi" %}
 </section>

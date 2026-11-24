@@ -6,13 +6,16 @@
 {% block head_extra %}{% if refresh_url %}<meta http-equiv="refresh" content="10; url={{ refresh_url }}">{% endif %}{% endblock %}
 
 {% block content %}
-<section class="card">
+<header class="page-header">
   <h1>Rising star</h1>
-  <p class="muted">
+  <p>
     Repo còn nhỏ (dưới {{ max_stars|intcomma }} star) mà đang tăng star nhanh (từ {{ min_gain|intcomma }} star trở lên
     trong 7 ngày). Số tăng lấy từ lịch sử star chính thức của GitHub (ngày tính theo UTC); repo nào chưa
     xác minh được thì nằm ở mục riêng bên dưới, ghi rõ là ước lượng.
   </p>
+</header>
+
+<section class="card">
   {% include "rising/_today.html" with stop_next="report" %}
 </section>
 
@@ -64,7 +67,7 @@
 
 {% if report or days or missing_day %}
 <section class="card">
-  <form method="get" action="{% url 'rising:report' %}" class="filter-form">
+  <form method="get" action="{% url 'rising:report' %}" class="filter-form" data-autosubmit data-clean-query>
     {% for field in form %}
       {% if field.errors %}<p class="error" role="alert">{{ field.label }}: {{ field.errors|join:" " }}</p>{% endif %}
     {% endfor %}

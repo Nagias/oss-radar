@@ -57,6 +57,8 @@ tắc phải biến thành luật kiểm được, không để làm khẩu hi�
 | Việc định kỳ, lịch hằng ngày | khai đường dẫn hàm trong `settings.SCHEDULED_JOBS`; bộ nhịp `core/scheduler.py` (bật trong lệnh `runserver` của dự án) cứ 5 phút gọi trên luồng nền; mỗi hàm tự kiểm "đến lượt chưa" và phải rẻ khi chưa đến (QĐ-15) | `features/rising/services.py` (`run_daily_if_due`) |
 | Thiết kế tính năng mới | `docs/designs/YYYY-MM-DD-fNNN-<slug>.md` → chủ dự án duyệt → kế hoạch `docs/plans/` → TDD | `docs/designs/2026-10-22-f002-quet-sau.md` |
 | Gọi AI | chưa có đường — `integrations/llm/` theo QĐ-12 | — |
+| Giao diện, tương tác trên trang | token + thành phần trong `static/css/app.css`; tương tác bằng thuộc tính `data-*` (`data-autosubmit`, `data-clean-query`, `data-search`, `data-confirm`) do `static/js/app.js` xử lý — ≤ 150 dòng, tắt JS trang vẫn dùng đủ; đổi CSS/JS thì đổi số `?v=` trong `base.html` (QĐ-20) | `templates/base.html`, `features/browse/templates/browse/repos.html` |
+| Test kiểm trang HTML | đọc theo ý nghĩa bằng `tests/html.py` (`nav_links`, `buttons`, `forms`), không so nguyên chuỗi HTML | `tests/test_layout.py` |
 
 Gặp loại việc chưa có trong bảng: dừng, đề xuất đường đi + ghi QĐ trong `docs/ARCHITECTURE.md`, rồi mới làm.
 
@@ -80,6 +82,7 @@ Gặp loại việc chưa có trong bảng: dừng, đề xuất đường đi +
 | Thêm thư viện không có QĐ | phình phụ thuộc, tăng bề mặt lỗi | settings.json hỏi `uv add` |
 | Gọi API trong vòng lặp không giới hạn | khoá token, cháy quota | `CallBudget` bắt buộc khi quét + review |
 | Tạo thread / `ThreadPoolExecutor` ngoài `core/background.py` và `core/scheduler.py` | mỗi lúc chỉ một luồng ghi SQLite | ruff `TID251` |
+| Tải script, CSS, phông, ảnh từ mạng trong template/CSS/JS | app chạy local, không phụ thuộc mạng ngoài (QĐ-20) | `tests/test_guards.py` |
 | Tự khởi động việc nền trong `AppConfig.ready()` hoặc signal | chạy cả khi `migrate`, test, lệnh khác | review |
 | Tự viết vòng gọi lại hoặc `time.sleep` khi gọi GitHub | giãn nhịp/gọi lại đã có trong client | review |
 | Viết code tính năng lớn trước khi thiết kế được duyệt | làm sai thứ chủ dự án cần | quy trình mục 6 |
