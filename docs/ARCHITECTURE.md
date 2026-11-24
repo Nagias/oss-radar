@@ -35,6 +35,7 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 | QĐ-20 | Giao diện (sửa QĐ-05) | Hệ thiết kế một file CSS (token sáng + tối tự động), JS tự viết `static/js/app.js` ≤ 150 dòng chỉ tăng cường dần, phông Be Vietnam Pro đóng gói sẵn | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng |
 | QĐ-21 | Service lớn | Tách thành module trong thư mục tính năng; `services.py` chỉ xuất lại tên và vẫn là cửa công khai duy nhất | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng (`features/rising`) |
 | QĐ-22 | Trending (sửa QĐ-16) | Mọi cỡ repo, ≥ 200 star và ≥ 2% trong 7 ngày; ngân sách xác minh riêng 300 (0 khi không token); chung bảng `RisingCheck` (cột `pool`) | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng |
+| QĐ-23 | Dữ liệu dùng chung mọi trang | Context processor mỏng `features/<tên>/context_processors.py` chỉ gọi `services`, khai trong `settings.TEMPLATES` (thanh bên Góc nhìn) | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng (`features/browse`) |
 
 ---
 
@@ -235,6 +236,16 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 - **Đã loại:** Task Scheduler của Windows (lịch nằm ngoài app, phải đăng ký bằng tay; chủ dự án chọn trong
   app); Huey (QĐ-11 cũ).
 
+### QĐ-23 — Dữ liệu dùng chung mọi trang: context processor mỏng
+- Thanh bên (trong `base.html`, mọi trang) cần danh sách góc nhìn đã lưu (F-012). Truyền từ từng view thì mọi view
+  của mọi tính năng phải nhớ thêm một biến — quên một chỗ là thanh bên trống ở trang đó.
+- **Chọn:** `features/browse/context_processors.py::sidebar`, khai trong `settings.TEMPLATES`. Lớp mỏng như view:
+  đọc bộ lọc của trang Khám phá (nếu đang ở đó) rồi gọi `services.saved_views`; không nghiệp vụ.
+- **Hệ quả:** chạy ở **mọi** trang có `request` → phải rẻ (đo được 1 câu truy vấn với 50 góc nhìn). Test dựng
+  `render_to_string(..., request=...)` cũng chạy nó → cần CSDL.
+- **Đã loại:** template tag tự truy vấn CSDL (giấu truy vấn trong template, trái "template không chứa logic"); lưu góc
+  nhìn trong trình duyệt (`localStorage`) — mất khi đổi trình duyệt / xoá dữ liệu, và test không kiểm được.
+
 ### QĐ-21 — Service lớn tách module, `services.py` vẫn là cửa duy nhất
 - `features/rising/services.py` dài 1.670 dòng (nợ D-009): khó đọc, agent dễ sửa nhầm chỗ.
 - **Chọn:** tách theo nhóm việc ngay trong thư mục tính năng (`_common.py` hằng số và hàm phụ, `_runner.py` luồng
@@ -314,7 +325,7 @@ features/
   rising/                F-005 Rising star + quét hằng ngày (growth.py: hàm thuần tính star tăng)
   scoring/               F-006 Chấm điểm (rules.py: hàm thuần; services.py: gom dữ kiện, lấy hồ sơ chủ)
   taxonomy/              F-010 Phân loại repo bằng AI (categories.toml: bộ nhóm; prompt.py: hàm thuần)
-  browse/                F-010 Trang Kho repo: lọc, sắp, phân trang toàn kho
+  browse/                F-010, F-012 Trang Khám phá (3 tab), Góc nhìn đã lưu, thanh bên
 integrations/
   github/                Client GitHub (+ pacing.py: giãn nhịp, gọi lại, ngân sách). Không biết Django model.
   llm/                   Client AI qua 9router (chuẩn OpenAI) — QĐ-18.
@@ -375,6 +386,9 @@ trùng → hiển thị sắp theo star, kèm độ phủ.**
 
 Đã làm (F-005): **ảnh chụp star hằng ngày → lọc thô ứng viên → xác minh bằng lịch sử star chính thức →
 báo rising star; lượt quét hằng ngày tự chạy trong app.**
+
+Đã làm (F-011 + F-012): **trending mọi cỡ (≥ 200 star và ≥ 2% trong 7 ngày, xác minh chính thức) → trang
+Khám phá 3 tab chung ô tìm và bộ lọc → góc nhìn đã lưu mở bằng một bấm.**
 
 ---
 

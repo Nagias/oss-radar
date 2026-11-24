@@ -1,13 +1,14 @@
 """Trang Khám phá — lớp mỏng: nhận bộ lọc → gọi services → hiển thị."""
 
 from django.http import HttpRequest, HttpResponse, QueryDict
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from features.browse import services
 from features.browse.filters import SORT_LABELS, TAB_SORTS
-from features.browse.forms import BrowseForm
+from features.browse.forms import BrowseForm, SavedViewForm
+from features.browse.models import SavedView
 from features.rising import services as rising
 from features.taxonomy.services import load_taxonomy
 
@@ -43,6 +44,7 @@ def explore(request: HttpRequest) -> HttpResponse:
         "tabs": services.tab_links(filters),
         "sorts": {key: SORT_LABELS[key] for key in TAB_SORTS[filters.tab]},
         "chips": services.active_chips(filters),
+        "save": services.save_state(filters),
         "clear_url": services.clear_url(filters),
         "show_suspicious_url": services.show_suspicious_url(filters),
         "is_live": rising.today_status().is_live,
@@ -53,3 +55,46 @@ def explore(request: HttpRequest) -> HttpResponse:
         "next_url": services.page_url(filters, page.page + 1) if page.page < page.pages else None,
     }
     return render(request, "browse/explore.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def views_page(request: HttpRequest) -> HttpResponse:
+    """Trang quản lý góc nhìn; POST = lưu góc nhìn mới (từ trang Khám phá) rồi mở nó."""
+    if request.method == "POST":
+        form = SavedViewForm(request.POST)
+        if form.is_valid():
+            view = services.save_view(form.cleaned_data["name"], form.cleaned_data["query"])
+            return redirect(services.view_url(view))
+        return _render_views(request, form, status=400)
+    return _render_views(request, None)
+
+
+@require_POST
+def view_edit(request: HttpRequest, view_id: int) -> HttpResponse:
+    """Đổi tên (gửi `name`) hoặc thay bộ lọc (gửi `query`) của một góc nhìn."""
+    view = get_object_or_404(SavedView, pk=view_id)
+    data = {
+        "name": request.POST.get("name", view.name),
+        "query": request.POST.get("query", view.query),
+    }
+    form = SavedViewForm(data, instance=view)
+    if not form.is_valid():
+        return _render_views(request, form, status=400)
+    services.update_view(view, name=form.cleaned_data["name"], query=form.cleaned_data["query"])
+    if "query" in request.POST:
+        return redirect(services.view_url(view))
+    return redirect("browse:views")
+
+
+@require_POST
+def view_delete(request: HttpRequest, view_id: int) -> HttpResponse:
+    view = get_object_or_404(SavedView, pk=view_id)
+    services.delete_view(view)
+    return redirect("browse:views")
+
+
+def _render_views(
+    request: HttpRequest, form: SavedViewForm | None, *, status: int = 200
+) -> HttpResponse:
+    context = {"items": services.saved_views(), "form": form}
+    return render(request, "browse/views.html", context, status=status)

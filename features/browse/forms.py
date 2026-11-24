@@ -3,8 +3,16 @@
 from typing import Any
 
 from django import forms
+from django.http import QueryDict
 
-from features.browse.filters import DEFAULT_TAB, SORT_LABELS, TABS, BrowseFilters
+from features.browse.filters import (
+    DEFAULT_TAB,
+    SORT_LABELS,
+    TABS,
+    BrowseFilters,
+    canonical_query,
+)
+from features.browse.models import SavedView
 from features.taxonomy.services import load_taxonomy
 
 
@@ -74,3 +82,60 @@ class BrowseForm(forms.Form):
             page=data.get("page") or 1,
             view=data.get("view"),
         )
+
+
+# Giới hạn số góc nhìn: thanh bên còn đọc được, và một người dùng thật hiếm khi cần hơn.
+MAX_SAVED_VIEWS = 50
+MAX_QUERY_LENGTH = 1000
+_BAD_QUERY = "Bộ lọc không hợp lệ ({fields}) — mở lại trang Khám phá, chọn lại bộ lọc rồi lưu."
+
+
+class SavedViewForm(forms.Form):
+    """Lưu / đổi tên / cập nhật góc nhìn. `query` được kiểm bằng `BrowseForm` rồi chuẩn hoá."""
+
+    name = forms.CharField(
+        label="Tên góc nhìn",
+        max_length=60,
+        error_messages={
+            "required": "Hãy đặt tên cho góc nhìn.",
+            "max_length": "Tên góc nhìn tối đa %(limit_value)d ký tự.",
+        },
+    )
+    query = forms.CharField(label="Bộ lọc", required=False, strip=False)
+
+    def __init__(self, *args: Any, instance: SavedView | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.instance = instance
+
+    def clean_name(self) -> str:
+        name: str = self.cleaned_data["name"]
+        others = SavedView.objects.all()
+        if self.instance is not None:
+            others = others.exclude(pk=self.instance.pk)
+        # So trong Python: `casefold` hiểu chữ có dấu (SQLite `lower()` chỉ hiểu chữ ASCII).
+        if any(
+            other.casefold() == name.casefold() for other in others.values_list("name", flat=True)
+        ):
+            raise forms.ValidationError(f"Đã có góc nhìn tên «{name}» — chọn tên khác.")
+        return name
+
+    def clean_query(self) -> str:
+        raw: str = self.cleaned_data.get("query") or ""
+        if len(raw) > MAX_QUERY_LENGTH:
+            raise forms.ValidationError(_BAD_QUERY.format(fields="dài quá 1.000 ký tự"))
+        browse = BrowseForm(QueryDict(raw))
+        if not browse.is_valid():
+            fields = ", ".join(str(browse.fields[name].label or name) for name in browse.errors)
+            raise forms.ValidationError(_BAD_QUERY.format(fields=fields))
+        canonical = canonical_query(browse.filters())
+        if len(canonical) > MAX_QUERY_LENGTH:
+            raise forms.ValidationError(_BAD_QUERY.format(fields="dài quá 1.000 ký tự"))
+        return canonical
+
+    def clean(self) -> dict[str, Any]:
+        data = super().clean() or {}
+        if self.instance is None and SavedView.objects.count() >= MAX_SAVED_VIEWS:
+            raise forms.ValidationError(
+                f"Chỉ lưu được tối đa {MAX_SAVED_VIEWS} góc nhìn — xoá bớt ở trang Góc nhìn đã lưu."
+            )
+        return data

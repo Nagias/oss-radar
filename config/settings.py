@@ -84,6 +84,8 @@ TEMPLATES = [
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",
+                # Danh sách góc nhìn ở thanh bên mọi trang (F-012, QĐ-23).
+                "features.browse.context_processors.sidebar",
             ],
         },
     },

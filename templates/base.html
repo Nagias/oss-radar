@@ -22,6 +22,13 @@
         <a class="nav-item" href="{% url 'rising:watch' %}"{% if ns == 'rising' %} aria-current="page"{% endif %}>Theo dõi</a>
       </nav>
       {% endwith %}
+      <section class="sidebar-section">
+        <p class="sidebar-heading">Góc nhìn</p>
+        <nav class="sidebar-nav" aria-label="Góc nhìn đã lưu">
+          {% for item in saved_views %}<a class="nav-item" href="{{ item.url }}" title="{{ item.summary }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.view.name }}</a>{% endfor %}
+          <a class="nav-item nav-manage" href="{% url 'browse:views' %}"{% if request.resolver_match.view_name == 'browse:views' %} aria-current="page"{% endif %}>Quản lý</a>
+        </nav>
+      </section>
       {% block sidebar_extra %}{% endblock %}
       <p class="sidebar-foot">Chạy tại máy bạn · số liệu lấy trực tiếp từ GitHub API</p>
     </aside>

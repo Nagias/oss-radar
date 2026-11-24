@@ -110,6 +110,29 @@
   </div>
 {% endif %}
 
+<div class="save-view">
+  {% if save.opened and not save.changed %}
+    <p class="muted small">Đang xem góc nhìn «{{ save.opened.name }}».</p>
+  {% elif save.opened %}
+    <form method="post" action="{% url 'browse:view_edit' save.opened.pk %}" class="inline-form">
+      {% csrf_token %}
+      <input type="hidden" name="query" value="{{ save.query }}">
+      <button type="submit" class="secondary btn-sm">Cập nhật «{{ save.opened.name }}»</button>
+      <span class="muted small">Bộ lọc đã khác góc nhìn đang mở.</span>
+    </form>
+  {% elif save.matching %}
+    <p class="muted small">Đang xem góc nhìn «{{ save.matching.name }}».</p>
+  {% else %}
+    <form method="post" action="{% url 'browse:views' %}" class="inline-form">
+      {% csrf_token %}
+      <input type="hidden" name="query" value="{{ save.query }}">
+      <label class="sr-only" for="id_view_name">Tên góc nhìn</label>
+      <input type="text" id="id_view_name" name="name" maxlength="60" required placeholder="Đặt tên, ví dụ: Video cho marketer">
+      <button type="submit" class="secondary btn-sm">Lưu góc nhìn</button>
+    </form>
+  {% endif %}
+</div>
+
 <section>
   {% if page.tab == "all" %}
     {% include "browse/_all_rows.html" %}
