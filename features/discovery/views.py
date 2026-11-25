@@ -12,8 +12,8 @@ from features.discovery import services
 from features.discovery.forms import ResumeForm, ScanForm
 from features.discovery.models import ScanRun
 
-# Trang lần quét chỉ in 500 repo nhiều star nhất; xem đủ cả lần quét ở trang Kho repo
-# (`/repos/?scan=<id>`, F-010).
+# Trang lần quét chỉ in 500 repo nhiều star nhất; xem đủ cả lần quét ở tab Toàn kho của Khám phá
+# (`/?tab=all&scan=<id>`, F-010, F-012).
 RESULTS_SHOWN_LIMIT = 500
 
 

@@ -58,8 +58,9 @@ tắc phải biến thành luật kiểm được, không để làm khẩu hi�
 | Việc định kỳ, lịch hằng ngày | khai đường dẫn hàm trong `settings.SCHEDULED_JOBS`; bộ nhịp `core/scheduler.py` (bật trong lệnh `runserver` của dự án) cứ 5 phút gọi trên luồng nền; mỗi hàm tự kiểm "đến lượt chưa" và phải rẻ khi chưa đến (QĐ-15) | `features/rising/services.py` (`run_daily_if_due`) |
 | Thiết kế tính năng mới | `docs/designs/YYYY-MM-DD-fNNN-<slug>.md` → chủ dự án duyệt → kế hoạch `docs/plans/` → TDD | `docs/designs/2026-10-22-f002-quet-sau.md` |
 | Gọi AI | chưa có đường — `integrations/llm/` theo QĐ-12 | — |
-| Giao diện, tương tác trên trang | token + thành phần trong `static/css/app.css`; tương tác bằng thuộc tính `data-*` (`data-autosubmit`, `data-clean-query`, `data-search`, `data-confirm`) do `static/js/app.js` xử lý — ≤ 150 dòng, tắt JS trang vẫn dùng đủ; đổi CSS/JS thì đổi số `?v=` trong `base.html` (QĐ-20) | `templates/base.html`, `features/browse/templates/browse/repos.html` |
+| Giao diện, tương tác trên trang | token + thành phần trong `static/css/app.css`; tương tác bằng thuộc tính `data-*` (`data-autosubmit`, `data-clean-query`, `data-search`, `data-confirm`) do `static/js/app.js` xử lý — ≤ 150 dòng, tắt JS trang vẫn dùng đủ; đổi CSS/JS thì đổi số `?v=` trong `base.html` (QĐ-20) | `templates/base.html`, `features/browse/templates/browse/explore.html` |
 | Test kiểm trang HTML | đọc theo ý nghĩa bằng `tests/html.py` (`nav_links`, `buttons`, `forms`), không so nguyên chuỗi HTML | `tests/test_layout.py` |
+| Dữ liệu dùng chung cho mọi trang (thanh bên) | context processor mỏng `features/<tên>/context_processors.py` chỉ gọi `services`, khai trong `settings.TEMPLATES`; rẻ (vài câu truy vấn) vì chạy ở mọi trang (QĐ-23) | `features/browse/context_processors.py` |
 
 Gặp loại việc chưa có trong bảng: dừng, đề xuất đường đi + ghi QĐ trong `docs/ARCHITECTURE.md`, rồi mới làm.
 

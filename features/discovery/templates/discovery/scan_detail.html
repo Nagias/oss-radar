@@ -88,7 +88,7 @@
 {% if scored.shown or scored.hidden %}
 <section>
   <h2>Kết quả, sắp theo star</h2>
-  <p><a href="{% url 'browse:repos' %}?scan={{ scan.pk }}">Xem cả {{ scan.fetched_count|intcomma }} repo của lần quét này ở Kho repo</a> — lọc theo nhóm, sắp theo nhiều cách, phân trang.</p>
+  <p><a href="{% url 'browse:explore' %}?tab=all&amp;scan={{ scan.pk }}">Xem cả {{ scan.fetched_count|intcomma }} repo của lần quét này ở Khám phá</a> — lọc theo nhóm, sắp theo nhiều cách, phân trang.</p>
   {% if scan.fetched_count > results_limit %}
     <p class="muted">Đang xét {{ results_limit }} repo nhiều star nhất trên {{ scan.fetched_count|intcomma }} repo đã lấy{% if scored.hidden %} (trong đó {{ scored.hidden|length }} repo nghi star giả bị ẩn ở cuối bảng){% endif %}.</p>
   {% endif %}

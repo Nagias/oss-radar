@@ -138,6 +138,21 @@ from features.rising.daily_run import (
 from features.rising.daily_run import (
     run_daily_if_due as run_daily_if_due,
 )
+from features.rising.growth import (
+    RISING_MAX_STARS as RISING_MAX_STARS,
+)
+from features.rising.growth import (
+    RISING_MIN_GAIN_7D as RISING_MIN_GAIN_7D,
+)
+from features.rising.growth import (
+    TRENDING_MIN_GAIN_7D as TRENDING_MIN_GAIN_7D,
+)
+from features.rising.growth import (
+    TRENDING_MIN_PERCENT_7D as TRENDING_MIN_PERCENT_7D,
+)
+from features.rising.models import (
+    DailyRun as DailyRun,
+)
 from features.rising.overview import (
     HEADLINE_NO_RUN_EARLY as HEADLINE_NO_RUN_EARLY,
 )
@@ -175,6 +190,12 @@ from features.rising.overview import (
     watch_overview as watch_overview,
 )
 from features.rising.report import (
+    KIND_RISING as KIND_RISING,
+)
+from features.rising.report import (
+    KIND_TRENDING as KIND_TRENDING,
+)
+from features.rising.report import (
     RISING_PAGE_SIZE as RISING_PAGE_SIZE,
 )
 from features.rising.report import (
@@ -188,6 +209,9 @@ from features.rising.report import (
 )
 from features.rising.report import (
     DailyReport as DailyReport,
+)
+from features.rising.report import (
+    LatestRows as LatestRows,
 )
 from features.rising.report import (
     PageInfo as PageInfo,
@@ -205,17 +229,17 @@ from features.rising.report import (
     latest_gain_subquery as latest_gain_subquery,
 )
 from features.rising.report import (
+    latest_report_rows as latest_report_rows,
+)
+from features.rising.report import (
     latest_report_run as latest_report_run,
-)
-from features.rising.report import (
-    latest_rising_repository_ids as latest_rising_repository_ids,
-)
-from features.rising.report import (
-    latest_trending_repository_ids as latest_trending_repository_ids,
 )
 from features.rising.report import (
     report_days as report_days,
 )
 from features.rising.report import (
     report_run_for as report_run_for,
+)
+from features.rising.report import (
+    reported_run as reported_run,
 )

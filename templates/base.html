@@ -8,21 +8,27 @@
   <title>{% block title %}Trang chủ{% endblock %} · OSS Radar</title>
   <link rel="preload" href="{% static 'fonts/be-vietnam-pro/be-vietnam-pro-400-vietnamese.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{% static 'css/fonts.css' %}?v=2026-11-23">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=2026-11-23">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=2026-11-24c">
   {% block head_extra %}{% endblock %}
 </head>
 <body>
   <div class="app">
     <aside class="sidebar">
-      <a class="brand" href="{% url 'discovery:home' %}"><span class="brand-mark" aria-hidden="true"></span>OSS Radar</a>
-      {% with ns=request.resolver_match.namespace view=request.resolver_match.view_name %}
+      <a class="brand" href="{% url 'browse:explore' %}"><span class="brand-mark" aria-hidden="true"></span>OSS Radar</a>
+      {% with ns=request.resolver_match.namespace %}
       <nav class="sidebar-nav" aria-label="Các trang chính">
+        <a class="nav-item" href="{% url 'browse:explore' %}"{% if ns == 'browse' %} aria-current="page"{% endif %}>Khám phá</a>
         <a class="nav-item" href="{% url 'discovery:home' %}"{% if ns == 'discovery' %} aria-current="page"{% endif %}>Quét</a>
-        <a class="nav-item" href="{% url 'rising:report' %}"{% if ns == 'rising' and view != 'rising:watch' and view != 'rising:watch_edit' %} aria-current="page"{% endif %}>Rising star</a>
-        <a class="nav-item" href="{% url 'browse:repos' %}"{% if ns == 'browse' %} aria-current="page"{% endif %}>Kho repo</a>
-        <a class="nav-item" href="{% url 'rising:watch' %}"{% if view == 'rising:watch' or view == 'rising:watch_edit' %} aria-current="page"{% endif %}>Theo dõi</a>
+        <a class="nav-item" href="{% url 'rising:watch' %}"{% if ns == 'rising' %} aria-current="page"{% endif %}>Theo dõi</a>
       </nav>
       {% endwith %}
+      <section class="sidebar-section">
+        <p class="sidebar-heading">Góc nhìn</p>
+        <nav class="sidebar-nav" aria-label="Góc nhìn đã lưu">
+          {% for item in saved_views %}<a class="nav-item" href="{{ item.url }}" title="{{ item.summary }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.view.name }}</a>{% endfor %}
+          <a class="nav-item nav-manage" href="{% url 'browse:views' %}"{% if request.resolver_match.view_name == 'browse:views' %} aria-current="page"{% endif %}>Quản lý</a>
+        </nav>
+      </section>
       {% block sidebar_extra %}{% endblock %}
       <p class="sidebar-foot">Chạy tại máy bạn · số liệu lấy trực tiếp từ GitHub API</p>
     </aside>

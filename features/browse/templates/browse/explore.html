@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Khám phá{% endblock %}
+
+{% block content %}
+<header class="page-header">
+  <h1>Khám phá</h1>
+  <p>
+    Repo đang hot (Trending), repo nhỏ đang lên nhanh (Đang lên) và cả kho, chung một ô tìm và một bộ lọc. Số star và số
+    tăng lấy từ GitHub; nhãn nhóm do AI gắn chỉ dựa trên mô tả và từ khoá của repo. Di chuột lên điểm hoặc nhãn để xem
+    vì sao.
+  </p>
+</header>
+
+{% if is_live %}
+  <p class="notice">
+    Lượt quét hôm nay đang chạy — danh sách dưới đây là của báo cáo trước.
+    <a href="{% url 'rising:watch' %}">Xem tiến độ ở trang Theo dõi</a>.
+  </p>
+{% endif %}
+
+<nav class="tabs" aria-label="Loại danh sách">
+  {% for tab in tabs %}<a href="{{ tab.url }}"{% if tab.current %} aria-current="page"{% endif %}>{{ tab.label }}</a>{% endfor %}
+</nav>
+
+{% if page.run %}
+  <p class="muted small report-line">
+    Báo cáo ngày {{ page.run.day|date:"d/m/Y" }}{% if page.window_start %} · số tăng star theo lịch sử GitHub, ngày UTC {{ page.window_start|date:"d/m" }}–{{ page.run.window_end|date:"d/m" }}{% endif %}
+  </p>
+{% endif %}
+
+<section class="card">
+  <form method="get" action="{% url 'browse:explore' %}" class="filter-form browse-filters" data-autosubmit data-clean-query>
+    {% for field in form %}
+      {% if field.errors %}<p class="error" role="alert">{{ field.label }}: {{ field.errors|join:" " }} — đang bỏ qua ô này.</p>{% endif %}
+    {% endfor %}
+    <input type="hidden" name="tab" value="{{ filters.tab }}">
+    {% if filters.view %}<input type="hidden" name="view" value="{{ filters.view }}">{% endif %}
+
+    <div class="search-row">
+      <div class="field search-field">
+        <label for="id_q">Tìm trong tên, mô tả, chủ đề <kbd title="Bấm phím / để nhảy vào ô này">/</kbd></label>
+        <input type="search" id="id_q" name="q" value="{{ filters.q }}" maxlength="100" placeholder="ví dụ: video agent" data-search>
+      </div>
+      <div class="field">
+        <label for="id_sort">Sắp theo</label>
+        <select id="id_sort" name="sort">
+          {% for value, label in sorts.items %}<option value="{{ value }}"{% if value == page.sort %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button type="submit">Lọc</button>
+    </div>
+
+    <details class="filter-more"{% if filters_open %} open{% endif %}>
+    <summary>Lọc thêm — nhóm, ngôn ngữ, số star, ngày tạo, giấy phép</summary>
+    <fieldset class="group-filter">
+      <legend>Dành cho ai</legend>
+      {% for category, count in audience %}
+        <label class="chip-check"><input type="checkbox" name="audience" value="{{ category.code }}"{% if category.code in filters.audience %} checked{% endif %}> {{ category.name }} <span class="muted small">{{ count|intcomma }}</span></label>
+      {% endfor %}
+    </fieldset>
+    <fieldset class="group-filter">
+      <legend>Làm được gì</legend>
+      {% for category, count in aspects %}
+        <label class="chip-check"><input type="checkbox" name="aspects" value="{{ category.code }}"{% if category.code in filters.aspects %} checked{% endif %}> {{ category.name }} <span class="muted small">{{ count|intcomma }}</span></label>
+      {% endfor %}
+    </fieldset>
+    <p class="muted small">
+      Chọn nhiều nhóm trong cùng một ô là "hoặc"; chọn ở cả hai ô là "và" — ví dụ (Marketer hoặc Nhà sáng tạo) và Video.
+      Nhiều từ trong ô tìm là "và": repo phải khớp mọi từ. Số cạnh mỗi nhóm đếm cả kho.
+    </p>
+
+    <div class="field-grid compact">
+      <div class="field">
+        <label for="id_language">Ngôn ngữ</label>
+        <input type="text" id="id_language" name="language" value="{{ filters.language }}" list="languages" maxlength="100">
+        <datalist id="languages">{% for language in page.languages %}<option value="{{ language }}">{% endfor %}</datalist>
+      </div>
+      <div class="field">
+        <label for="id_min_stars">Star tối thiểu</label>
+        <input type="number" id="id_min_stars" name="min_stars" value="{{ form.min_stars.value|default_if_none:'' }}" min="0">
+      </div>
+      <div class="field">
+        <label for="id_max_stars">Star tối đa</label>
+        <input type="number" id="id_max_stars" name="max_stars" value="{{ form.max_stars.value|default_if_none:'' }}" min="0">
+      </div>
+      <div class="field">
+        <label for="id_created_days">Tạo trong (ngày gần đây)</label>
+        <input type="number" id="id_created_days" name="created_days" value="{{ form.created_days.value|default_if_none:'' }}" min="1">
+      </div>
+    </div>
+
+    <div class="checks">
+      <label class="chip-check"><input type="checkbox" name="commercial"{% if filters.commercial %} checked{% endif %}> Giấy phép cho phép dùng thương mại (MIT, Apache, BSD…)</label>
+      <label class="chip-check"><input type="checkbox" name="unclassified"{% if filters.unclassified %} checked{% endif %}> Chỉ repo chưa phân loại <span class="muted small">{{ unclassified_count|intcomma }}</span></label>
+      <label class="chip-check"><input type="checkbox" name="show_suspicious"{% if filters.show_suspicious %} checked{% endif %}> Hiện cả repo nghi star giả</label>
+    </div>
+    </details>
+
+    {% if filters.scan %}
+      <input type="hidden" name="scan" value="{{ filters.scan }}">
+      <p class="notice">Chỉ hiện repo của <a href="{% url 'discovery:scan_detail' filters.scan %}">lần quét #{{ filters.scan }}</a>.</p>
+    {% endif %}
+  </form>
+</section>
+
+{% if chips %}
+  <div class="chips" role="group" aria-label="Bộ lọc đang bật">
+    {% for chip in chips %}<a class="chip chip-remove" href="{{ chip.remove_url }}" title="Gỡ bộ lọc này">{{ chip.label }} <span aria-hidden="true">✕</span></a>{% endfor %}
+    <a class="btn btn-ghost btn-sm" href="{{ clear_url }}">Xoá tất cả</a>
+  </div>
+{% endif %}
+
+<div class="save-view">
+  {% if save.scan_limited %}
+    <p class="muted small">Góc nhìn không lưu lần quét — bỏ lọc theo lần quét để lưu góc nhìn.</p>
+  {% elif save.opened and not save.changed %}
+    <p class="muted small">Đang xem góc nhìn «{{ save.opened.name }}».</p>
+  {% elif save.opened %}
+    <form method="post" action="{% url 'browse:view_edit' save.opened.pk %}" class="inline-form">
+      {% csrf_token %}
+      <input type="hidden" name="query" value="{{ save.query }}">
+      <button type="submit" class="secondary btn-sm">Cập nhật «{{ save.opened.name }}»</button>
+      <span class="muted small">Bộ lọc đã khác góc nhìn đang mở.</span>
+    </form>
+  {% elif save.matching %}
+    <p class="muted small">Đang xem góc nhìn «{{ save.matching.name }}».</p>
+  {% else %}
+    <form method="post" action="{% url 'browse:views' %}" class="inline-form">
+      {% csrf_token %}
+      <input type="hidden" name="query" value="{{ save.query }}">
+      <label class="sr-only" for="id_view_name">Tên góc nhìn</label>
+      <input type="text" id="id_view_name" name="name" maxlength="60" required placeholder="Đặt tên, ví dụ: Video cho marketer">
+      <button type="submit" class="secondary btn-sm">Lưu góc nhìn</button>
+    </form>
+  {% endif %}
+</div>
+
+<section>
+  {% if page.tab == "all" %}
+    {% include "browse/_all_rows.html" %}
+  {% elif not page.run %}
+    <div class="card empty">
+      <h2>Chưa có báo cáo nào</h2>
+      <p>
+        Danh sách Trending và Đang lên lấy từ lượt quét hằng ngày (tự chạy sau 7:00 sáng khi app đang mở). Xem hoặc chạy
+        lượt đầu tiên ở <a href="{% url 'rising:watch' %}">trang Theo dõi</a>; trong lúc chờ, tab Toàn kho vẫn dùng được.
+      </p>
+    </div>
+  {% elif page.trending_skipped and not page.report_rows %}
+    <div class="card empty">
+      <h2>Báo cáo ngày {{ page.run.day|date:"d/m/Y" }} không xác minh repo trending</h2>
+      <p>
+        Lượt đó chạy khi chưa có GITHUB_TOKEN (không token thì app dành lượt gọi cho repo đang lên), hoặc chạy trước khi app
+        có tính năng trending. Điền token vào .env rồi chờ lượt sau, hoặc xem tab Đang lên.
+      </p>
+    </div>
+  {% else %}
+    {% include "browse/_report_rows.html" %}
+  {% endif %}
+</section>
+{% endblock %}

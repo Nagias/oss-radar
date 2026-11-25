@@ -1,4 +1,4 @@
-{# Trạng thái lượt hôm nay + nút Chạy ngay / Chạy tiếp / Dừng. Dùng chung hai trang; cần `stop_next`. #}
+{# Trạng thái lượt hôm nay + nút Chạy ngay / Chạy tiếp / Dừng (trang Theo dõi). #}
 <div class="today">
   <p class="today-line{% if status.run.status == 'failed' %} today-failed{% endif %}">{{ status.headline }}</p>
 
@@ -30,7 +30,6 @@
   {% if status.can_stop %}
     <form method="post" action="{% url 'rising:stop' status.run.pk %}" class="inline-form">
       {% csrf_token %}
-      <input type="hidden" name="next" value="{{ stop_next }}">
       <button type="submit" class="secondary">Dừng</button>
       <span class="muted small">Trang tự cập nhật mỗi 10 giây.</span>
     </form>

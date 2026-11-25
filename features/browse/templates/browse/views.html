@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Góc nhìn đã lưu{% endblock %}
+
+{% block content %}
+<header class="page-header">
+  <h1>Góc nhìn đã lưu</h1>
+  <p>
+    Mỗi góc nhìn là một tổ hợp tab, bộ lọc và cách sắp của trang Khám phá có đặt tên, mở lại bằng một bấm ở thanh bên.
+    Góc nhìn chỉ lưu cách lọc, không lưu danh sách repo: mở ra lúc nào cũng là số liệu mới nhất.
+  </p>
+</header>
+
+{% if form.errors %}
+  <div class="error" role="alert">
+    {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+    {% for field in form %}{% for error in field.errors %}<p>{{ error }}</p>{% endfor %}{% endfor %}
+  </div>
+{% endif %}
+
+{% if items %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tên</th><th>Bộ lọc</th><th>Đổi tên</th><th></th></tr></thead>
+      <tbody>
+        {% for item in items %}
+          <tr>
+            <td><a href="{{ item.url }}"><strong>{{ item.view.name }}</strong></a></td>
+            <td class="small muted">{{ item.summary }}</td>
+            <td>
+              <form method="post" action="{% url 'browse:view_edit' item.view.pk %}" class="inline-form compact-form">
+                {% csrf_token %}
+                <label class="sr-only" for="rename-{{ item.view.pk }}">Tên mới cho «{{ item.view.name }}»</label>
+                <input type="text" id="rename-{{ item.view.pk }}" name="name" value="{{ item.view.name }}" maxlength="60" required>
+                <button type="submit" class="secondary btn-sm">Đổi tên</button>
+              </form>
+            </td>
+            <td>
+              <form method="post" action="{% url 'browse:view_delete' item.view.pk %}" data-confirm="Xoá góc nhìn «{{ item.view.name }}»? Repo không bị ảnh hưởng.">
+                {% csrf_token %}
+                <button type="submit" class="secondary btn-sm">Xoá</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="card empty">
+    <h2>Chưa có góc nhìn nào</h2>
+    <p>
+      Mở <a href="{% url 'browse:explore' %}">trang Khám phá</a>, chọn tab và bộ lọc bạn hay dùng (ví dụ: Đang lên · Làm
+      được gì: Video), đặt tên rồi bấm <strong>Lưu góc nhìn</strong>.
+    </p>
+  </div>
+{% endif %}
+{% endblock %}

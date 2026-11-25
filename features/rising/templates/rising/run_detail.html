@@ -1,32 +1,22 @@
 {% extends "base.html" %}
 {% load humanize %}
 
-{% block title %}Rising star{% endblock %}
-
-{% block head_extra %}{% if refresh_url %}<meta http-equiv="refresh" content="10; url={{ refresh_url }}">{% endif %}{% endblock %}
+{% block title %}Báo cáo {{ report.run.day|date:"d/m/Y" }}{% endblock %}
 
 {% block content %}
+<p class="back-link"><a href="{% url 'rising:watch' %}">← Về trang Theo dõi</a></p>
 <header class="page-header">
-  <h1>Rising star</h1>
+  <h1>Báo cáo lượt quét ngày {{ report.run.day|date:"d/m/Y" }}</h1>
   <p>
-    Repo còn nhỏ (dưới {{ max_stars|intcomma }} star) mà đang tăng star nhanh (từ {{ min_gain|intcomma }} star trở lên
-    trong 7 ngày). Số tăng lấy từ lịch sử star chính thức của GitHub (ngày tính theo UTC); repo nào chưa
-    xác minh được thì nằm ở mục riêng bên dưới, ghi rõ là ước lượng.
+    Chi tiết một lượt quét hằng ngày: repo còn nhỏ (dưới {{ max_stars|intcomma }} star) mà đang tăng star nhanh (từ
+    {{ min_gain|intcomma }} star trở lên trong 7 ngày), lý do từng repo có mặt, và các ứng viên chưa xác minh được. Số
+    tăng lấy từ lịch sử star chính thức của GitHub (ngày tính theo UTC).
   </p>
 </header>
 
-<section class="card">
-  {% include "rising/_today.html" with stop_next="report" %}
-</section>
-
-{% if missing_day %}
-  <p class="notice">Chưa có báo cáo cho ngày {{ missing_day|date:"d/m/Y" }}.</p>
-{% endif %}
-
-{% if report %}
 <section>
   <h2>
-    Báo cáo ngày {{ report.run.day|date:"d/m/Y" }}
+    Tóm tắt lượt
     <span class="status status-{{ report.run.status }}">{{ report.run.get_status_display }}</span>
   </h2>
 
@@ -36,10 +26,10 @@
     <li>Ứng viên: <strong>{{ report.run.candidate_count|intcomma }}</strong> — đã xác minh <strong>{{ report.verified_count|intcomma }}</strong>, chưa xác minh <strong>{{ report.unverified_page.total|intcomma }}</strong></li>
     <li><strong>{{ report.run.insufficient_count|intcomma }}</strong> chưa đủ dữ liệu</li>
     <li><strong>{{ report.run.rising_count|intcomma }}</strong> rising star{% if report.hidden_rising_count %} (đã ẩn {{ report.hidden_rising_count }} nghi star giả){% endif %}</li>
-    <li><strong>{{ report.run.trending_count|intcomma }}</strong> repo trending (mọi cỡ, xem ở Kho repo)</li>
+    <li><strong>{{ report.run.trending_count|intcomma }}</strong> repo trending (mọi cỡ){% if is_latest %} — <a href="{% url 'browse:explore' %}?tab=trending">xem ở Khám phá</a>{% endif %}</li>
   </ul>
 
-  {% if report.run.problems and report.run.pk != status.run.pk %}
+  {% if report.run.problems %}
     <details class="problems">
       <summary>Chỗ còn sót của lượt này ({{ report.run.problems|length }})</summary>
       <ul>
@@ -64,24 +54,13 @@
     </details>
   {% endif %}
 </section>
-{% endif %}
 
-{% if report or days or missing_day %}
 <section class="card">
-  <form method="get" action="{% url 'rising:report' %}" class="filter-form" data-autosubmit data-clean-query>
+  <form method="get" action="{% url 'rising:run_detail' report.run.pk %}" class="filter-form" data-autosubmit data-clean-query>
     {% for field in form %}
       {% if field.errors %}<p class="error" role="alert">{{ field.label }}: {{ field.errors|join:" " }}</p>{% endif %}
     {% endfor %}
     <div class="field-grid compact">
-      <div class="field">
-        <label for="{{ form.day.id_for_label }}">{{ form.day.label }}</label>
-        <select name="day" id="{{ form.day.id_for_label }}">
-          <option value=""{% if not selected_day %} selected{% endif %}>Mới nhất</option>
-          {% for day in days %}
-            <option value="{{ day|date:'Y-m-d' }}"{% if day == selected_day %} selected{% endif %}>{{ day|date:"d/m/Y" }}</option>
-          {% endfor %}
-        </select>
-      </div>
       <div class="field">
         <label for="{{ form.max_stars.id_for_label }}">{{ form.max_stars.label }}</label>
         {{ form.max_stars }}
@@ -116,9 +95,7 @@
     </div>
   </form>
 </section>
-{% endif %}
 
-{% if report %}
 <section id="rising">
   <h2>Bảng rising star ({{ report.rising_page.total|intcomma }}){% if rising_pager %} <span class="muted small">· Trang {{ report.rising_page.page }}/{{ report.rising_page.pages }}</span>{% endif %}</h2>
   {% if report.rising %}
@@ -256,18 +233,4 @@
 </section>
 {% endif %}
 
-{% elif not missing_day %}
-<section class="card">
-  <h2>Chưa có báo cáo nào</h2>
-  <p>
-    Lượt quét hằng ngày tự chạy sau 7:00 sáng khi app đang mở.
-    {% if status.can_run_now %}
-      Muốn có báo cáo đầu tiên ngay, bấm {{ status.run_now_label }} ở trên (khoảng 30 phút nếu có token, khoảng 1 giờ
-      nếu không có).
-    {% elif status.is_live %}
-      Lượt hôm nay đang chạy — báo cáo sẽ hiện ở đây khi nó xong.
-    {% endif %}
-  </p>
-</section>
-{% endif %}
 {% endblock %}

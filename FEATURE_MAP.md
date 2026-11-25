@@ -14,11 +14,12 @@ test ở đâu, đang nợ gì.
 | Mã | Tính năng | Trạng thái | Thư mục | Lối vào | Test chính | Nợ |
 |---|---|---|---|---|---|---|
 | F-001 | Quét GitHub theo truy vấn → lưu không trùng → xem sắp theo star | Đã gộp vào F-002 (= mức Nhanh) | `features/discovery/` | như F-002 | `features/discovery/tests/` | — |
-| F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py`, `test_auto_resume.py` | — |
-| F-005 | Rising star + lượt quét hằng ngày: ảnh chụp star, lọc thô, xác minh bằng lịch sử star chính thức, lịch chạy trong app, chạy bù, tự chạy tiếp | Chạy thật | `features/rising/` | Web `/rising/`, `/rising/watch/`, nút Chạy ngay/Chạy tiếp/Dừng; lệnh `manage.py daily`; tự chạy sau 7:00 khi app mở | `features/rising/tests/test_daily_run.py`, `test_verify.py`, `test_e2e.py` | — |
-| F-006 | Chấm điểm Chất lượng / Tiềm năng có giải thích, lọc star giả (ẩn "Nghi cao", có nút hiện), hồ sơ chủ repo cho rising star | Chạy thật | `features/scoring/` | Cột điểm ở `/rising/` và `/scans/<id>/`; bước "Lấy hồ sơ chủ repo" của lượt hằng ngày | `features/scoring/tests/`, `features/rising/tests/test_owners.py` | — |
-| F-010 | Phân loại repo theo nhóm bằng AI (Gemini qua 9router) + trang Kho repo lọc và sắp toàn kho | Chạy thật | `features/taxonomy/`, `features/browse/` | Web `/repos/`; nhãn ở `/rising/` và `/scans/<id>/`; lệnh `manage.py classify` | `features/taxonomy/tests/`, `features/browse/tests/` | — |
-| F-011 | Trending mọi cỡ: repo từ 1.000 star (và repo nhỏ tăng mạnh) tăng ≥ 200 star và ≥ 2% trong 7 ngày, xác minh bằng lịch sử star chính thức, ngân sách riêng | Chạy thật | `features/rising/` | Bước 7 "Xác minh trending" của lượt hằng ngày; ô "Chỉ trending" ở `/repos/`; cột Trending ở `/rising/watch/`; lệnh `manage.py daily` | `features/rising/tests/test_trending.py`, `test_growth.py` | — |
+| F-002 | Quét sâu: chia lát vượt trần 1.000 kết quả, chạy nền, ngân sách, giãn nhịp, dừng/tiếp tục, độ phủ | Chạy thật | `features/discovery/` | Web `/scan/`, `/scans/<id>/`, nút Dừng/Tiếp tục; lệnh `manage.py scan` | `features/discovery/tests/test_deep_scan.py`, `test_e2e.py`, `test_auto_resume.py` | — |
+| F-005 | Rising star + lượt quét hằng ngày: ảnh chụp star, lọc thô, xác minh bằng lịch sử star chính thức, lịch chạy trong app, chạy bù, tự chạy tiếp | Chạy thật | `features/rising/` | Web `/rising/watch/` (thẻ báo cáo mới nhất, lịch sử lượt), `/rising/runs/<id>/` (chi tiết lượt), tab Đang lên ở `/`, nút Chạy ngay/Chạy tiếp/Dừng; lệnh `manage.py daily`; tự chạy sau 7:00 khi app mở | `features/rising/tests/test_daily_run.py`, `test_verify.py`, `test_e2e.py` | — |
+| F-006 | Chấm điểm Chất lượng / Tiềm năng có giải thích, lọc star giả (ẩn "Nghi cao", có nút hiện), hồ sơ chủ repo cho rising star | Chạy thật | `features/scoring/` | Cột điểm ở trang Khám phá `/`, chi tiết lượt `/rising/runs/<id>/` và `/scans/<id>/`; bước "Lấy hồ sơ chủ repo" của lượt hằng ngày | `features/scoring/tests/`, `features/rising/tests/test_owners.py` | — |
+| F-010 | Phân loại repo theo nhóm bằng AI (Gemini qua 9router) + trang Kho repo lọc và sắp toàn kho | Chạy thật | `features/taxonomy/`, `features/browse/` | Web `/?tab=all` (tab Toàn kho của Khám phá); nhãn ở mọi bảng repo; lệnh `manage.py classify` | `features/taxonomy/tests/`, `features/browse/tests/` | — |
+| F-011 | Trending mọi cỡ: repo từ 1.000 star (và repo nhỏ tăng mạnh) tăng ≥ 200 star và ≥ 2% trong 7 ngày, xác minh bằng lịch sử star chính thức, ngân sách riêng | Chạy thật | `features/rising/` | Bước 7 "Xác minh trending" của lượt hằng ngày; tab Trending ở `/` (Khám phá); cột Trending ở `/rising/watch/`; lệnh `manage.py daily` | `features/rising/tests/test_trending.py`, `test_growth.py` | — |
+| F-012 | Trang Khám phá: 3 tab Trending / Đang lên / Toàn kho chung ô tìm (nhiều từ, cả chủ đề) và bộ lọc, chip gỡ từng ô; Góc nhìn đã lưu ở thanh bên | Chạy thật | `features/browse/` | Web `/` (`?tab=trending\|rising\|all`), `/views/`; thanh bên mục Góc nhìn; `/repos/`, `/rising/` cũ chuyển hướng 302 | `features/browse/tests/test_explore.py`, `test_saved_views.py`, `test_canonical.py`, `test_context_processor.py` | — |
 
 ## Mô-đun lõi và cửa ra ngoài
 
@@ -32,11 +33,47 @@ test ở đâu, đang nợ gì.
 
 ## Chi tiết từng tính năng
 
+### F-012 — Trang Khám phá và Góc nhìn đã lưu
+- **Phục vụ vế nào của mục tiêu:** tìm đúng (một ô tìm nhiều từ khớp cả chủ đề, lọc nhóm / ngôn ngữ / star / giấy
+  phép áp được cho repo trending và đang lên), không rác (ẩn "Nghi cao" tính kèm số tăng ở tab Trending / Đang lên),
+  đỡ việc tay (góc nhìn đã lưu mở lại tổ hợp lọc yêu thích bằng một bấm).
+- **Người dùng làm gì → thấy gì:**
+  - Mở app (`/`) là thấy tab **Trending** của báo cáo mới nhất; chuyển tab **Đang lên** / **Toàn kho** giữ bộ lọc,
+    đặt lại cách sắp và trang.
+  - Gõ từ khoá (phím `/`), tick nhóm, chọn ngôn ngữ / star / ngày tạo / giấy phép; bộ lọc đang bật hiện thành chip
+    có ✕ để gỡ riêng, kèm "Xoá tất cả".
+  - Mỗi dòng Trending / Đang lên có số tăng +1/+7/+30 ngày, %, biểu đồ 30 ngày, cờ cảnh giác, nhãn "Mới", dòng "Vì
+    sao có mặt", điểm có giải thích.
+  - Đặt tên rồi bấm **Lưu góc nhìn**; góc nhìn hiện ở thanh bên (mục Góc nhìn), bấm là mở lại. Đổi bộ lọc khi đang mở
+    một góc thì có nút "Cập nhật «tên»". Trang **Quản lý** (`/views/`) để đổi tên, xoá (có hỏi lại).
+  - Báo cáo rising cũ thành trang chi tiết từng lượt (`/rising/runs/<id>/`), mở từ trang Theo dõi.
+- **Luồng chạy:** view `explore` → `BrowseForm.filters()` → `services.explore`:
+  - Toàn kho: `browse` (lọc + sắp trong CSDL, 50 dòng/trang, ẩn "Nghi cao" theo điểm lưu sẵn).
+  - Trending / Đang lên: `_filtered` (lọc repo trong CSDL) → `rising.services.latest_report_rows(kind, repos)` (dòng
+    đã xác minh của báo cáo mới nhất, đã chấm điểm kèm số tăng) → ẩn "Nghi cao" → sắp → 25 dòng/trang.
+  - Góc nhìn: `filters.canonical_query` (thứ tự cố định, bỏ mặc định, bỏ `page` / `scan` / `view`) → `SavedView`;
+    `SavedViewForm` kiểm tên (≤ 60 ký tự, không trùng kể cả khác hoa thường) và bộ lọc (qua `BrowseForm`), tối đa 50.
+  - Thanh bên: `context_processors.sidebar` → `services.saved_views(current)` (QĐ-23).
+- **Thành phần:** `features/browse/filters.py` (`BrowseFilters`, tab, cách sắp, `params`, `canonical_query`,
+  `without`), `services.explore`, `tab_links`, `active_chips`, `save_state`, `saved_views`, `save_view`,
+  `update_view`, `delete_view`; `models.SavedView` (migration `browse/0001`); templates `explore.html`,
+  `_report_rows.html`, `_all_rows.html`, `views.html`; `rising.services.latest_report_rows`, `reported_run`,
+  `DailyRun.has_report`; trang `rising/run_detail.html`.
+- **Phụ thuộc:** F-010 (nhãn, Toàn kho), F-005 + F-011 (báo cáo rising / trending), F-006 (điểm, nghi star giả).
+- **Đường cũ:** `/repos/?…` → `/?tab=all&…` (`rising_only` → tab Đang lên, `trending_only` → tab Trending);
+  `/rising/?day=` → chi tiết lượt ngày đó (không có thì Theo dõi); `/rising/` → `/?tab=rising`. Đều 302.
+- **Kiểm chứng tự động:** `features/browse/tests/test_explore.py` (tập repo từng tab, lọc chung, tìm nhiều từ, cách
+  sắp, ẩn "Nghi cao", trang trống, chia trang, số câu truy vấn cố định, link tab, chip), `test_saved_views.py`,
+  `test_canonical.py`, `test_context_processor.py`, `features/rising/tests/test_views.py` (chi tiết lượt, chuyển
+  hướng), `test_report.py` (`latest_report_rows`).
+- **Kiểm chứng tay:** mở `/`, chuyển tab, gõ "video agent", lưu góc nhìn, mở lại từ thanh bên.
+- **Nợ liên quan:** D-010 (JS chưa có test tự động).
+
 ### F-011 — Trending mọi cỡ
 - **Phục vụ vế nào của mục tiêu:** tìm đủ (repo lớn đang hot không còn bị bỏ qua vì trần 1.000 star), tìm đúng
   (ngưỡng % loại repo khổng lồ tăng chậm so với cỡ của nó).
-- **Người dùng làm gì → thấy gì:** không làm gì thêm — lượt hằng ngày tự xét. Ở `/repos/` tick "Chỉ trending (báo
-  cáo mới nhất)" và sắp theo "Tăng 7 ngày"; cột "+7 ngày" nay có số cho cả repo lớn. `/rising/` có dòng "N repo
+- **Người dùng làm gì → thấy gì:** không làm gì thêm — lượt hằng ngày tự xét. Từ F-012 xem ở tab **Trending** của
+  trang Khám phá (`/`); cột "+7 ngày" của tab Toàn kho có số cho cả repo lớn. Trang chi tiết lượt có dòng "N repo
   trending"; `/rising/watch/` có cột Trending (số repo · lượt gọi/ngân sách). Trang Khám phá (F-012) sẽ có tab riêng.
 - **Luồng chạy:** bước 2 lọc thô (`_runner._DailyRunner._screen`) bỏ trần 1.000 star: dưới 1.000 → nhóm `rising`
   (luật cũ), từ 1.000 → nhóm `trending` nếu `growth.is_trending_candidate` (ước lượng ≥ 100 và ≥ 1%) → bước 3 xác
@@ -47,25 +84,26 @@ test ở đâu, đang nợ gì.
   `is_trending` (≥ 200 và ≥ 2%) cho cả hai nhóm → lập báo cáo ghi `trending_count`.
 - **Thành phần:** `growth.is_trending`, `is_trending_candidate` (hàm thuần); `RisingCheck.pool`, `is_trending`;
   `DailyRun.trending_budget`, `trending_calls_used`, `trending_candidate_count`, `trending_count`,
-  `Step.TRENDING = 7`; `services.latest_trending_repository_ids`; `BrowseFilters.trending_only`.
+  `Step.TRENDING = 7`; `services.latest_report_rows` (F-012, thay `latest_trending_repository_ids` và ô `trending_only`).
 - **Phụ thuộc:** như F-005; `browse` đọc `rising.services.latest_trending_repository_ids`.
 - **Kiểm chứng tự động:** `features/rising/tests/test_trending.py` (lọc thô 2 nhóm, ngân sách không lẫn, hết ngân
   sách, Dừng rồi chạy tiếp, 404, không token, lượt dừng ở bước xác minh đi tiếp, repo nhỏ vừa rising vừa
   trending), `test_growth.py` (mốc biên 200 star / 2%), `test_report.py` (báo cáo `/rising/` không lẫn dòng
   trending), `features/browse/tests/`. Gọi GitHub thật: `uv run poe test-live` (lịch sử star của repo > 100.000 star).
-- **Kiểm chứng tay:** chạy `manage.py daily` rồi mở `/repos/?trending_only=on&sort=gain`.
+- **Kiểm chứng tay:** chạy `manage.py daily` rồi mở `/` (tab Trending của trang Khám phá, F-012).
 - **Nợ liên quan:** không có. `RisingCheck` không được dọn theo ngày (tăng ~950 dòng/ngày cả hai nhóm) — xem rủi ro QĐ-22.
 
 ### F-010 — Phân loại repo theo nhóm bằng AI, trang Kho repo
 - **Phục vụ vế nào của mục tiêu:** tìm đúng (lọc đúng mảng mình cần thay vì một danh sách trộn lẫn), không rác
   (ẩn "Nghi cao" trên cả kho, lọc giấy phép cho phép dùng thương mại).
 - **Người dùng làm gì → thấy gì:**
-  - Mở **Kho repo** (`/repos/`), tick nhóm "Dành cho ai" / "Làm được gì" (mỗi nhóm có số repo).
+  - Mở tab **Toàn kho** của trang Khám phá (`/?tab=all`, F-012; `/repos/` cũ chuyển hướng), tick nhóm "Dành cho
+    ai" / "Làm được gì" (mỗi nhóm có số repo).
   - Lọc thêm theo từ khoá, ngôn ngữ, star, ngày tạo, giấy phép thương mại, chỉ rising star, chưa phân loại.
   - Sắp theo star, fork, tăng 7 ngày, Chất lượng, mới tạo, mới đẩy code; 50 repo/trang.
   - Mỗi dòng có nhãn: bấm nhãn = lọc theo nhãn đó, di chuột = lý do AI xếp.
   - Trang Rising star có nhãn và ô lọc nhóm.
-  - Trang lần quét có nhãn và link "Xem cả N repo của lần quét này ở Kho repo".
+  - Trang lần quét có nhãn và link "Xem cả N repo của lần quét này ở Khám phá" (tab Toàn kho).
 - **Luồng chạy:**
   - **Phân loại:** `taxonomy.services.repositories_needing_labels` (repo chưa có nhãn hoặc được quét lại có mô tả
     đổi) → `classify` (lô 40 repo, `prompt.build_messages` → `LlmClient.complete` → `prompt.parse_labels` kiểm
@@ -96,13 +134,13 @@ test ở đâu, đang nợ gì.
   - `features/rising/tests/test_classify_step.py`, `features/scoring/tests/test_cache.py`;
   - gọi 9router thật: `uv run poe test-live`.
 - **Kiểm chứng tay:** `uv run python manage.py classify --budget 5`; `uv run poe dev` rồi mở
-  `http://127.0.0.1:8765/repos/`.
+  `http://127.0.0.1:8765/?tab=all`.
 - **Nợ liên quan:** trả D-007.
 
 ### F-006 — Chấm điểm Chất lượng / Tiềm năng, lọc star giả
 - **Phục vụ vế nào của mục tiêu:** không rác (lọc star giả), tìm đúng (xếp theo chất lượng/tiềm năng thay vì
   chỉ theo star); nguyên tắc 6 — mọi điểm mở ra xem được từng thành phần.
-- **Người dùng làm gì → thấy gì:** mở `/rising/` → bảng rising star có 3 cột **Tiềm năng**, **Chất lượng**,
+- **Người dùng làm gì → thấy gì:** mở tab Đang lên ở `/` hoặc trang chi tiết lượt → bảng rising star có 3 cột **Tiềm năng**, **Chất lượng**,
   **Nghi star giả**; bấm vào điểm thì thấy từng thành phần ("Phổ biến 20/30 — 1.000 star"…). Mặc định sắp
   theo Tiềm năng, ô **Sắp theo** đổi về "Tăng 7 ngày". Repo "Nghi cao" (≥ 60) không nằm ở bảng chính: dòng
   **"Đã ẩn N repo nghi star giả — Hiện"** mở ra danh sách kèm lý do; repo "Cần xem" (30–59) có nhãn vàng.
@@ -129,7 +167,7 @@ test ở đâu, đang nợ gì.
   sơ chủ: mỗi chủ một lần, hết ngân sách, sập rồi chạy tiếp không gọi lại, 404, chặn, token sai, Dừng);
   `test_report.py`, `test_views.py` (sắp, ẩn sau bộ lọc); `features/discovery/tests/test_views.py`. Gọi
   GitHub thật: `uv run poe test-live` (thêm 1 lượt `get_user`).
-- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/rising/`, bấm vào điểm, bấm "Hiện" ở dòng
+- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/?tab=rising`, bấm vào điểm, bấm "Hiện" ở dòng
   đã ẩn; mở một lần quét bất kỳ.
 - **Nợ liên quan:** không có nợ mới. D-007 (trang lần quét 500 repo) vẫn giữ; D-009 xem sổ nợ.
 
@@ -138,7 +176,7 @@ test ở đâu, đang nợ gì.
   danh sách theo dõi nên repo mới không bị lỡ), không rác (cờ cảnh giác: dồn một ngày, repo rất mới, không
   mô tả).
 - **Người dùng làm gì → thấy gì:** mở app sau 7:00 → lượt hằng ngày tự chạy (hoặc bấm **Chạy ngay**) →
-  trang `/rising/` hiện tiến độ ("đã xong k/16 truy vấn"), xong thì hiện bảng rising star: +1/+7/+30 ngày,
+  trang Theo dõi (`/rising/watch/`) hiện tiến độ ("đã xong k/16 truy vấn"), xong thì hiện bảng rising star: +1/+7/+30 ngày,
   tăng %, tuổi repo, biểu đồ 30 ngày, nhãn **Mới vào danh sách**, cờ cảnh giác, dòng "Vì sao có mặt" ghi
   nguồn và khoảng ngày UTC; mục "Ứng viên chưa xác minh" (ước lượng, ghi rõ; gập sẵn) và "Chưa đủ dữ
   liệu". Lọc nhanh theo star tối đa và mức tăng tối thiểu. Bảng rising (25 dòng/trang, ô `page`) và mục chưa
@@ -168,7 +206,7 @@ test ở đâu, đang nợ gì.
     `daily_report`, `latest_report_run`, `report_run_for`, `report_days`, `today_status`, `watch_overview`,
     `daily_estimate`, `recent_daily_runs`
   - form: `WatchQueryForm`, `ReportFilterForm`
-  - view/URL (`app_name = "rising"`): `report` (`/rising/`), `watch` (`/rising/watch/`), `watch_edit`
+  - view/URL (`app_name = "rising"`): `report` (`/rising/`, nay chỉ chuyển hướng), `run_detail` (`/rising/runs/<id>/`), `watch` (`/rising/watch/`), `watch_edit`
     (`/rising/watch/<id>/`), `run_now` (POST `/rising/run/`), `stop` (POST `/rising/runs/<id>/stop/`)
   - template: `rising/report.html`, `watch.html`, `watch_edit.html`, `_today.html`, `_watch_form.html`,
     `_pager.html`
@@ -178,9 +216,9 @@ test ở đâu, đang nợ gì.
 - **Kiểm chứng tự động:** `features/rising/tests/` — hàm thuần với phản hồi lịch sử star thật đã lưu; lượt
   hằng ngày với GitHub giả lập (quét lại, lọc thô, xác minh, hết ngân sách, repo bị xoá 404, bị gián đoạn
   rồi chạy tiếp, Dừng, sang ngày mới, lỗi token rồi Chạy tiếp); lịch (trước/sau 7:00, chạy bù, tối đa 3
-  lần tự chạy tiếp); trang và lệnh (gồm chia trang báo cáo); `test_e2e.py` chạy `manage.py daily` trên 300 repo giả rồi mở `/rising/`.
+  lần tự chạy tiếp); trang và lệnh (gồm chia trang báo cáo); `test_e2e.py` chạy `manage.py daily` trên 300 repo giả rồi mở trang chi tiết lượt.
   `features/discovery/tests/test_auto_resume.py` cho phần trả D-006. Gọi GitHub thật: `uv run poe test-live`.
-- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/rising/` sau 7:00 (lượt tự chạy) hoặc
+- **Kiểm chứng tay:** `uv run poe dev`, mở `http://127.0.0.1:8765/rising/watch/` sau 7:00 (lượt tự chạy) hoặc
   bấm Chạy ngay; sửa một file `.py` giữa lúc chạy để server khởi động lại → khoảng 5 phút sau lượt tự nối.
 - **Nợ liên quan:** D-009 đã trả (2026-11-24, cùng F-011).
 

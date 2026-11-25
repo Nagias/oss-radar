@@ -1,0 +1,40 @@
+{% load humanize %}
+{% comment %}Tab Toàn kho của trang Khám phá. Biến: page (ExplorePage), clear_url, previous_url, next_url.{% endcomment %}
+<h2>{{ page.total|intcomma }} repo trong kho{% if page.pages > 1 %} <span class="muted small">· Trang {{ page.page }}/{{ page.pages }}</span>{% endif %}</h2>
+{% if page.all_rows %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="num">#</th><th>Repo</th><th class="num">Star</th><th class="num">Fork</th>
+          <th class="num">+7 ngày</th><th class="num">Chất lượng</th><th class="num">Nghi star giả</th>
+          <th>Ngôn ngữ</th><th>Đẩy code</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in page.all_rows %}
+          {% with repo=row.repository %}
+          <tr data-repo="{{ repo.full_name }}">
+            <td class="num">{{ forloop.counter0|add:page.first_index }}</td>
+            <td>
+              <a href="{{ repo.html_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ repo.full_name }}</strong></a>
+              {% include "taxonomy/_labels.html" with labels=row.labels %}
+              {% if repo.description %}<div class="desc">{{ repo.description|truncatechars:200 }}</div>{% endif %}
+            </td>
+            <td class="num">{{ repo.stars|intcomma }}</td>
+            <td class="num">{{ repo.forks|intcomma }}</td>
+            <td class="num">{% if row.gain_7d is not None %}+{{ row.gain_7d|intcomma }}{% else %}—{% endif %}</td>
+            <td class="num">{% include "scoring/_score.html" with score=row.scores.quality %}</td>
+            <td class="num">{% include "scoring/_suspicion.html" with suspicion=row.scores.suspicion %}</td>
+            <td>{{ repo.language|default:"—" }}</td>
+            <td class="nowrap">{{ repo.gh_pushed_at|date:"d/m/Y"|default:"—" }}</td>
+          </tr>
+          {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "browse/_pager.html" %}
+{% else %}
+  <p class="muted">Không có repo nào khớp bộ lọc. Thử bỏ bớt nhóm, hoặc <a href="{{ clear_url }}">xoá tất cả bộ lọc</a>.</p>
+{% endif %}

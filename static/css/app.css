@@ -237,7 +237,23 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); widt
 /* Ô tick nằm trong chip: viền bàn phím vẽ quanh cả chip cho dễ thấy. */
 .chip-check:has(input:focus-visible) { outline: 2px solid var(--text); outline-offset: 2px; }
 
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; overflow-x: auto; }
+/* Bộ lọc đang bật của trang Khám phá: mỗi chip là một link gỡ riêng ô đó (không cần JS). */
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 16px 0 0; }
+.chip-remove { background: var(--surface-3); }
+.chip-remove span { color: var(--muted); font-size: 11px; }
+.search-row { display: grid; grid-template-columns: minmax(0, 1fr) 220px auto; gap: 12px; align-items: end; }
+.search-row select, .search-row button { height: 44px; }
+.search-field input { height: 44px; font-size: 15px; border-radius: 12px; }
+/* Phần lọc thêm gập sẵn: trang mở ra là thấy danh sách repo ngay (tự mở khi đang dùng một ô trong đó). */
+.filter-more { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.filter-more > summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--muted); }
+.filter-more > summary:hover { color: var(--text); }
+.filter-more[open] > summary { margin-bottom: 12px; }
+.report-line { margin: -8px 0 16px; }
+.save-view input[type="text"] { width: 320px; max-width: 100%; }
+.save-view .inline-form, .save-view p { margin-top: 12px; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; overflow-x: auto; overflow-y: hidden; }
 .tabs a {
   padding: 10px 12px; margin-bottom: -1px; border-bottom: 2px solid transparent;
   color: var(--muted); font-weight: 500; white-space: nowrap;
@@ -350,4 +366,6 @@ td:has(> a > strong) { min-width: 300px; }
   .card { padding: 16px; }
   /* Nhãn lọc dài được xuống dòng thay vì tràn khỏi thẻ. */
   .chip, .chip-check { white-space: normal; height: auto; min-height: 30px; padding: 4px 12px; }
+  .search-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .search-row .search-field { grid-column: 1 / -1; }
 }

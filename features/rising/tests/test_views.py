@@ -1,4 +1,4 @@
-"""Trang Rising star và trang Theo dõi — lớp mỏng: nhận yêu cầu → gọi services → hiển thị."""
+"""Trang chi tiết lượt và trang Theo dõi — lớp mỏng: nhận yêu cầu → gọi services → hiển thị."""
 
 import html
 import re
@@ -36,7 +36,7 @@ pytestmark = pytest.mark.django_db
 
 Status = DailyRun.Status
 Source = RisingCheck.Source
-REPORT_URL = reverse("rising:report")
+REPORT_URL = reverse("rising:report")  # đường cũ: nay chỉ chuyển hướng (F-012)
 WATCH_URL = reverse("rising:watch")
 RUN_URL = reverse("rising:run_now")
 WATCH_FORM = {
@@ -62,6 +62,11 @@ def today_run(**fields: object) -> DailyRun:
     )
 
 
+def detail(run: DailyRun) -> str:
+    """Trang chi tiết lượt (thân báo cáo rising cũ, F-012)."""
+    return reverse("rising:run_detail", args=[run.pk])
+
+
 def link_scan(run: DailyRun, query: str, *, position: int = 1) -> ScanRun:
     scan = ScanRun.objects.create(
         query=query, origin=ScanRun.Origin.DAILY, status=ScanRun.Status.SUCCEEDED
@@ -71,7 +76,7 @@ def link_scan(run: DailyRun, query: str, *, position: int = 1) -> ScanRun:
     return scan
 
 
-# --- Trang Rising star -----------------------------------------------------------------------
+# --- Trang chi tiết lượt ---------------------------------------------------------------------
 
 
 def test_report_page_shows_rising_rows_with_reason_flags_and_noopener(client: Client) -> None:
@@ -86,7 +91,7 @@ def test_report_page_shows_rising_rows_with_reason_flags_and_noopener(client: Cl
         candidate_count=3, new_repo_count=42, insufficient_count=7
     )
 
-    page = client.get(REPORT_URL).text
+    page = client.get(detail(run)).text
 
     assert page.index("gia-lap/repo-2") < page.index("gia-lap/repo-1")  # tăng nhiều lên trước
     assert "gia-lap/repo-3" not in page
@@ -120,7 +125,7 @@ def test_report_page_summarises_scans_candidates_and_missing_data(client: Client
     )
     scan = link_scan(run, "topic:ai-agent")
 
-    page = client.get(REPORT_URL).text
+    page = client.get(detail(run)).text
 
     assert reverse("discovery:scan_detail", args=[scan.pk]) in page
     assert "topic:ai-agent" in page
@@ -137,7 +142,7 @@ def test_report_page_lists_problems_of_an_older_report(client: Client) -> None:
     old = make_run(DAY - timedelta(days=1), status=Status.SUCCEEDED_PARTIAL)
     DailyRun.objects.filter(pk=old.pk).update(problems=["Truy vấn «topic:x» lỗi: mạng."])
 
-    page = client.get(REPORT_URL).text
+    page = client.get(detail(old)).text
 
     assert "Truy vấn «topic:x» lỗi: mạng." in page
     assert "Xong nhưng còn sót" in page
@@ -151,10 +156,10 @@ def test_report_filters_from_query_string(client: Client) -> None:
     make_check(run, 2, stars=900, gain_7d=60, is_rising=True)
     make_check(run, 3, stars=1500, gain_7d=40)
 
-    default = client.get(REPORT_URL).text
-    narrow = client.get(REPORT_URL, {"max_stars": "500", "min_gain": "100"}).text
-    wide = client.get(REPORT_URL, {"max_stars": "2000", "min_gain": "0"}).text
-    other_day = client.get(REPORT_URL, {"day": older.day.isoformat()}).text
+    default = client.get(detail(run)).text
+    narrow = client.get(detail(run), {"max_stars": "500", "min_gain": "100"}).text
+    wide = client.get(detail(run), {"max_stars": "2000", "min_gain": "0"}).text
+    other_day = client.get(detail(older)).text
 
     assert [name in default for name in ("repo-1<", "repo-2<", "repo-3<")] == [True, True, False]
     assert [name in narrow for name in ("repo-1<", "repo-2<", "repo-3<")] == [True, False, False]
@@ -162,7 +167,6 @@ def test_report_filters_from_query_string(client: Client) -> None:
     assert "repo-9<" in other_day
     assert "repo-1<" not in other_day
     assert 'value="500"' in narrow  # ô lọc giữ giá trị vừa chọn
-    assert f'<option value="{older.day.isoformat()}" selected>' in other_day
 
 
 def test_report_with_invalid_filter_shows_error_and_falls_back_to_defaults(
@@ -171,46 +175,19 @@ def test_report_with_invalid_filter_shows_error_and_falls_back_to_defaults(
     run = make_run()
     make_check(run, 1, stars=340, gain_7d=120, is_rising=True)
 
-    page = client.get(REPORT_URL, {"min_gain": "-5", "max_stars": "abc"}).text
+    page = client.get(detail(run), {"min_gain": "-5", "max_stars": "abc"}).text
 
     assert 'class="error"' in page
     assert "repo-1<" in page  # vẫn hiện báo cáo theo ngưỡng mặc định
 
 
-def test_report_keeps_a_valid_day_when_another_filter_is_invalid(client: Client) -> None:
-    older = make_run(DAY - timedelta(days=1))
-    make_check(older, 9, stars=100, gain_7d=70, is_rising=True)
-    make_check(older, 8, stars=900, gain_7d=60, is_rising=True)
-    make_run()
-    day = older.day.isoformat()
-
-    bad_gain = client.get(REPORT_URL, {"day": day, "min_gain": "-5", "max_stars": "500"}).text
-    bad_day = client.get(REPORT_URL, {"day": "hôm qua", "max_stars": "500", "min_gain": "65"}).text
-
-    assert 'class="error"' in bad_gain
-    assert f'<option value="{day}" selected>' in bad_gain  # vẫn đúng ngày đã chọn
-    assert "repo-9<" in bad_gain  # ngưỡng tăng sai → mặc định 50; ngưỡng star 500 hợp lệ vẫn giữ
-    assert "repo-8<" not in bad_gain  # 900 star: trên ngưỡng 500 của ô hợp lệ
-    assert 'class="error"' in bad_day
-    assert "repo-9<" not in bad_day  # ngày sai → báo cáo mới nhất (không có repo-9)
-
-
-def test_report_for_a_day_without_report_says_so(client: Client) -> None:
-    make_run()
-
-    response = client.get(REPORT_URL, {"day": "2020-01-01"})
-
-    assert response.status_code == 200
-    assert "Chưa có báo cáo cho ngày 01/01/2020" in response.text
-
-
-def test_report_auto_refresh_only_while_live(client: Client) -> None:
+def test_watch_auto_refresh_only_while_live(client: Client) -> None:
     make_run(DAY - timedelta(days=1))
     run = today_run(step=DailyRun.Step.VERIFY)
 
-    live_page = client.get(REPORT_URL).text
+    live_page = client.get(WATCH_URL).text
 
-    assert f'<meta http-equiv="refresh" content="10; url={REPORT_URL}">' in live_page
+    assert f'<meta http-equiv="refresh" content="10; url={WATCH_URL}">' in live_page
     assert reverse("rising:stop", args=[run.pk]) in live_page
     assert "Chạy ngay" not in live_page
     assert "Chạy tiếp" not in live_page
@@ -219,25 +196,13 @@ def test_report_auto_refresh_only_while_live(client: Client) -> None:
         status=Status.SUCCEEDED, step=DailyRun.Step.REPORT, finished_at=at(7, 31)
     )
 
-    done_page = client.get(REPORT_URL).text
+    done_page = client.get(WATCH_URL).text
 
     assert 'http-equiv="refresh"' not in done_page
     assert reverse("rising:stop", args=[run.pk]) not in done_page
     assert "Chạy ngay" not in done_page  # hôm nay đã xong: không chạy lại
     assert "Chạy tiếp" not in done_page
     assert "Xong lúc 07:31" in done_page
-
-
-def test_report_refresh_target_keeps_the_current_filter(client: Client) -> None:
-    today_run()
-
-    page = client.get(REPORT_URL, {"max_stars": "500", "min_gain": "100"}).text
-
-    # `&` trong thuộc tính HTML phải viết `&amp;`; trình duyệt đọc lại thành `&`.
-    assert (
-        f'<meta http-equiv="refresh" content="10; url={REPORT_URL}?max_stars=500&amp;min_gain=100">'
-        in page
-    )
 
 
 def test_refused_run_now_never_auto_refreshes(client: Client) -> None:
@@ -256,7 +221,7 @@ def test_refused_run_now_never_auto_refreshes(client: Client) -> None:
 def test_report_page_marks_a_stale_run_as_interrupted_and_offers_run_now(client: Client) -> None:
     run = today_run(heartbeat_at=timezone.now() - timedelta(minutes=10))
 
-    page = client.get(REPORT_URL).text
+    page = client.get(WATCH_URL).text
 
     run.refresh_from_db()
     assert run.status == Status.PAUSED  # xem trang là biết lượt đã chết, như trang lần quét
@@ -266,7 +231,7 @@ def test_report_page_marks_a_stale_run_as_interrupted_and_offers_run_now(client:
 
 
 def test_report_empty_state_before_first_run(client: Client) -> None:
-    response = client.get(REPORT_URL)
+    response = client.get(WATCH_URL)
 
     page = response.text
     assert response.status_code == 200
@@ -290,7 +255,7 @@ def test_run_now_button_says_continue_when_todays_run_exists(
 ) -> None:
     today_run(heartbeat_at=None, stop_reason=services.REASON_BUSY_APP, **fields)
 
-    for url in (REPORT_URL, WATCH_URL):
+    for url in (WATCH_URL,):
         page = client.get(url).text
 
         assert Button("Chạy tiếp", disabled=False) in buttons(page)
@@ -300,7 +265,7 @@ def test_run_now_button_says_continue_when_todays_run_exists(
 def test_empty_state_points_only_at_a_button_that_is_shown(client: Client) -> None:
     run = today_run()  # lượt đầu tiên đang chạy, chưa có báo cáo nào, nút Chạy bị ẩn
 
-    live = client.get(REPORT_URL).text
+    live = client.get(WATCH_URL).text
 
     assert "Chưa có báo cáo nào" in live
     assert "Chạy ngay" not in live
@@ -309,7 +274,7 @@ def test_empty_state_points_only_at_a_button_that_is_shown(client: Client) -> No
 
     DailyRun.objects.filter(pk=run.pk).update(status=Status.PAUSED, heartbeat_at=None)
 
-    paused = client.get(REPORT_URL).text
+    paused = client.get(WATCH_URL).text
 
     assert "Chưa có báo cáo nào" in paused
     assert "bấm Chạy tiếp" in paused
@@ -320,7 +285,7 @@ def test_report_page_disables_run_now_while_background_is_busy(
 ) -> None:
     monkeypatch.setattr("core.background.busy_label", lambda: "Lần quét #3")
 
-    page = client.get(REPORT_URL).text
+    page = client.get(WATCH_URL).text
 
     assert "Lần quét #3" in page
     assert Button("Chạy ngay", disabled=True) in buttons(page)
@@ -332,11 +297,87 @@ def test_busy_hint_names_the_button_that_is_shown(
     monkeypatch.setattr("core.background.busy_label", lambda: "Lần quét #3")
     today_run(status=Status.PAUSED, heartbeat_at=None)
 
-    page = client.get(REPORT_URL).text
+    page = client.get(WATCH_URL).text
 
     assert Button("Chạy tiếp", disabled=True) in buttons(page)
     assert "chờ xong rồi bấm Chạy tiếp" in page
     assert "Chạy ngay" not in page
+
+
+# --- Đường cũ `/rising/` chuyển hướng (F-012) -------------------------------------------------
+
+
+def test_old_report_url_goes_to_the_rising_tab_keeping_groups_and_gain_sort(
+    client: Client,
+) -> None:
+    response = client.get(
+        REPORT_URL, {"audience": "creator", "aspects": "video", "sort": "gain", "min_gain": "9"}
+    )
+
+    assert response.status_code == 302
+    location = urlsplit(response["Location"])
+    assert location.path == "/"
+    assert parse_qs(location.query) == {
+        "tab": ["rising"],
+        "audience": ["creator"],
+        "aspects": ["video"],
+        "sort": ["gain"],
+    }
+    assert client.get(REPORT_URL)["Location"] == "/?tab=rising"  # Tiềm năng là mặc định: bỏ
+
+
+def test_old_report_url_with_a_day_opens_that_run(client: Client) -> None:
+    older = make_run(DAY - timedelta(days=1))
+    make_run()
+
+    response = client.get(REPORT_URL, {"day": older.day.isoformat(), "max_stars": "500"})
+
+    assert (response.status_code, response["Location"]) == (302, f"{detail(older)}?max_stars=500")
+
+
+def test_old_report_url_with_a_day_without_report_goes_to_watch(client: Client) -> None:
+    make_run()
+
+    response = client.get(REPORT_URL, {"day": "2020-01-01"})
+
+    assert (response.status_code, response["Location"]) == (302, WATCH_URL)
+
+
+def test_run_detail_needs_a_finished_report(client: Client) -> None:
+    running = today_run()
+
+    assert client.get(detail(running)).status_code == 404
+    assert client.get(reverse("rising:run_detail", args=[999])).status_code == 404
+
+
+def test_run_detail_has_no_auto_refresh_or_run_buttons(client: Client) -> None:
+    run = make_run()
+    today_run()  # lượt hôm nay đang chạy: chỉ trang Theo dõi tự tải lại
+
+    page = client.get(detail(run)).text
+
+    assert 'http-equiv="refresh"' not in page
+    assert not [button for button in buttons(page) if button.text in {"Chạy ngay", "Dừng"}]
+    assert 'href="/rising/watch/"' in page  # đường quay về Theo dõi
+
+
+def test_watch_page_summarises_the_latest_report_and_links_every_reported_run(
+    client: Client,
+) -> None:
+    older = make_run(DAY - timedelta(days=1))
+    run = make_run()
+    DailyRun.objects.filter(pk=run.pk).update(trending_count=12, rising_count=7, unverified_count=3)
+    failed = make_run(DAY + timedelta(days=1), status=Status.FAILED, step=DailyRun.Step.VERIFY)
+
+    page = client.get(WATCH_URL).text
+
+    assert "Báo cáo mới nhất: ngày 22/10/2026" in page
+    assert re.search(r"<strong>12</strong> repo trending", page)
+    assert re.search(r"<strong>7</strong> rising star", page)
+    assert 'href="/?tab=rising"' in page
+    assert f'href="{detail(run)}"' in page
+    assert f'href="{detail(older)}"' in page
+    assert f'href="{detail(failed)}"' not in page  # lượt lỗi không có trang chi tiết
 
 
 # --- Trang Theo dõi --------------------------------------------------------------------------
@@ -392,9 +433,12 @@ def test_report_stats_show_trending_count(client: Client) -> None:
     run = make_run()
     DailyRun.objects.filter(pk=run.pk).update(trending_count=17)
 
-    page = client.get(REPORT_URL).text
+    page = client.get(detail(run)).text
 
-    assert "<strong>17</strong> repo trending (mọi cỡ, xem ở Kho repo)" in page
+    assert (
+        '<strong>17</strong> repo trending (mọi cỡ) — <a href="/?tab=trending">xem ở Khám phá</a>'
+        in page
+    )
 
 
 def test_watch_page_shows_live_run_with_stop_button(client: Client) -> None:
@@ -405,7 +449,6 @@ def test_watch_page_shows_live_run_with_stop_button(client: Client) -> None:
     assert reverse("rising:stop", args=[run.pk]) in page
     assert "Chạy ngay" not in page
     assert f'<meta http-equiv="refresh" content="10; url={WATCH_URL}">' in page
-    assert 'name="next" value="watch"' in page
 
 
 def test_watch_page_error_after_post_does_not_auto_refresh(client: Client) -> None:
@@ -513,7 +556,7 @@ def test_run_now_starts_daily_run_in_background(
     response = client.post(RUN_URL)
 
     run = DailyRun.objects.get()
-    assert (response.status_code, response["Location"]) == (302, REPORT_URL)
+    assert (response.status_code, response["Location"]) == (302, WATCH_URL)
     assert labels == [f"Lượt quét hằng ngày {timezone.localdate():%d/%m}"]
     assert (run.day, run.status) == (timezone.localdate(), Status.SUCCEEDED)  # chạy tại chỗ ở test
     assert run.scans.count() == len(watch_list)
@@ -589,7 +632,7 @@ def test_stop_requests_daily_stop(client: Client) -> None:
     response = client.post(reverse("rising:stop", args=[run.pk]))
 
     run.refresh_from_db()
-    assert (response.status_code, response["Location"]) == (302, REPORT_URL)
+    assert (response.status_code, response["Location"]) == (302, WATCH_URL)
     assert run.stop_requested is True
 
 
@@ -597,13 +640,13 @@ def test_stop_requests_daily_stop(client: Client) -> None:
     ("form", "expected"),
     [
         ({"next": "watch"}, WATCH_URL),
-        ({"next": "report"}, REPORT_URL),
-        ({}, REPORT_URL),
-        ({"next": "https://evil.example/"}, REPORT_URL),  # chỉ nhận tên trong danh sách cho phép
-        ({"next": "//evil.example"}, REPORT_URL),
+        ({"next": "report"}, WATCH_URL),
+        ({}, WATCH_URL),
+        ({"next": "https://evil.example/"}, WATCH_URL),  # không bao giờ đi theo `next`
+        ({"next": "//evil.example"}, WATCH_URL),
     ],
 )
-def test_stop_returns_to_the_page_it_was_pressed_on(
+def test_stop_always_returns_to_the_watch_page(
     client: Client, form: dict[str, str], expected: str
 ) -> None:
     run = today_run()
@@ -613,13 +656,6 @@ def test_stop_returns_to_the_page_it_was_pressed_on(
     run.refresh_from_db()
     assert (response.status_code, response["Location"]) == (302, expected)
     assert run.stop_requested is True
-
-
-def test_stop_buttons_remember_which_page_they_are_on(client: Client) -> None:
-    today_run()
-
-    assert 'name="next" value="report"' in client.get(REPORT_URL).text
-    assert 'name="next" value="watch"' in client.get(WATCH_URL).text
 
 
 def test_stop_unknown_run_is_404_and_get_is_refused(client: Client) -> None:
@@ -633,42 +669,41 @@ def test_stop_unknown_run_is_404_and_get_is_refused(client: Client) -> None:
 @pytest.mark.parametrize(
     ("path", "current"),
     [
-        ("/", "Quét"),
+        ("/", "Khám phá"),
+        ("/scan/", "Quét"),
         ("/scans/{scan}/", "Quét"),
-        ("/rising/", "Rising star"),
+        ("/rising/runs/{run}/", "Theo dõi"),
         ("/rising/watch/", "Theo dõi"),
         ("/rising/watch/{watch}/", "Theo dõi"),
-        ("/repos/", "Kho repo"),
     ],
 )
 def test_nav_links_on_every_page(
     client: Client, watch_list: list[WatchQuery], path: str, current: str
 ) -> None:
     scan = ScanRun.objects.create(query="topic:x", status=ScanRun.Status.SUCCEEDED)
-    url = path.format(scan=scan.pk, watch=watch_list[0].pk)
+    url = path.format(scan=scan.pk, run=make_run().pk, watch=watch_list[0].pk)
 
     page = client.get(url).text
 
     links = nav_links(page)
     assert [(link.href, link.text) for link in links] == [
-        ("/", "Quét"),
-        ("/rising/", "Rising star"),
-        ("/repos/", "Kho repo"),
+        ("/", "Khám phá"),
+        ("/scan/", "Quét"),
         ("/rising/watch/", "Theo dõi"),
     ]
     assert [link.text for link in links if link.current] == [current]
 
 
-def test_nav_marks_rising_star_on_the_refused_run_now_page(client: Client) -> None:
+def test_nav_marks_watch_on_the_refused_run_now_page(client: Client) -> None:
     make_run(timezone.localdate())
 
     page = client.post(RUN_URL).text
 
-    assert [link.text for link in nav_links(page) if link.current] == ["Rising star"]
+    assert [link.text for link in nav_links(page) if link.current] == ["Theo dõi"]
 
 
 def test_nav_ignores_a_same_named_view_of_another_namespace() -> None:
-    # Chỉ "rising:watch" (có namespace) đánh dấu "Theo dõi"; view `watch` của app khác thì không.
+    # Chỉ namespace "rising" đánh dấu "Theo dõi"; view `watch` của app khác thì không.
     request = RequestFactory().get("/khac/watch/")
     request.resolver_match = ResolverMatch(
         lambda request: None, (), {}, url_name="watch", app_names=["khac"], namespaces=["khac"]
@@ -677,7 +712,7 @@ def test_nav_ignores_a_same_named_view_of_another_namespace() -> None:
     page = render_to_string("base.html", request=request)
 
     links = nav_links(page)
-    assert len(links) == 4
+    assert len(links) == 3
     assert not [link for link in links if link.current]
 
 
@@ -688,7 +723,7 @@ def test_repository_links_have_no_unsafe_markup(client: Client) -> None:
     Repository.objects.filter(pk=repo.pk).update(language="<i>Py</i>")
     make_check(run, 1, stars=340, gain_7d=120, is_rising=True)
 
-    page = client.get(REPORT_URL).text
+    page = client.get(detail(run)).text
 
     assert "<i>Py</i>" not in page
     assert "&lt;i&gt;Py&lt;/i&gt;" in page
@@ -713,7 +748,7 @@ def test_report_page_shows_scores_and_hides_high_suspicion_with_reasons(client: 
     make_check(run, 3, stars=300, gain_7d=100, is_rising=True)
     DailyRun.objects.filter(pk=run.pk).update(rising_count=3)
 
-    page = client.get(REPORT_URL).text
+    page = client.get(detail(run)).text
 
     for header in ("Tiềm năng", "Chất lượng", "Nghi star giả"):
         assert f'<th class="num">{header}</th>' in page
@@ -732,7 +767,7 @@ def test_report_page_without_hidden_rows_has_no_hidden_section(client: Client) -
     run = make_run()
     make_check(run, 3, stars=300, gain_7d=100, is_rising=True)
 
-    page = client.get(REPORT_URL).text
+    page = client.get(detail(run)).text
 
     assert "nghi star giả — Hiện" not in page
     assert "đã ẩn" not in page
@@ -743,8 +778,8 @@ def test_report_sort_choice_switches_order_and_is_kept_in_form(client: Client) -
     make_check(run, 1, stars=999, gain_7d=60, is_rising=True)  # Tiềm năng thấp, tăng nhiều
     make_check(run, 2, stars=60, gain_7d=55, is_rising=True)  # Tiềm năng cao, tăng ít
 
-    default = client.get(REPORT_URL).text
-    by_gain = client.get(REPORT_URL, {"sort": "gain"}).text
+    default = client.get(detail(run)).text
+    by_gain = client.get(detail(run), {"sort": "gain"}).text
 
     assert default.index("gia-lap/repo-2") < default.index("gia-lap/repo-1")
     assert by_gain.index("gia-lap/repo-1") < by_gain.index("gia-lap/repo-2")
@@ -756,7 +791,7 @@ def test_report_unverified_rows_show_estimated_potential(client: Client) -> None
     run = make_run()
     make_check(run, 1, stars=300, gain_7d=30, source=Source.SNAPSHOT)
 
-    page = client.get(REPORT_URL).text
+    page = client.get(detail(run)).text
 
     assert "Tiềm năng (ước lượng)" in page
     assert "<strong>36</strong>" in page
@@ -768,11 +803,11 @@ def test_report_page_shows_labels_and_filters_by_group(client: Client) -> None:
         make_check(run, github_id, stars=300, gain_7d=100 + github_id, is_rising=True)
     label_repository(make_repo(1), audience=("creator",), aspects=("video",))
 
-    every = client.get(REPORT_URL).text
-    creators = client.get(REPORT_URL, {"audience": "creator"}).text
+    every = client.get(detail(run)).text
+    creators = client.get(detail(run), {"audience": "creator"}).text
 
     assert "Video &amp; làm phim AI" in every
-    assert 'href="/repos/?aspects=video"' in every
+    assert 'href="/?tab=all&amp;aspects=video"' in every
     assert "gia-lap/repo-2" in every
     assert "gia-lap/repo-1" in creators
     assert "gia-lap/repo-2" not in creators
@@ -794,7 +829,6 @@ def test_report_pager_keeps_every_filter_and_the_other_section_page(client: Clie
         make_check(run, github_id, stars=300, gain_7d=100 + github_id, is_rising=True)
         label_repository(make_repo(github_id), audience=("creator",))
     query = {
-        "day": run.day.isoformat(),
         "max_stars": "500",
         "min_gain": "10",
         "sort": "gain",
@@ -802,8 +836,8 @@ def test_report_pager_keeps_every_filter_and_the_other_section_page(client: Clie
         "upage": "3",
     }
 
-    first = client.get(REPORT_URL, query).text
-    second = client.get(REPORT_URL, {**query, "page": "2"}).text
+    first = client.get(detail(run), query).text
+    second = client.get(detail(run), {**query, "page": "2"}).text
 
     [next_link] = pager_links(first, "rising")
     assert next_link == {**{key: [value] for key, value in query.items()}, "page": ["2"]}
@@ -820,7 +854,7 @@ def test_report_filter_form_starts_again_from_first_page(client: Client) -> None
     run = make_run()
     make_check(run, 1, stars=300, gain_7d=100, is_rising=True)
 
-    page = client.get(REPORT_URL, {"page": "2", "upage": "2"}).text
+    page = client.get(detail(run), {"page": "2", "upage": "2"}).text
 
     assert 'name="page"' not in page  # bấm Lọc → về trang 1 của cả hai mục
     assert 'name="upage"' not in page
@@ -832,8 +866,8 @@ def test_report_unverified_section_is_collapsed_until_paged(client: Client) -> N
     for github_id in range(1, services.UNVERIFIED_PAGE_SIZE + 2):
         make_check(run, github_id, stars=300, gain_7d=github_id, source=Source.SNAPSHOT)
 
-    default = client.get(REPORT_URL).text
-    paged = client.get(REPORT_URL, {"upage": "2"}).text
+    default = client.get(detail(run)).text
+    paged = client.get(detail(run), {"upage": "2"}).text
 
     assert f"Ứng viên chưa xác minh ({services.UNVERIFIED_PAGE_SIZE + 1})" in default
     assert '<details class="unverified-list">' in default
@@ -848,7 +882,15 @@ def test_report_with_invalid_page_falls_back_to_first_page(client: Client) -> No
     run = make_run()
     make_check(run, 1, stars=300, gain_7d=100, is_rising=True)
 
-    response = client.get(REPORT_URL, {"page": "abc", "upage": "-1"})
+    response = client.get(detail(run), {"page": "abc", "upage": "-1"})
 
     assert response.status_code == 200
     assert "gia-lap/repo-1<" in response.text
+
+
+def test_old_report_url_with_a_broken_day_goes_to_the_rising_tab(client: Client) -> None:
+    make_run()
+
+    response = client.get(REPORT_URL, {"day": "hôm qua"})
+
+    assert (response.status_code, response["Location"]) == (302, "/?tab=rising")

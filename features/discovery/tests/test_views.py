@@ -497,4 +497,4 @@ def test_scan_detail_shows_labels_and_links_to_full_list(client: Client, use_fak
     page = client.get(detail_url(scan)).text
 
     assert "Video &amp; làm phim AI" in page
-    assert f'href="/repos/?scan={scan.pk}"' in page
+    assert f'href="/?tab=all&amp;scan={scan.pk}"' in page

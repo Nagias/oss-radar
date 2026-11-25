@@ -133,7 +133,7 @@
   - [x] Sổ sách: QĐ-20, CLAUDE.md, FEATURE_MAP, D-010
   - [x] Kiểm chứng: `poe check`, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
 - [x] PR A merge vào `main` (Nagias/oss-radar#9, commit `11d0dcb`, 2026-11-24)
-- [ ] PR B `feat/f011-trending` — kế hoạch `docs/plans/2026-11-24-pr-b-f011-trending.md`
+- [x] PR B `feat/f011-trending` — kế hoạch `docs/plans/2026-11-24-pr-b-f011-trending.md`
   - [x] Trả D-009: tách `services.py` rising (1.670 dòng → 5 module, lớn nhất `_runner.py` ~790), lọc thô theo ngày của lượt, nhãn
         "Mới" theo ngưỡng đang lọc, số ngày dọn là một hằng ở catalog
   - [x] Quy tắc trending (≥ 200 star và ≥ 2%), cột `pool` / `is_trending`, migration `rising/0005_trending`
@@ -142,4 +142,12 @@
   - [x] Kiểm chứng: `poe check`, `poe test-live`, chạy thật trên bản sao CSDL, trình duyệt, rà soát độc lập, mở PR
   - [x] Chạy thật `daily` trên bản sao CSDL (2026-11-24): 87,5 phút, 380 ứng viên trending, xác minh 300/300, 229 repo
         trending (176 từ 1.000 star), 108 rising; số star top 10 khớp GitHub
-- [ ] PR C `feat/f012-kham-pha`
+- [x] PR B merge vào `main` (Nagias/oss-radar#10, commit `4e5774b`, 2026-11-24)
+- [ ] PR C `feat/f012-kham-pha` — kế hoạch `docs/plans/2026-11-24-pr-c-f012-kham-pha.md`
+  - [x] `rising.services.latest_report_rows`: dòng trending / đang lên của báo cáo mới nhất, lý do riêng cho trending
+  - [x] Trang chi tiết lượt `/rising/runs/<id>/`; `/rising/` và `/repos/` cũ chuyển hướng; Theo dõi có thẻ báo cáo mới nhất
+  - [x] Trang Khám phá 3 tab ở `/`, Quét chuyển sang `/scan/`; tìm nhiều từ cả trong chủ đề; chip gỡ từng ô lọc
+  - [x] Góc nhìn đã lưu: model, form, trang quản lý, thanh bên (context processor, QĐ-23)
+  - [x] Sổ sách: FEATURE_MAP F-012, QĐ-23, CLAUDE.md
+  - [x] Kiểm chứng: `poe check`, tốc độ và độ nặng trang trên bản sao CSDL, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
+  - [x] Đo trên bản sao CSDL thật: 24 trường hợp 105–241 ms, 12–15 truy vấn, trang ≤ 125 KB; sửa 1 mục quan trọng + 5 mục nhỏ của rà soát

@@ -1,9 +1,13 @@
 """Đọc báo cáo rising star từ dữ liệu đã lưu: lọc theo ngưỡng, "mới vào", lý do, chưa xác minh."""
 
 from datetime import UTC, datetime, time, timedelta
+from typing import Any
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
+from features.catalog.models import Repository
 from features.rising import services
 from features.rising.growth import FLAG_LABELS, Flag, sparkline_points
 from features.rising.models import DailyRun, RisingCheck
@@ -341,3 +345,104 @@ def test_hidden_rows_are_not_counted_in_rising_pages() -> None:
 
     assert report.rising_page.total == 1
     assert [row.repository.github_id for row in report.hidden] == [1]
+
+
+# --- Dòng của báo cáo mới nhất cho trang Khám phá (F-012) --------------------------------------
+
+Pool = RisingCheck.Pool
+
+
+def _ids(rows: list[services.RisingRow]) -> list[int]:
+    return [row.repository.github_id for row in rows]
+
+
+def _mixed_report(run: DailyRun) -> None:
+    make_check(run, 1, stars=40_000, gain_7d=900, pool=Pool.TRENDING, is_trending=True)
+    make_check(run, 2, stars=800, gain_7d=300, is_rising=True, is_trending=True)
+    make_check(run, 3, stars=500, gain_7d=120, is_rising=True)
+    make_check(run, 4, stars=90_000, gain_7d=250, pool=Pool.TRENDING)  # dưới 2%: không trending
+    make_check(run, 5, stars=5_000, gain_7d=400, pool=Pool.TRENDING, source=Source.SNAPSHOT)
+    make_check(run, 6, stars=300, gain_7d=90, source=Source.SNAPSHOT)
+
+
+def test_latest_rows_split_trending_and_rising_of_the_latest_report() -> None:
+    make_check(make_run(DAY - timedelta(days=1)), 9, stars=50_000, gain_7d=5_000, is_trending=True)
+    run = make_run()
+    make_run(DAY + timedelta(days=1), status=Status.RUNNING, step=Step.VERIFY)  # chưa xong: bỏ qua
+    _mixed_report(run)
+
+    trending = services.latest_report_rows("trending")
+    rising = services.latest_report_rows("rising")
+
+    assert (trending.run, rising.run) == (run, run)
+    assert _ids(trending.rows) == [1, 2]  # repo nhỏ tăng ≥ 200 cũng là trending
+    assert _ids(rising.rows) == [2, 3]  # tăng nhiều trước
+    assert (trending.unverified_count, rising.unverified_count) == (1, 1)
+
+
+def test_latest_rows_only_keep_given_repositories() -> None:
+    run = make_run()
+    _mixed_report(run)
+    wanted = Repository.objects.filter(github_id__in=[2, 4])
+
+    assert _ids(services.latest_report_rows("trending", wanted).rows) == [2]
+
+
+def test_latest_rows_without_report_are_empty() -> None:
+    make_run(status=Status.RUNNING, step=Step.VERIFY)
+
+    rows = services.latest_report_rows("trending")
+
+    assert (rows.run, rows.rows, rows.unverified_count) == (None, [], 0)
+
+
+def test_latest_rows_mark_new_entries_by_kind() -> None:
+    previous = make_run(DAY - timedelta(days=1))
+    make_check(previous, 1, stars=39_000, gain_7d=800, pool=Pool.TRENDING, is_trending=True)
+    make_check(previous, 3, stars=480, gain_7d=100, is_rising=True)
+    _mixed_report(make_run())
+
+    trending = {
+        row.repository.github_id: row.is_new_entry
+        for row in services.latest_report_rows("trending").rows
+    }
+    rising = {
+        row.repository.github_id: row.is_new_entry
+        for row in services.latest_report_rows("rising").rows
+    }
+
+    assert trending == {1: False, 2: True}
+    assert rising == {2: True, 3: False}
+
+
+def test_trending_row_explains_its_own_threshold_and_scores_with_growth() -> None:
+    run = make_run()
+    make_check(run, 1, stars=40_000, gain_7d=900, pool=Pool.TRENDING, is_trending=True)
+
+    [row] = services.latest_report_rows("trending").rows
+
+    assert row.reason == (
+        "+900 star trong 7 ngày (ngưỡng 200 star và 2%) · đang 40.000 star · "
+        "nguồn: lịch sử star GitHub, ngày UTC 15/10–21/10"  # noqa: RUF001 — đúng mẫu thiết kế
+    )
+    assert row.scores.potential is not None  # có số tăng: chấm được Tiềm năng
+    assert row.sparkline == sparkline_points(row.check.series)
+    assert row.growth_percent is not None
+
+
+def test_latest_rows_query_count_does_not_grow_with_rows(
+    django_assert_max_num_queries: Any,
+) -> None:
+    run = make_run()
+    for github_id in range(1, 4):
+        make_check(run, github_id, stars=5_000, gain_7d=500, pool=Pool.TRENDING, is_trending=True)
+    with CaptureQueriesContext(connection) as few:
+        services.latest_report_rows("trending")
+    for github_id in range(10, 30):
+        make_check(run, github_id, stars=5_000, gain_7d=500, pool=Pool.TRENDING, is_trending=True)
+        label_repository(Repository.objects.get(github_id=github_id), audience=("creator",))
+
+    with django_assert_max_num_queries(len(few)):
+        rows = services.latest_report_rows("trending")
+
+    assert len(rows.rows) == 23
