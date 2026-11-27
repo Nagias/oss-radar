@@ -45,6 +45,26 @@ def test_classify_command_respects_budget_and_limit(fake_llm: FakeLlm) -> None:
     assert RepoClassification.objects.count() == 45
 
 
+def test_classify_command_budget_stop_is_not_reported_as_ai_misses(fake_llm: FakeLlm) -> None:
+    # Hết ngân sách giữa chừng: repo chưa tới lượt không phải "AI bỏ sót" (đo thật 26/11: lệnh
+    # `--budget 1` báo "8.934 repo AI bỏ sót" trong khi sổ bỏ sót trống).
+    make_repos(90)
+
+    text = run_command("--budget", "1")
+
+    assert "Xong: 40 repo có nhãn, 50 repo chưa có nhãn — chạy lại lệnh để làm tiếp" in text
+    assert "AI bỏ sót" not in text
+
+
+def test_classify_command_reports_repos_ai_kept_missing(fake_llm: FakeLlm) -> None:
+    repos = make_repos(3)
+    fake_llm.skip_ids = {repos[0].github_id}  # AI bỏ sót cả lượt đầu lẫn lượt thử lại
+
+    text = run_command()
+
+    assert "Xong: 2 repo có nhãn, 1 repo AI bỏ sót" in text
+
+
 def test_classify_command_reclassify(fake_llm: FakeLlm) -> None:
     make_repos(2)
     run_command()
