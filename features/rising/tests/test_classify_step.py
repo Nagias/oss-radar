@@ -42,6 +42,14 @@ def fake_llm(http_mock: respx.MockRouter, settings: Settings) -> FakeLlm:
     return fake
 
 
+@pytest.fixture(autouse=True)
+def _rules_place_nothing(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Các test của bước AI (F-010) coi như luật từ khoá không xếp được repo nào, để mọi repo của
+    lượt đều tới tay AI như trước. Test có chữ "rules" trong tên thì dùng luật thật."""
+    if "rules" not in request.node.name:
+        monkeypatch.setattr(taxonomy, "rule_labels", lambda _repo: None)
+
+
 def three_repos(use_fake: UseFake) -> Any:
     """Rising: OTHER +140, FAST +70. MID +20 là ứng viên không rising."""
     snapshot(FAST, stars=100)
@@ -358,3 +366,40 @@ def test_classify_run_heartbeat_kept_while_waiting_for_9router(
 
     assert run.status == Status.SUCCEEDED
     assert len(fake_llm.calls) == 2
+
+
+# --- Luật từ khoá trong lượt (gói 1b của bộ luật) ------------------------------------------------
+
+
+def test_daily_run_labels_by_rules_without_ai_for_the_whole_catalog(use_fake: UseFake) -> None:
+    # Không có khoá AI. Repo ngoài lượt (không thuộc truy vấn theo dõi nào) cũng được luật gắn nhãn.
+    three_repos(use_fake)
+    outside = make_github_repo(
+        github_id=999, full_name="someone/outside", topics=("comfyui",), description="Nodes"
+    )
+    upsert_repositories([outside], seen_at=timezone.now())
+
+    run = run_daily_now()
+
+    assert run.status in {Status.SUCCEEDED, Status.SUCCEEDED_PARTIAL}
+    row = RepoClassification.objects.get(repository__github_id=999)
+    assert row.source == RepoClassification.Source.RULE
+    assert ClassifyRun.objects.count() == 0  # không mở lần phân loại AI nào
+    assert run.ai_calls_used == 0
+
+
+def test_daily_run_sends_ai_only_what_the_rules_could_not_place(
+    use_fake: UseFake, fake_llm: FakeLlm
+) -> None:
+    three_repos(use_fake)
+
+    run_daily_now()
+
+    by_rule = set(
+        RepoClassification.objects.filter(source=RepoClassification.Source.RULE).values_list(
+            "repository__github_id", flat=True
+        )
+    )
+    sent_to_ai = {repo_id for call in fake_llm.calls for repo_id in call}
+    assert by_rule.isdisjoint(sent_to_ai)
+    assert by_rule | sent_to_ai >= {FAST, MID, OTHER}

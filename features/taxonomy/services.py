@@ -49,6 +49,8 @@ HEARTBEAT_CHUNK_SECONDS = 10.0
 # lại) — không đốt lượt mỗi nhịp 5 phút cho đúng mấy repo đó.
 MAX_MISSES = 2
 MISS_REST = timedelta(days=7)
+RULE_MODEL = "luật"  # ghi vào cột `model` của dòng do luật gắn
+RULE_BATCH_SIZE = 500
 UNCLASSIFIED = "__unclassified__"  # khoá đếm số repo chưa có nhãn trong `label_counts`
 REASON_INTERRUPTED = "Bị gián đoạn (app tắt giữa chừng)."
 REASON_UNEXPECTED = "Lỗi không mong đợi — xem log của máy chủ."
@@ -430,7 +432,8 @@ def compare_rules_with_ai() -> RuleComparison:
     rule: dict[tuple[str, str], int] = {}
     both: dict[tuple[str, str], int] = {}
     unplaced = 0
-    repos = Repository.objects.filter(pk__in=classified_repository_ids())
+    by_ai = RepoClassification.objects.filter(source=RepoClassification.Source.AI)
+    repos = Repository.objects.filter(pk__in=by_ai.values("repository_id"))
     for repo in repos.only(
         "github_id", "full_name", "description", "topics", "language"
     ).iterator():
@@ -462,6 +465,72 @@ def compare_rules_with_ai() -> RuleComparison:
         if category.code != OTHER
     )
     return RuleComparison(compared=repos.count(), unplaced=unplaced, groups=groups)
+
+
+@dataclass(slots=True)
+class RuleReport:
+    examined: int = 0  # repo luật đã xét (chưa có nhãn, hoặc nhãn do luật gắn cần xem lại)
+    labelled: int = 0  # được ghi nhãn mới hoặc ghi lại
+    removed: int = 0  # dòng do luật gắn nay không còn khớp → gỡ
+    unplaced: int = 0  # chưa có nhãn và luật không xếp được
+
+
+def classify_catalog_by_rules(
+    *,
+    batch_size: int = RULE_BATCH_SIZE,
+    after_batch: Callable[[int], None] = lambda _examined: None,
+) -> RuleReport:
+    """Gắn nhãn bằng luật từ khoá cho cả kho. Không gọi mạng, không cần AI.
+
+    Chỉ xét repo chưa có dòng phân loại, hoặc dòng do luật gắn mà bộ từ khoá đã đổi phiên bản / repo
+    vừa được quét lại. Dòng của AI không bao giờ bị đụng tới. Luật không xếp được thì không ghi gì
+    (repo vẫn là "chưa phân loại"); dòng của luật nay không còn khớp thì gỡ. `after_batch(số repo
+    đã xét)` chạy sau mỗi lô (để ghi nhịp sống khi chạy trong lượt hằng ngày).
+    """
+    now = timezone.now()
+    version = load_keywords().version
+    taxonomy_version = load_taxonomy().version
+    by_rule = Q(classification__source=RepoClassification.Source.RULE)
+    stale = (
+        ~Q(classification__rules_version=version)
+        | Q(classification__checked_at__isnull=True)
+        | Q(last_seen_at__gt=F("classification__checked_at"))
+    )
+    candidates = list(
+        Repository.objects.filter(Q(classification__isnull=True) | (by_rule & stale))
+        .select_related("classification")
+        .order_by("-stars", "pk")
+    )
+    report = RuleReport()
+    for start in range(0, len(candidates), batch_size):
+        batch = candidates[start : start + batch_size]
+        unchanged: list[int] = []
+        with transaction.atomic():
+            for repo in batch:
+                previous: RepoClassification | None = getattr(repo, "classification", None)
+                labels = rule_labels(repo)
+                if labels is None:
+                    if previous is None:
+                        report.unplaced += 1
+                    else:
+                        RepoLabel.objects.filter(repository=repo).delete()
+                        previous.delete()
+                        report.removed += 1
+                elif (
+                    previous is not None
+                    and previous.rules_version == version
+                    and previous.fingerprint == _fingerprint(repo)
+                ):
+                    unchanged.append(previous.pk)
+                else:
+                    _save_rule_labels(
+                        repo, labels, now=now, version=version, taxonomy_version=taxonomy_version
+                    )
+                    report.labelled += 1
+            RepoClassification.objects.filter(pk__in=unchanged).update(checked_at=now)
+        report.examined += len(batch)
+        after_batch(report.examined)
+    return report
 
 
 # --- Hàm phụ ---------------------------------------------------------------------------------
@@ -514,6 +583,9 @@ def _save(
                     "fingerprint": _fingerprint(repo),
                     "classified_at": now,
                     "checked_at": now,
+                    # AI ghi lên dòng của luật thì dòng thành của AI: từ đó luật không đụng nữa.
+                    "source": RepoClassification.Source.AI,
+                    "rules_version": 0,
                 },
             )
             ClassifyMiss.objects.filter(repository=repo).delete()
@@ -531,6 +603,38 @@ def _save(
         ClassifyRun.objects.filter(pk=run.pk).update(
             classified_count=F("classified_count") + len(labels)
         )
+
+
+def _save_rule_labels(
+    repo: Repository, labels: Labels, *, now: datetime, version: int, taxonomy_version: int
+) -> None:
+    RepoClassification.objects.update_or_create(
+        repository=repo,
+        defaults={
+            "reason": labels.reason,
+            "model": RULE_MODEL,
+            "prompt_version": 0,  # khác mọi PROMPT_VERSION: `--reclassify` cho AI làm lại
+            "taxonomy_version": taxonomy_version,
+            "fingerprint": _fingerprint(repo),
+            "classified_at": now,
+            "checked_at": now,
+            "source": RepoClassification.Source.RULE,
+            "rules_version": version,
+        },
+    )
+    RepoLabel.objects.filter(repository=repo).delete()
+    RepoLabel.objects.bulk_create(
+        [
+            *(
+                RepoLabel(repository=repo, axis=RepoLabel.Axis.AUDIENCE, code=code)
+                for code in labels.audience
+            ),
+            *(
+                RepoLabel(repository=repo, axis=RepoLabel.Axis.ASPECTS, code=code)
+                for code in labels.aspects
+            ),
+        ]
+    )
 
 
 def _record_misses(repos: list[Repository], *, reason: str) -> None:

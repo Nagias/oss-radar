@@ -622,9 +622,22 @@ class _DailyRunner:
         lại do việc định kỳ phân loại dần.
         """
         self._check_in()
+        # Luật từ khoá trước (F-013): cho cả kho, không cần AI. AI (nếu có) chỉ còn lo repo của lượt
+        # mà luật không xếp được.
+        by_rules = taxonomy.classify_catalog_by_rules(after_batch=self._beat_after_rule_batch)
+        logger.info(
+            "Lượt hằng ngày #%s: luật gắn nhãn %s repo, gỡ %s, không xếp được %s",
+            self.run_id,
+            by_rules.labelled,
+            by_rules.removed,
+            by_rules.unplaced,
+        )
         if llm_configured():
             self._classify_repos()
         self._check_in(step=DailyRun.Step.REPORT)
+
+    def _beat_after_rule_batch(self, _examined: int) -> None:
+        self._check_in()
 
     def _classify_repos(self) -> None:
         in_run = Repository.objects.filter(rising_checks__daily_run_id=self.run_id)

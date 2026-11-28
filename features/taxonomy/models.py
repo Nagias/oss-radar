@@ -7,7 +7,12 @@ class RepoClassification(models.Model):
     """Lần phân loại gần nhất của một repo: lý do, model, phiên bản — để kiểm lại và gọi lại.
 
     `fingerprint` là dấu vân tay của đầu vào (mô tả, topics, ngôn ngữ): đổi thì phân loại lại.
+    `source` nói nhãn do AI hay do luật từ khoá gắn (F-013): luật không bao giờ ghi đè dòng của AI.
     """
+
+    class Source(models.TextChoices):
+        AI = "ai", "AI"
+        RULE = "rule", "Luật từ khoá"
 
     repository = models.OneToOneField(
         Repository, on_delete=models.CASCADE, related_name="classification"
@@ -20,6 +25,11 @@ class RepoClassification(models.Model):
     classified_at = models.DateTimeField("Phân loại lúc")
     # Lần gần nhất đã kiểm dấu vân tay (repo được quét lại sau mốc này thì xét lại mô tả có đổi).
     checked_at = models.DateTimeField("Kiểm dấu vân tay lúc", null=True, blank=True)
+    source = models.CharField(
+        "Nguồn nhãn", max_length=10, choices=Source.choices, default=Source.AI
+    )
+    # `version` của keywords.toml lúc luật gắn nhãn (0 với dòng do AI gắn).
+    rules_version = models.PositiveSmallIntegerField("Phiên bản bộ từ khoá", default=0)
 
     class Meta:
         verbose_name = "phân loại repo"
