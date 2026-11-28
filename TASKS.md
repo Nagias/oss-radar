@@ -143,7 +143,7 @@
   - [x] Chạy thật `daily` trên bản sao CSDL (2026-11-24): 87,5 phút, 380 ứng viên trending, xác minh 300/300, 229 repo
         trending (176 từ 1.000 star), 108 rising; số star top 10 khớp GitHub
 - [x] PR B merge vào `main` (Nagias/oss-radar#10, commit `4e5774b`, 2026-11-24)
-- [ ] PR C `feat/f012-kham-pha` — kế hoạch `docs/plans/2026-11-24-pr-c-f012-kham-pha.md`
+- [x] PR C `feat/f012-kham-pha` (Nagias/oss-radar#11, commit `a00ced9`, 2026-11-25) — kế hoạch `docs/plans/2026-11-24-pr-c-f012-kham-pha.md`
   - [x] `rising.services.latest_report_rows`: dòng trending / đang lên của báo cáo mới nhất, lý do riêng cho trending
   - [x] Trang chi tiết lượt `/rising/runs/<id>/`; `/rising/` và `/repos/` cũ chuyển hướng; Theo dõi có thẻ báo cáo mới nhất
   - [x] Trang Khám phá 3 tab ở `/`, Quét chuyển sang `/scan/`; tìm nhiều từ cả trong chủ đề; chip gỡ từng ô lọc
@@ -151,3 +151,20 @@
   - [x] Sổ sách: FEATURE_MAP F-012, QĐ-23, CLAUDE.md
   - [x] Kiểm chứng: `poe check`, tốc độ và độ nặng trang trên bản sao CSDL, trình duyệt 1440/375 sáng tối, rà soát độc lập, mở PR
   - [x] Đo trên bản sao CSDL thật: 24 trường hợp 105–241 ms, 12–15 truy vấn, trang ≤ 125 KB; sửa 1 mục quan trọng + 5 mục nhỏ của rà soát
+
+## Đưa CSDL thật lên bản mới và quét bù (2026-11-25 → 27)
+
+- [x] Sao lưu `data/backup-sau-nang-cap-f011-f012-2026-11-25.sqlite3`; migration `browse/0001`, `rising/0005` đã áp
+- [x] Lượt 25/11 Lỗi (MemoryError — cả máy cạn bộ nhớ ảo, app chỉ dùng ~66 MB); lượt 26/11 chạy lại: 695 lượt Search,
+      300 xác minh, 300 xác minh trending, 100 hồ sơ chủ; 231 trending, 213 rising; kho 39.830 repo
+- [x] Phân loại bù bằng model mới (`gemini-4-hydrogen`, qua CLI Proxy cổng 8317): 8.974 repo, 39.830/39.830 có nhãn,
+      0 bỏ sót; đọc tay 20 nhãn ngẫu nhiên — 19 hợp lý
+
+## Sửa: lệnh `classify` báo nhầm "AI bỏ sót" khi hết ngân sách (2026-11-27, nhánh `fix/classify-bao-bo-sot`)
+
+- [x] Test đỏ trước (hết ngân sách → "N repo chưa có nhãn — chạy lại lệnh để làm tiếp"; AI bỏ sót thật vẫn báo bỏ sót)
+- [x] Sửa dòng tổng kết của lệnh; `poe check` xanh (980 test, độ phủ 98,55%)
+- [ ] Chạy thật `classify --budget 1` trên bản sao CSDL — bị chặn: 27/11 Gemini hết hạn mức (chờ ~3 giờ); 28/11
+      CLI Proxy trả 403 "service has been disabled in this account for violation of Terms of Service". Chờ chủ dự
+      án có tài khoản / nguồn AI khác
+- [ ] PR Nagias/oss-radar#12, CI xanh, chủ dự án duyệt → squash-merge

@@ -75,8 +75,14 @@ class Command(BaseCommand):
             self.stdout.write(report.stopped)
         run = report.run
         missing = max(0, report.needed - run.classified_count)
+        # Dừng vì hết ngân sách thì phần lớn repo còn thiếu là chưa tới lượt, không phải AI bỏ sót.
+        missing_text = (
+            f"{_n(missing)} repo chưa có nhãn — chạy lại lệnh để làm tiếp"
+            if report.stopped
+            else f"{_n(missing)} repo AI bỏ sót"
+        )
         self.stdout.write(
-            f"Xong: {_n(run.classified_count)} repo có nhãn, {_n(missing)} repo AI bỏ sót"
+            f"Xong: {_n(run.classified_count)} repo có nhãn, {missing_text}"
             f" · {run.calls_used} lượt gọi AI · {_n(run.prompt_tokens)} token vào,"
             f" {_n(run.completion_tokens)} token ra · {(time.monotonic() - started) / 60:.1f} phút."
         )
