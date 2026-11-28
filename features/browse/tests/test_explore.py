@@ -485,3 +485,58 @@ def test_whole_page_query_count_does_not_grow_with_rows(
 
     with django_assert_max_num_queries(len(few.captured_queries)):
         client.get("/", {"tab": tab})
+
+
+# --- Số cạnh mỗi nhóm lọc đếm theo danh sách đang xem ---------------------------------------------
+
+
+def labelled_mix() -> None:
+    """`mixed()` kèm nhãn: repo 2, 3, 5 có nhãn; repo 1, 4 chưa phân loại."""
+    mixed()
+    label(Repository.objects.get(github_id=2), audience=("creator",), aspects=("video",))
+    label(Repository.objects.get(github_id=3), audience=("creator",), aspects=("image",))
+    label(Repository.objects.get(github_id=5), audience=("marketer",), aspects=("video",))
+
+
+def counts(filters: BrowseFilters, *codes: str) -> list[int]:
+    page = services.explore(filters)
+    return [page.counts[code] for code in codes]
+
+
+def test_group_counts_follow_the_tab() -> None:
+    labelled_mix()
+    codes = ("creator", "marketer", "video", "image", services.UNCLASSIFIED)
+
+    assert counts(RISING, *codes) == [2, 0, 1, 1, 0]  # chỉ repo 2 và 3
+    assert counts(TRENDING, *codes) == [1, 0, 1, 0, 1]  # repo 1 (chưa nhãn) và 2
+    assert counts(ALL, *codes) == [2, 1, 2, 1, 2]
+
+
+def test_group_counts_follow_the_other_filters() -> None:
+    labelled_mix()
+
+    assert counts(replace(ALL, min_stars=1_000), "creator", "marketer", "video") == [0, 1, 1]
+    assert counts(replace(RISING, q="repo-3"), "creator", "video", "image") == [1, 0, 1]
+
+
+def test_group_counts_ignore_own_axis_but_follow_the_other_axis() -> None:
+    """Trong một ô là "hoặc": tick thêm nhóm cùng ô chỉ cộng thêm, nên số không tính ô đó."""
+    labelled_mix()
+    picked = replace(ALL, audience=("creator",))
+
+    assert counts(picked, "creator", "marketer") == [2, 1]
+    assert counts(picked, "video", "image") == [1, 1]  # chỉ trong repo của Nhà sáng tạo
+    assert counts(picked, services.UNCLASSIFIED) == [2]  # không tính các ô nhóm đang tick
+
+
+def test_group_counts_skip_hidden_suspicious_rows() -> None:
+    run = report()
+    created = timezone.now() - timedelta(days=30)
+    fishy = add_repo(1, stars=613, forks=2, created_at=created, pushed_at=created.replace(hour=18))
+    honest = add_repo(2, stars=5_000, forks=900)
+    for repo in (fishy, honest):
+        check(run, repo, gain=300, trending=True)
+        label(repo, audience=("creator",))
+
+    assert counts(TRENDING, "creator") == [1]
+    assert counts(replace(TRENDING, show_suspicious=True), "creator") == [2]

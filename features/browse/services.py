@@ -150,11 +150,9 @@ def explore(filters: BrowseFilters) -> ExplorePage:
         )
     kind = rising.KIND_TRENDING if filters.tab == TAB_TRENDING else rising.KIND_RISING
     latest_rows = rising.latest_report_rows(kind, _filtered(filters, Repository.objects.all()))
-    rows = latest_rows.rows
-    hidden = 0
-    if not filters.show_suspicious:
-        kept = [row for row in rows if not row.scores.suspicion.is_hidden]
-        hidden, rows = len(rows) - len(kept), kept
+    rows = _visible(latest_rows.rows, filters)
+    hidden = len(latest_rows.rows) - len(rows)
+    counts = _report_counts(filters, kind, rows)
     rows = _sorted_rows(rows, filters.effective_sort)
     pages = max(1, math.ceil(len(rows) / REPORT_PAGE_SIZE))
     page = min(max(1, filters.page), pages)
@@ -171,7 +169,7 @@ def explore(filters: BrowseFilters) -> ExplorePage:
         window_start=latest_rows.window_start,
         hidden_count=hidden,
         unverified_count=latest_rows.unverified_count,
-        counts=taxonomy.label_counts(),
+        counts=counts,
         languages=_languages(),
     )
 
@@ -200,7 +198,7 @@ def browse(filters: BrowseFilters) -> BrowsePage:
         total=total,
         page=page,
         pages=pages,
-        counts=taxonomy.label_counts(),
+        counts=_group_counts(filters, _annotated_filtered),
         languages=_languages(),
     )
 
@@ -336,6 +334,56 @@ def _filtered(filters: BrowseFilters, repos: QuerySet[Repository]) -> QuerySet[R
     if filters.scan is not None:
         repos = repos.filter(pk__in=discovery.repositories_seen_in([filters.scan]).values("pk"))
     return repos
+
+
+def _visible(rows: list[rising.RisingRow], filters: BrowseFilters) -> list[rising.RisingRow]:
+    """Tab Trending / Đang lên: bỏ dòng "Nghi cao" (điểm tính trực tiếp) trừ khi được yêu cầu."""
+    if filters.show_suspicious:
+        return rows
+    return [row for row in rows if not row.scores.suspicion.is_hidden]
+
+
+def _group_counts(
+    filters: BrowseFilters, listed: Callable[[BrowseFilters], QuerySet[Repository]]
+) -> dict[str, int]:
+    """Số cạnh mỗi nhóm lọc: đếm trong danh sách đang xem (`listed(bộ lọc)` = repo của danh sách).
+
+    Theo mọi ô lọc khác, trừ chính ô chứa nhóm đó: trong một ô là "hoặc", tick thêm chỉ cộng thêm
+    repo, nên số của "Dành cho ai" không tính các nhóm "Dành cho ai" đang tick (nhưng vẫn theo ô
+    "Làm được gì"), và ngược lại. Số "chưa phân loại" không tính cả hai ô nhóm. Chưa tick nhóm nào
+    thì ba tập này là một, chỉ đếm một lần.
+    """
+    counted: dict[BrowseFilters, dict[str, int]] = {}
+
+    def within(variant: BrowseFilters) -> dict[str, int]:
+        if variant not in counted:
+            counted[variant] = taxonomy.label_counts(listed(variant))
+        return counted[variant]
+
+    groups = taxonomy.load_taxonomy()
+    by_audience = within(replace(filters, audience=()))
+    by_aspects = within(replace(filters, aspects=()))
+    unlabelled = within(replace(filters, audience=(), aspects=(), unclassified=False))
+    counts = {category.code: by_audience.get(category.code, 0) for category in groups.audience}
+    counts.update({category.code: by_aspects.get(category.code, 0) for category in groups.aspects})
+    counts[UNCLASSIFIED] = unlabelled[UNCLASSIFIED]
+    return counts
+
+
+def _report_counts(
+    filters: BrowseFilters, kind: str, rows: list[rising.RisingRow]
+) -> dict[str, int]:
+    """Số cạnh mỗi nhóm ở tab Trending / Đang lên: đếm trong các dòng báo cáo đang hiện.
+
+    Đang tick nhóm (hoặc "chưa phân loại") thì `rows` đã bị thu hẹp theo nhóm, nên phải lấy lại
+    danh sách chưa lọc theo nhóm (thêm một lượt chấm điểm vài trăm dòng) để đếm.
+    """
+    if filters.audience or filters.aspects or filters.unclassified:
+        loose = replace(filters, audience=(), aspects=(), unclassified=False)
+        report = rising.latest_report_rows(kind, _filtered(loose, Repository.objects.all()))
+        rows = _visible(report.rows, filters)
+    shown = Repository.objects.filter(pk__in=[row.repository.pk for row in rows])
+    return _group_counts(filters, lambda variant: _filtered(variant, shown))
 
 
 def _annotated_filtered(filters: BrowseFilters) -> QuerySet[Repository]:
