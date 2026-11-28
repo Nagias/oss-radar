@@ -1,4 +1,8 @@
-"""Migration dữ liệu: 16 truy vấn theo dõi gợi ý (thiết kế F-005 mục 2), đúng thứ tự, đúng nhãn."""
+"""Migration dữ liệu: 16 truy vấn theo dõi gợi ý (thiết kế F-005 mục 2), đúng thứ tự, đúng nhãn.
+
+Từ gói 0 của bộ luật (2026-11-28) có thêm 10 truy vấn tiếng Trung đứng sau — xem
+`test_watch_seed_china.py`.
+"""
 
 import importlib
 
@@ -32,7 +36,7 @@ SUGGESTED = [
 
 
 def test_seed_creates_sixteen_suggested_watch_queries_in_order() -> None:
-    rows = list(WatchQuery.objects.all())
+    rows = list(WatchQuery.objects.all())[:16]
 
     assert [(row.label, row.query) for row in rows] == SUGGESTED
     assert [row.position for row in rows] == list(range(1, 17))
@@ -44,4 +48,4 @@ def test_seed_creates_sixteen_suggested_watch_queries_in_order() -> None:
 def test_seed_run_again_does_not_duplicate() -> None:
     seed_migration.seed_watch_queries(apps, None)
 
-    assert WatchQuery.objects.count() == 16
+    assert WatchQuery.objects.filter(query__in=[query for _label, query in SUGGESTED]).count() == 16

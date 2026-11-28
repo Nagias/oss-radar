@@ -36,6 +36,7 @@ rủi ro gì). Quy tắc làm việc hằng ngày ("làm việc X thì đi đư�
 | QĐ-21 | Service lớn | Tách thành module trong thư mục tính năng; `services.py` chỉ xuất lại tên và vẫn là cửa công khai duy nhất | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng (`features/rising`) |
 | QĐ-22 | Trending (sửa QĐ-16) | Mọi cỡ repo, ≥ 200 star và ≥ 2% trong 7 ngày; ngân sách xác minh riêng 300 (0 khi không token); chung bảng `RisingCheck` (cột `pool`) | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng |
 | QĐ-23 | Dữ liệu dùng chung mọi trang | Context processor mỏng `features/<tên>/context_processors.py` chỉ gọi `services`, khai trong `settings.TEMPLATES` (thanh bên Góc nhìn) | Đã duyệt 2026-11-23 (thiết kế F-011/F-012), đã dùng (`features/browse`) |
+| QĐ-24 | Luật thay AI (sửa QĐ-18, QĐ-22) | Phân loại, lọc kết quả kém, đánh dấu repo Trung Quốc và điểm gợi ý đều tính bằng **luật viết sẵn** (hàm thuần, từ khoá và ngưỡng nằm trong file dữ liệu / hằng số, mọi kết luận kèm lý do). AI chỉ còn là lớp bổ sung cho repo luật không xếp được, không có AI app vẫn chạy đủ. Ứng viên rising / trending đến từ 26 truy vấn theo dõi (16 topic tiếng Anh + 10 truy vấn tiếng Trung) | Đã duyệt 2026-11-28 (thiết kế bộ luật), đang làm (gói 0 đã dùng) |
 
 ---
 
