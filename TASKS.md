@@ -164,5 +164,7 @@
 
 - [x] Test đỏ trước (hết ngân sách → "N repo chưa có nhãn — chạy lại lệnh để làm tiếp"; AI bỏ sót thật vẫn báo bỏ sót)
 - [x] Sửa dòng tổng kết của lệnh; `poe check` xanh (980 test, độ phủ 98,55%)
-- [ ] Chạy thật `classify --budget 1` trên bản sao CSDL — bị chặn 27/11: CLI Proxy báo Gemini hết hạn mức, chờ ~3 giờ
-- [ ] PR, CI xanh, chủ dự án duyệt → squash-merge
+- [ ] Chạy thật `classify --budget 1` trên bản sao CSDL — bị chặn: 27/11 Gemini hết hạn mức (chờ ~3 giờ); 28/11
+      CLI Proxy trả 403 "service has been disabled in this account for violation of Terms of Service". Chờ chủ dự
+      án có tài khoản / nguồn AI khác
+- [ ] PR Nagias/oss-radar#12, CI xanh, chủ dự án duyệt → squash-merge
