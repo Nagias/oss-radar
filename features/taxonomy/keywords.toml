@@ -1,0 +1,274 @@
+# Bộ từ khoá của luật phân loại (F-013, thiết kế bộ luật 2026-11-28). Sửa tay được, không cần sửa code.
+#
+# - Mỗi nhóm có `strong` (một từ là đủ: 2 điểm) và `weak` (1 điểm mỗi từ; nhóm cần đủ 2 điểm).
+# - Từ khoá viết chữ thường. So theo NGUYÊN TỪ trên topic, tên repo và mô tả: `agent` không khớp `agents`;
+#   `text-to-video` khớp cả "text to video". Từ khoá chữ Hán khớp theo chuỗi con.
+# - `[derived]`: nhóm "Dành cho ai" được cộng điểm khi repo đã thuộc một trong các nhóm "Làm được gì" bên phải.
+# - Danh sách ban đầu chọn từ số đo trên ~40.000 nhãn AI (28/11/2026): từ mạnh là từ mà ≥ ~80% repo chứa nó được AI
+#   xếp vào nhóm. Thêm trào lưu mới thì thêm từ vào đây.
+# - Mỗi lần sửa file thì TĂNG `version`, rồi chạy `uv run python manage.py classify --compare-rules` để đo lại.
+
+version = 1
+
+[derived]
+developer = ["devtools", "ai_infra", "webapp", "scraping"]
+creator = ["video", "image", "audio"]
+marketer = ["ads", "social"]
+business = ["commerce"]
+gamedev = ["game"]
+
+# --- Lớp "Làm được gì" -------------------------------------------------------------------------
+
+[aspects.agent]
+strong = [
+  "agent", "agents", "ai-agent", "ai-agents", "agentic", "agentic-ai", "multi-agent", "agent-skills", "harness",
+  "orchestration", "autonomous", "openclaw", "coding-agent", "chatbot", "hermes-agent", "agent-orchestration",
+  "autonomous-agents", "agent-memory", "tool-calling", "agentic-workflow", "agent-framework", "function-calling",
+  "langgraph", "langchain", "browser-automation", "llm-agents", "manus", "workflow-automation",
+  "multi-agent-systems", "subagents", "computer-use", "orchestrator", "crewai", "autogen", "智能体",
+]
+weak = ["automation", "skills", "skill", "assistant", "bot", "workflow", "copilot", "sandbox", "swarm", "claude-skills"]
+
+[aspects.video]
+strong = [
+  "video", "videos", "video-generation", "ai-video", "text-to-video", "ffmpeg", "video-editing", "motion-graphics",
+  "image-to-video", "remotion", "shorts", "storyboard", "hyperframes", "reels", "video-editor", "captions",
+  "explainer-video", "film", "filmmaking", "youtube-shorts", "subtitles", "subtitle", "ltx-video", "short-drama",
+  "short-video", "capcut", "sora", "talking-head", "lip-sync", "voiceover", "video-processing", "video-production",
+  "clips", "footage", "mp4", "cinematic", "seedance", "视频", "短视频", "短剧", "分镜", "配音", "漫剧", "剧本", "数字人", "剪辑",
+]
+weak = [
+  "motion", "animation", "veo", "kling", "wan", "youtube", "tiktok", "aigc", "douyin", "bilibili", "抖音", "avatar",
+  "vfx", "yt-dlp", "screen-recording", "camera", "director",
+]
+
+[aspects.image]
+strong = [
+  "image", "image-generation", "text-to-image", "image-editing", "ai-image-api", "image-api", "comfyui",
+  "image-prompts", "prompt-gallery", "stable-diffusion", "flux", "comfyui-nodes", "nano-banana", "ai-art",
+  "comfyui-custom-node", "comfyui-custom-nodes", "comfyui-workflow", "comfy", "seedream", "sdxl",
+  "ai-image-generation", "image-processing", "gpt-image", "gpt-image-2", "qwen-image", "inpainting",
+  "stable-diffusion-webui", "custom-nodes", "illustration", "photography", "text2image", "imagen", "midjourney",
+  "文生图", "生图", "绘画", "图片",
+]
+weak = [
+  "images", "diffusion", "art", "lora", "photo", "svg", "figma", "logo", "face", "generative-art", "diffusers",
+  "blender", "controlnet", "upscale", "poster", "doubao", "design",
+]
+
+[aspects.audio]
+strong = [
+  "speech-to-text", "text-to-speech", "voice-ai", "voice-cloning", "voice-agent", "voice-agents", "stt",
+  "music-generation", "ai-music", "midi", "music-production", "dictation", "livekit", "daw", "telephony",
+  "audio-processing", "diarization", "speaker-diarization", "speech-recognition", "asr", "语音", "音乐",
+]
+weak = [
+  "voice", "speech", "audio", "tts", "music", "voice-assistant", "whisper", "transcription", "elevenlabs",
+  "podcast", "transcribe", "lyrics", "kokoro", "twilio",
+]
+
+[aspects.writing]
+strong = [
+  "ai-writing", "geo", "academic-writing", "seo-tools", "generative-engine-optimization", "aeo", "humanizer",
+  "copywriting", "writing-tools", "seotools", "writing-assistant", "technical-seo", "ai-detection",
+  "answer-engine-optimization", "seo-audit", "ai-seo", "creative-writing", "keyword-research", "ai-visibility",
+  "scientific-writing", "novel-writing", "humanize", "google-search-console", "paper-writing", "ai-humanizer",
+  "blogging", "seo-automation", "fiction-writing", "写作", "论文", "小说",
+]
+weak = [
+  "seo", "writing", "academic", "seo-optimization", "blog", "latex", "keyword", "wordpress", "sitemap", "cms",
+  "novel", "technical-writing", "content-marketing", "writer", "prose", "article", "fiction", "backlinks",
+  "thesis", "translation", "translate", "summarization", "screenwriting",
+]
+
+[aspects.social]
+strong = [
+  "social-media", "social-media-automation", "instagram-reels", "rednote", "youtube-automation", "youtube-api",
+  "twitter-api", "instagram-api", "xhs", "social-media-marketing", "youtube-shorts", "公众号", "微博",
+]
+weak = [
+  "social", "youtube", "tiktok", "instagram", "twitter", "linkedin", "reels", "shorts", "posts", "reddit", "viral",
+  "bilibili", "content-creation", "faceless", "content-automation", "creator-tools", "carousel", "posting",
+  "wechat", "weibo", "facebook", "xiaohongshu", "douyin", "小红书", "抖音",
+]
+
+[aspects.ads]
+strong = [
+  "advertising", "meta-ads", "email-marketing", "google-ads", "facebook-ads", "cold-email", "ppc", "ga4", "mautic",
+  "brand-monitoring", "cro", "marketing-analytics", "广告",
+]
+weak = [
+  "marketing", "marketing-automation", "ads", "ad", "lead-generation", "gtm", "campaigns", "campaign", "outreach",
+  "ai-marketing", "sales-automation", "google-analytics", "growth-hacking", "digital-marketing", "newsletter",
+  "attribution", "营销",
+]
+
+[aspects.scraping]
+strong = [
+  "scraping", "web-scraping", "scraper", "crawler", "web-search", "web-crawler", "headless-browser", "stealth",
+  "crawl", "crawling", "firecrawl", "data-extraction", "scrape", "web-scraper", "stealth-browser", "searxng",
+  "html-to-markdown", "crawl4ai", "anti-bot", "content-extraction", "webscraping", "antidetect", "search-api",
+  "爬虫",
+]
+weak = [
+  "extraction", "osint", "cdp", "web-automation", "extract", "fetch", "puppeteer", "chromium", "browser-agent",
+  "tavily", "fingerprint", "serp", "spider", "selenium", "captcha", "apify", "duckduckgo", "websearch",
+  "google-search",
+]
+
+[aspects.devtools]
+strong = [
+  "coding", "cli", "developer", "developer-tools", "opencode", "terminal", "ai-coding", "coding-agents",
+  "coding-agent", "copilot", "git", "testing", "gemini-cli", "code-review", "antigravity", "tui", "hooks",
+  "codex-cli", "agentic-coding", "github-copilot", "devops", "devtools", "windsurf", "ide", "vscode", "ci",
+  "static-analysis", "openai-codex", "codebase", "tmux", "spec-driven-development", "mcp-tools",
+  "ai-coding-assistant", "shell", "code-quality", "debugging", "worktree", "worktrees", "ssh",
+  "reverse-engineering", "coding-assistant", "code-generation", "bash", "security-tools", "cline", "vibe-coding",
+  "neovim", "claude-code-plugin",
+]
+weak = [
+  "claude-code", "code", "mcp-server", "codex", "cursor", "development", "security", "rust", "macos", "github",
+  "review",
+]
+
+[aspects.ai_infra]
+strong = [
+  "vector-search", "vector-database", "ai-gateway", "api-pricing", "retrieval-augmented-generation", "llm-gateway",
+  "llm-inference", "llm-proxy", "api-gateway", "graphrag", "ai-infrastructure", "llm-router", "anthropic-api",
+  "api-proxy", "graph-database", "inference-engine", "tool-calling", "function-calling", "ai-sdk", "typescript-sdk",
+  "endpoint", "pricing", "reverse-engineered-api", "ai-api-gateway", "大模型",
+]
+weak = [
+  "openai", "gateway", "rag", "compatible", "multimodal", "proxy", "vector", "inference", "retrieval",
+  "embeddings", "embedding", "semantic-search", "local-llm", "llama", "ollama", "fine-tuning", "finetuning",
+  "apimart", "image-api", "knowledge-graph", "long-term-memory", "ai-memory", "vllm", "gguf", "quantization",
+  "openai-compatible", "llm-evaluation",
+]
+
+[aspects.webapp]
+strong = [
+  "tailwindcss", "shadcn", "tailwind", "shadcn-ui", "web-design", "ssr", "responsive", "landing-page", "ui-components", "framer", "website-builder", "component-library", "framer-motion", "spa", "responsive-design",
+  "jamstack", "personal-website", "saas-boilerplate", "chat-ui", "gatsby", "headless-cms", "app-builder", "ssg",
+  "web-components", "portfolio-website", "full-stack",
+]
+weak = [
+  "frontend", "design-system", "css", "components", "ui-design", "vite", "boilerplate", "cms", "astro", "landing",
+  "reactjs", "nuxt", "fullstack", "angular", "design-to-code", "static-site-generator", "generative-ui", "vuejs",
+  "pwa", "webapp", "nextjs", "website",
+]
+
+[aspects.game]
+strong = [
+  "game", "game-development", "gamedev", "unity", "godot", "unreal", "unreal-engine", "minecraft", "game-engine",
+  "roblox", "game-assets", "sprite", "modding", "game-ai", "godot-engine", "luau", "ue5", "unity3d", "gdscript",
+  "roblox-studio", "rpg", "npc", "game-design", "game-dev", "游戏",
+]
+weak = ["games", "assets", "procedural-generation", "sprites", "playable", "gaming", "worlds", "texture"]
+
+[aspects.commerce]
+strong = [
+  "ecommerce", "commerce", "seller", "shopify", "e-commerce", "agentic-commerce", "cross-border-ecommerce",
+  "amazon-seller", "product-photography", "cart", "stablecoin", "woocommerce", "dropshipping", "电商", "跨境",
+]
+weak = [
+  "payments", "payment", "shop", "shopping", "usdc", "orders", "listing", "stripe", "checkout", "store",
+  "marketplace", "x402",
+]
+
+[aspects.productivity]
+strong = [
+  "obsidian", "second-brain", "note", "job-search", "task-management", "note-taking",
+  "personal-knowledge-management", "pkm", "career", "pptx", "powerpoint", "ppt", "gmail", "obsidian-plugin",
+  "spaced-repetition", "job-application", "personal-finance", "zettelkasten", "meeting-notes", "reminders",
+  "office-automation", "outlook", "resume-builder", "cover-letter", "飞书", "办公",
+]
+weak = [
+  "personal", "productivity", "markdown", "notes", "knowledge-base", "knowledge-management", "job", "wiki", "pdf",
+  "email", "document", "vault", "resume", "project-management", "kanban", "n8n", "personal-assistant", "calendar",
+  "documents", "office", "presentation", "slides", "product-management", "no-code", "low-code", "feishu", "crm",
+  "excel", "docx", "mail", "notion", "accounting", "meeting", "planner", "jira",
+]
+
+# --- Lớp "Dành cho ai" -------------------------------------------------------------------------
+
+[audience.developer]
+strong = [
+  "developer", "developer-tools", "cli", "sdk", "coding", "mcp-server", "framework", "terminal", "typescript",
+  "rust", "opencode", "library", "golang", "docker", "kubernetes", "backend", "api",
+]
+weak = [
+  "code", "tools", "server", "mcp", "plugin", "github", "security", "openai", "anthropic", "llm", "rag",
+  "model-context-protocol", "claude-code", "codex", "cursor", "python", "self-hosted",
+]
+
+[audience.creator]
+strong = [
+  "comfyui", "ai-video", "comfyui-nodes", "video-editing", "creative", "motion-graphics", "remotion",
+  "content-creation", "ai-writing", "shorts", "ai-art", "storyboard", "blender", "kling", "veo", "captions",
+  "reels", "comfyui-workflow", "video-editor", "film", "youtube-shorts", "subtitles", "short-drama",
+  "generative-art", "filmmaking", "motion-design", "cinematic", "creative-coding", "typography", "viral",
+  "storytelling", "midjourney", "video-production", "short-video", "clips", "image-prompts", "prompt-gallery",
+  "music-production", "ai-music", "creator", "creators", "视频", "短视频", "创作", "剪辑", "配音",
+]
+weak = [
+  "video", "videos", "text-to-video", "animation", "youtube", "music", "character", "lora", "podcast", "ffmpeg",
+  "tiktok", "image-to-video",
+]
+
+[audience.marketer]
+strong = [
+  "marketing", "marketing-automation", "geo", "ads", "social-media", "seo-tools", "generative-engine-optimization",
+  "aeo", "lead-generation", "copywriting", "gtm", "content-marketing", "advertising", "outreach", "ai-marketing",
+  "technical-seo", "keyword-research", "seo-audit", "sales-automation", "answer-engine-optimization", "seotools",
+  "social-media-automation", "ai-seo", "email-marketing", "meta-ads", "google-ads", "ai-visibility", "campaign",
+  "backlinks", "google-search-console", "cold-email", "facebook-ads", "content-strategy", "prospecting",
+  "marketing-tools", "growth-hacking", "go-to-market", "ppc", "ga4", "digital-marketing", "marketing-analytics",
+  "social-media-marketing", "local-seo", "brand-monitoring", "seo-automation", "affiliate-marketing", "营销",
+  "运营", "广告",
+]
+weak = [
+  "seo", "content", "social", "tiktok", "sales", "instagram", "content-creation", "seo-optimization", "linkedin",
+  "keyword", "lead", "growth", "brand", "twitter", "visibility", "ai-search", "posts", "ad", "xiaohongshu", "b2b",
+  "reddit", "campaigns", "viral", "serp", "leads", "ugc", "engagement", "keywords", "facebook", "小红书", "抖音",
+  "公众号",
+]
+
+[audience.business]
+strong = [
+  "sales", "crm", "investment", "lead-generation", "b2b", "founder", "founders", "sales-automation",
+  "financial-analysis", "erp", "stock-analysis", "investment-research", "solopreneur", "customer-support",
+  "seller", "tax", "business-intelligence", "cold-email", "go-to-market", "startups", "prospecting", "consulting",
+  "businesses", "customer-service", "indie-hackers", "indie-hacker", "portfolio-management", "one-person-company",
+  "small-business", "equity-research", "amazon-seller", "solo-founder", "helpdesk", "business-automation",
+  "bookkeeping", "revops", "invoice", "电商", "一人公司", "跨境", "创业",
+]
+weak = [
+  "business", "market", "trading", "finance", "stock", "company", "financial", "ecommerce", "saas", "customer",
+  "lead", "startup", "product-management", "commerce", "fintech", "legal", "stock-market", "gtm", "backtesting",
+  "quant", "stocks", "indie", "outreach", "accounting", "investing", "legal-tech", "market-research", "shopify",
+  "payments", "enterprise",
+]
+
+[audience.gamedev]
+strong = [
+  "game", "game-development", "gamedev", "unity", "godot", "unreal", "unreal-engine", "game-engine", "roblox",
+  "game-assets", "sprite", "modding", "game-ai", "luau", "godot-engine", "unity3d", "ue5", "roblox-studio",
+  "gdscript", "npc", "game-design", "game-dev", "游戏",
+]
+weak = ["games", "blender", "assets", "procedural-generation", "minecraft", "sprites", "gaming", "rpg", "texture"]
+
+[audience.research]
+strong = [
+  "paper", "papers", "diffusion-models", "academic", "scientific", "literature", "gan", "academic-writing",
+  "arxiv", "dataset", "datasets", "research-tools", "reinforcement-learning", "cvpr", "literature-review", "latex",
+  "neurips", "world-models", "world-model", "ai-research", "iclr", "bioinformatics", "academic-research",
+  "reproducible-research", "research-automation", "generative-model", "zotero", "scientist", "survey",
+  "autoresearch", "embodied-ai", "research-tool", "research-assistant", "scientific-writing", "eccv",
+  "ai-scientist", "scholar", "icml", "iccv", "research-agent", "researcher", "scientific-computing", "pubmed",
+  "ai-for-science", "peer-review", "paper-writing", "thesis", "research-paper", "论文", "研究",
+]
+weak = [
+  "research", "benchmark", "pytorch", "deep-learning", "machine-learning", "evaluation", "science", "training",
+  "computer-vision", "llm-evaluation", "deep-research", "data-science", "robotics", "medical", "experiments",
+  "benchmarks", "data-analysis", "fine-tuning", "neural", "citation", "transformers",
+]

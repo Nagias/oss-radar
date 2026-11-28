@@ -17,8 +17,9 @@ from django.db.models import Count, F, Q, QuerySet, Sum
 from django.utils import timezone
 
 from features.catalog.models import Repository
-from features.taxonomy.categories import Category
+from features.taxonomy.categories import AXES, OTHER, Axis, Category
 from features.taxonomy.categories import load_taxonomy as load_taxonomy
+from features.taxonomy.keywords import load_keywords
 from features.taxonomy.models import ClassifyMiss, ClassifyRun, RepoClassification, RepoLabel
 from features.taxonomy.prompt import (
     PROMPT_VERSION,
@@ -29,6 +30,7 @@ from features.taxonomy.prompt import (
     fingerprint,
     parse_labels,
 )
+from features.taxonomy.rules import classify_by_rules
 from integrations.github.pacing import CallBudget, CallBudgetExhaustedError, Sleep
 from integrations.llm.client import LlmClient, get_llm_client
 from integrations.llm.errors import LlmError, LlmResponseError
@@ -379,6 +381,87 @@ def ai_calls_on(day: date, *, origin: str) -> int:
         calls=Sum("calls_used")
     )["calls"]
     return int(total or 0)
+
+
+# --- Luật phân loại không cần AI (F-013) ---------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class GroupAgreement:
+    """Một nhóm: AI gắn bao nhiêu repo, luật gắn bao nhiêu, trùng nhau bao nhiêu."""
+
+    axis: Axis
+    code: str
+    name: str
+    ai: int
+    rule: int
+    both: int
+
+    @property
+    def recall(self) -> float | None:
+        """Luật bắt được bao nhiêu phần repo AI đã xếp vào nhóm (None = AI không xếp repo nào)."""
+        return self.both / self.ai if self.ai else None
+
+    @property
+    def precision(self) -> float | None:
+        """Trong các repo luật xếp vào nhóm, bao nhiêu phần khớp AI (None = luật không xếp gì)."""
+        return self.both / self.rule if self.rule else None
+
+
+@dataclass(frozen=True, slots=True)
+class RuleComparison:
+    compared: int  # số repo đang có nhãn AI
+    unplaced: int  # trong đó luật không xếp được nhóm "Làm được gì" nào
+    groups: tuple[GroupAgreement, ...]
+
+
+def rule_labels(repo: Repository) -> Labels | None:
+    """Nhãn của một repo theo bộ từ khoá hiện hành; None khi luật không xếp được."""
+    return classify_by_rules(_for_prompt(repo), load_keywords(), load_taxonomy())
+
+
+def compare_rules_with_ai() -> RuleComparison:
+    """Đo luật so với nhãn đang lưu (do AI gắn) trên mọi repo đã phân loại. Chỉ đọc."""
+    taxonomy = load_taxonomy()
+    stored: dict[int, set[tuple[str, str]]] = {}
+    for repository_id, axis, code in RepoLabel.objects.values_list("repository_id", "axis", "code"):
+        stored.setdefault(repository_id, set()).add((axis, code))
+    ai: dict[tuple[str, str], int] = {}
+    rule: dict[tuple[str, str], int] = {}
+    both: dict[tuple[str, str], int] = {}
+    unplaced = 0
+    repos = Repository.objects.filter(pk__in=classified_repository_ids())
+    for repo in repos.only(
+        "github_id", "full_name", "description", "topics", "language"
+    ).iterator():
+        theirs = stored.get(repo.pk, set())
+        labels = rule_labels(repo)
+        if labels is None:
+            unplaced += 1
+            ours: set[tuple[str, str]] = set()
+        else:
+            ours = {("audience", code) for code in labels.audience}
+            ours |= {("aspects", code) for code in labels.aspects}
+        for key in theirs:
+            ai[key] = ai.get(key, 0) + 1
+        for key in ours:
+            rule[key] = rule.get(key, 0) + 1
+        for key in theirs & ours:
+            both[key] = both.get(key, 0) + 1
+    groups = tuple(
+        GroupAgreement(
+            axis=axis,
+            code=category.code,
+            name=category.name,
+            ai=ai.get((axis, category.code), 0),
+            rule=rule.get((axis, category.code), 0),
+            both=both.get((axis, category.code), 0),
+        )
+        for axis in reversed(AXES)
+        for category in taxonomy.of(axis)
+        if category.code != OTHER
+    )
+    return RuleComparison(compared=repos.count(), unplaced=unplaced, groups=groups)
 
 
 # --- Hàm phụ ---------------------------------------------------------------------------------

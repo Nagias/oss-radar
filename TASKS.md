@@ -174,11 +174,17 @@
 - [x] Đo trên kho thật (40.134 repo): star, độ cũ, dấu hiệu Trung Quốc, luật từ khoá thô so với nhãn AI, số kết quả tìm
       bằng tiếng Trung; agent độc lập rà bản nháp (10 lỗ hổng, đã đưa cách tránh vào thiết kế)
 - [x] Chủ dự án duyệt năm bộ luật A–E, ẩn mặc định kết quả kém, thứ tự sáu gói (2026-11-28)
-- [ ] Gói 0 `feat/f004-truy-van-tieng-trung` — kế hoạch `docs/plans/2026-11-28-goi-0-truy-van-tieng-trung.md`
+- [x] Gói 0 `feat/f004-truy-van-tieng-trung` — kế hoạch `docs/plans/2026-11-28-goi-0-truy-van-tieng-trung.md`
   - [x] Test đỏ trước; migration `rising/0006_seed_china_watch_queries` (10 truy vấn, từ 20 star, 50 lượt gọi)
   - [x] Sổ sách: FEATURE_MAP (F-004 phần tìm, lộ trình F-013/F-014/F-015 thay F-007), QĐ-24
-  - [ ] Kiểm chứng: `poe check`; quét thật từng truy vấn trên bản sao CSDL; PR, CI xanh, gộp; migrate CSDL thật
-- [ ] Gói 1a — bộ từ khoá, hàm luật B và C, lệnh so sánh với nhãn AI (F-013)
+  - [x] Kiểm chứng: `poe check` (984 test); quét thật 10 truy vấn trên bản sao: 103 lượt gọi, 6.197 repo mới (86% mô tả
+        chữ Hán); PR Nagias/oss-radar#14 gộp 2026-11-28; CSDL thật đã migrate (26 truy vấn)
+- [ ] Gói 1a `feat/f013-luat-phan-loai` — kế hoạch `docs/plans/2026-11-28-goi-1a-luat-phan-loai.md`
+  - [x] Test đỏ trước; `keywords.toml` + `keywords.py` (E002), `rules.py`, `compare_rules_with_ai`, `--compare-rules`
+  - [x] Chỉnh từ khoá theo số đo trên 39.830 nhãn AI: không xếp được 4,7%; Video 93 / 80, Ảnh 90 / 81, Game 82 / 83
+        đạt; Agent 95 / 77, Công cụ lập trình 80 / 76 gần đạt; nhóm nhỏ đúng 70–82% nhưng bắt được 31–66%
+  - [x] Đọc tay 50 repo ngẫu nhiên: 46 hợp lý, 4 lệch
+  - [ ] PR, CI xanh, gộp
 - [ ] Gói 1b — ghi nhãn do luật gắn, nguồn "luật" / "AI", chạy trong lượt hằng ngày cho cả kho (F-013)
 - [ ] Gói 2 — Luật A: lọc kết quả kém (F-014)
 - [ ] Gói 3 — đánh dấu repo Trung Quốc (F-004)

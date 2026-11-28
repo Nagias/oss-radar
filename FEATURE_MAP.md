@@ -21,6 +21,7 @@ test ở đâu, đang nợ gì.
 | F-011 | Trending mọi cỡ: repo từ 1.000 star (và repo nhỏ tăng mạnh) tăng ≥ 200 star và ≥ 2% trong 7 ngày, xác minh bằng lịch sử star chính thức, ngân sách riêng | Chạy thật | `features/rising/` | Bước 7 "Xác minh trending" của lượt hằng ngày; tab Trending ở `/` (Khám phá); cột Trending ở `/rising/watch/`; lệnh `manage.py daily` | `features/rising/tests/test_trending.py`, `test_growth.py` | — |
 | F-012 | Trang Khám phá: 3 tab Trending / Đang lên / Toàn kho chung ô tìm (nhiều từ, cả chủ đề) và bộ lọc, chip gỡ từng ô; Góc nhìn đã lưu ở thanh bên | Chạy thật | `features/browse/` | Web `/` (`?tab=trending\|rising\|all`), `/views/`; thanh bên mục Góc nhìn; `/repos/`, `/rising/` cũ chuyển hướng 302 | `features/browse/tests/test_explore.py`, `test_saved_views.py`, `test_canonical.py`, `test_context_processor.py` | — |
 | F-004 | Repo Trung Quốc — phần tìm: 10 truy vấn theo dõi tiếng Trung chạy cùng lượt hằng ngày (phần đánh dấu và ô lọc: gói 3 của bộ luật) | Phần tìm: chạy thật | `features/rising/` | Trang `/rising/watch/` (dòng 17–26, sửa / tắt được); lượt hằng ngày | `features/rising/tests/test_watch_seed_china.py` | — |
+| F-013 | Phân loại bằng luật từ khoá, không cần AI — gói 1a: bộ từ khoá, hàm luật, lệnh đo so với nhãn AI (chưa ghi nhãn; ghi nhãn là gói 1b) | Gói 1a: đo được | `features/taxonomy/` | Lệnh `manage.py classify --compare-rules` (chỉ đọc) | `features/taxonomy/tests/test_rules.py`, `test_keywords.py`, `test_commands.py` | — |
 
 ## Mô-đun lõi và cửa ra ngoài
 
@@ -33,6 +34,30 @@ test ở đâu, đang nợ gì.
 | `templates/base.html` + `static/` | Khung trang chung (thanh bên trái, phần đầu trang) và hệ thiết kế (QĐ-20): `static/css/app.css` token sáng/tối + thành phần (nút, ô nhập, chip, tab, bảng, nhãn, điểm nổi); `static/css/fonts.css` + `static/fonts/be-vietnam-pro/` phông đóng gói sẵn; `static/js/app.js` tăng cường dần (tự lọc, bỏ ô rỗng, phím `/`, hỏi lại). Test HTML đọc theo ý nghĩa qua `tests/html.py` | Mọi template của tính năng (`{% extends "base.html" %}`) | `tests/test_layout.py`, `tests/test_guards.py`, `tests/test_html_helper.py` |
 
 ## Chi tiết từng tính năng
+
+### F-013 — Phân loại bằng luật từ khoá (gói 1a)
+- **Phục vụ vế nào của mục tiêu:** tìm đúng — repo mới vẫn có nhãn nhóm khi không có AI (tài khoản Gemini bị khoá
+  2026-11-28); mỗi nhãn kèm lý do là danh sách từ khoá đã khớp (nguyên tắc 6).
+- **Người dùng làm gì → thấy gì:** gói 1a chưa đổi gì trên trang. Chạy `manage.py classify --compare-rules` để xem
+  bảng từng nhóm: AI gắn / luật gắn / trùng / bắt được / đúng, và số repo luật không xếp được.
+- **Luồng chạy:** `keywords.load_keywords()` đọc `keywords.toml` (từ mạnh 2 điểm, từ yếu 1 điểm, bảng suy "Dành cho
+  ai" từ "Làm được gì") → `rules.classify_by_rules(repo, keywords, taxonomy)` (hàm thuần): khớp nguyên từ trên
+  topic, tên repo, mô tả; chữ Hán khớp chuỗi con; một dấu hiệu chỉ tính điểm một lần; nhóm "Làm được gì" cần ≥ 2 điểm,
+  tối đa 3; "Dành cho ai" cần ≥ 3 điểm (Lập trình viên ≥ 2), tối đa 2; không nhóm nào đủ điểm → `None` →
+  `services.compare_rules_with_ai()` so với nhãn đang lưu.
+- **Thành phần:** `features/taxonomy/keywords.toml` (sửa tay, có `version` riêng), `keywords.py` (`Keywords`,
+  `GroupKeywords`, `parse_keywords`), `rules.py`, `checks.py` (`taxonomy.E002`), `services.rule_labels`,
+  `services.compare_rules_with_ai`, cờ `--compare-rules` của lệnh `classify`.
+- **Phụ thuộc:** bộ nhóm F-010 (`categories.toml`). Không gọi mạng, không ghi CSDL.
+- **Số đo (2026-11-28, 39.830 repo có nhãn AI):** luật không xếp được 4,7%. Đạt mục tiêu 80 / 80: Video (93% / 80%),
+  Ảnh (90% / 81%), Game (82% / 83%). Gần đạt: AI Agent (95% / 77%), Công cụ lập trình (80% / 76%). Nhóm nhỏ đúng
+  70–82% nhưng chỉ bắt được 31–66% (AI hiểu theo nghĩa cả câu, luật chỉ thấy từ khoá). "Dành cho ai" (độ đúng):
+  Nghiên cứu 94%, Lập trình viên 84%, Marketer 83%, Làm game 82%, Kinh doanh 79%, Sáng tạo 78%.
+- **Kiểm chứng tự động:** `test_rules.py` (khớp nguyên từ, chữ Hán, điểm, trần 3 / 2, `None`, suy "Dành cho ai"),
+  `test_keywords.py` (file thật, 13 kiểu file hỏng, E002), `test_commands.py` (bảng so sánh, không ghi gì).
+- **Kiểm chứng tay:** `uv run python manage.py classify --compare-rules`.
+- **Còn lại:** gói 1b — ghi nhãn do luật gắn (cột nguồn, chạy cho cả kho trong lượt hằng ngày).
+- **Nợ liên quan:** không có.
 
 ### F-004 — Repo Trung Quốc (phần tìm)
 - **Phục vụ vế nào của mục tiêu:** tìm đủ (mục tiêu gốc: "nghiên cứu nhiều hơn các repo đến từ Trung Quốc"; đo
@@ -298,7 +323,7 @@ test ở đâu, đang nợ gì.
 |---|---|---|
 | F-003 | Làm giàu: số contributor, tổ chức đứng sau, xác minh tổ chức, quốc gia | tìm đúng |
 | F-004 (gói 3) | Đánh dấu repo Trung Quốc bằng luật: hai mức "Tiếng Trung" / "Trung Quốc", nhãn, ô lọc (location của chủ repo: để F-003) | tìm đúng |
-| F-013 | Phân loại "Làm được gì" và "Dành cho ai" bằng luật từ khoá, không cần AI (gói 1a, 1b) | tìm đúng |
+| F-013 (gói 1b) | Ghi nhãn do luật gắn: cột nguồn "luật" / "AI", chạy cho cả kho trong lượt hằng ngày | tìm đúng |
 | F-014 | Lọc kết quả kém: repo đã đóng, bỏ hoang, ít star không tăng, lạc đề — ẩn mặc định, có lý do (gói 2) | không rác |
 | F-015 | Điểm gợi ý và tab Gợi ý theo "Dành cho ai", tính bằng luật (gói 4) | tìm đúng |
 | F-008 | Nguồn khám phá phụ Exa, Tavily | tìm đủ |

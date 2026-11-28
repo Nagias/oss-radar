@@ -4,11 +4,15 @@ from io import StringIO
 
 import pytest
 from django.core.management import CommandError, call_command
+from django.utils import timezone
 from pytest_django.fixtures import Settings
 
+from features.catalog.models import Repository
+from features.catalog.services import upsert_repositories
 from features.taxonomy import services
 from features.taxonomy.models import ClassifyRun, RepoClassification
 from features.taxonomy.tests.conftest import make_repos
+from tests.factories import label_repository, make_github_repo
 from tests.fakes import FakeLlm
 
 pytestmark = pytest.mark.django_db
@@ -140,3 +144,44 @@ def test_classify_command_rejects_bad_numbers(fake_llm: FakeLlm, args: tuple[str
 
     with pytest.raises(CommandError, match="từ 1"):
         run_command(*args)
+
+
+# --- So sánh luật với nhãn AI (gói 1a của bộ luật: chỉ đọc) ------------------------------------
+
+
+def _repo_with(github_id: int, *, topics: tuple[str, ...]) -> Repository:
+    # Tên và mô tả trung tính để chỉ topic quyết định nhãn của luật.
+    github_repo = make_github_repo(
+        github_id=github_id,
+        full_name=f"someone/project-{github_id}",
+        topics=topics,
+        description="Recipes for dinner",
+    )
+    upsert_repositories([github_repo], seen_at=timezone.now())
+    return Repository.objects.get(github_id=github_id)
+
+
+def test_compare_rules_prints_agreement_per_group_without_ai_key_or_writes() -> None:
+    # Hai repo AI xếp vào "Ảnh", luật bắt được một; một repo AI xếp "Video" mà luật lại xếp "Ảnh".
+    label_repository(_repo_with(1, topics=("comfyui",)), audience=("creator",), aspects=("image",))
+    label_repository(_repo_with(2, topics=("cooking",)), aspects=("image",))
+    label_repository(_repo_with(3, topics=("stable-diffusion",)), aspects=("video",))
+    _repo_with(4, topics=("comfyui",))  # chưa có nhãn AI: không tính vào phép so
+    before = (RepoClassification.objects.count(), ClassifyRun.objects.count())
+
+    text = run_command("--compare-rules")
+
+    assert "So với nhãn AI của 3 repo" in text
+    assert "luật không xếp được 1 repo (33%)" in text
+    # Cột: AI gắn · luật gắn · trùng · bắt được · đúng.
+    assert _row(text, "image") == ["2", "2", "1", "50%", "50%"]
+    assert _row(text, "video") == ["1", "0", "0", "0%", "—"]
+    assert (RepoClassification.objects.count(), ClassifyRun.objects.count()) == before
+
+
+def _row(text: str, code: str) -> list[str]:
+    for line in text.splitlines():
+        cells = line.split()
+        if cells and cells[0] == code:
+            return cells[-5:]
+    raise AssertionError(f"không thấy dòng của nhóm {code} trong:\n{text}")
