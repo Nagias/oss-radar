@@ -13,6 +13,12 @@ uv run python manage.py migrate          # tạo CSDL trong thư mục data/
 uv run poe dev                           # mở http://127.0.0.1:8765
 ```
 
+## Chạy hằng ngày
+
+Bấm đúp `run.bat` ở thư mục gốc: file này cài thư viện còn thiếu, cập nhật CSDL, chạy web tại
+`http://127.0.0.1:8765` và tự mở trình duyệt. Để cửa sổ đó mở thì tool tự quét hằng ngày; đóng cửa sổ là
+tắt tool.
+
 ## Lệnh hay dùng
 
 | Lệnh | Làm gì |
