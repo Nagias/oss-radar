@@ -27,19 +27,23 @@ strong = [
   "langgraph", "langchain", "browser-automation", "llm-agents", "manus", "workflow-automation",
   "multi-agent-systems", "subagents", "computer-use", "orchestrator", "crewai", "autogen", "智能体",
 ]
-weak = ["automation", "skills", "skill", "assistant", "bot", "workflow", "copilot", "sandbox", "swarm", "claude-skills"]
+weak = [
+  "automation", "skills", "skill", "assistant", "bot", "workflow", "copilot", "sandbox", "swarm", "claude-skills",
+  "机器人", "助手", "自动化", "工作流", "插件",
+]
 
 [aspects.video]
 strong = [
-  "video", "videos", "video-generation", "ai-video", "text-to-video", "ffmpeg", "video-editing", "motion-graphics",
-  "image-to-video", "remotion", "shorts", "storyboard", "hyperframes", "reels", "video-editor", "captions",
-  "explainer-video", "film", "filmmaking", "youtube-shorts", "subtitles", "subtitle", "ltx-video", "short-drama",
-  "short-video", "capcut", "sora", "talking-head", "lip-sync", "voiceover", "video-processing", "video-production",
-  "clips", "footage", "mp4", "cinematic", "seedance", "视频", "短视频", "短剧", "分镜", "配音", "漫剧", "剧本", "数字人", "剪辑",
+  "video", "videos", "video-generation", "ai-video", "text-to-video", "ffmpeg", "video-editing",
+  "motion-graphics", "image-to-video", "remotion", "shorts", "storyboard", "hyperframes", "reels", "video-editor",
+  "captions", "explainer-video", "film", "filmmaking", "youtube-shorts", "subtitles", "subtitle", "ltx-video",
+  "short-drama", "short-video", "capcut", "sora", "talking-head", "lip-sync", "voiceover", "video-processing",
+  "video-production", "clips", "footage", "mp4", "cinematic", "seedance", "视频", "短视频", "短剧", "分镜", "配音", "漫剧",
+  "剧本", "数字人", "剪辑", "字幕",
 ]
 weak = [
   "motion", "animation", "veo", "kling", "wan", "youtube", "tiktok", "aigc", "douyin", "bilibili", "抖音", "avatar",
-  "vfx", "yt-dlp", "screen-recording", "camera", "director",
+  "vfx", "yt-dlp", "screen-recording", "camera", "director", "去水印", "直播",
 ]
 
 [aspects.image]
@@ -108,7 +112,7 @@ strong = [
   "scraping", "web-scraping", "scraper", "crawler", "web-search", "web-crawler", "headless-browser", "stealth",
   "crawl", "crawling", "firecrawl", "data-extraction", "scrape", "web-scraper", "stealth-browser", "searxng",
   "html-to-markdown", "crawl4ai", "anti-bot", "content-extraction", "webscraping", "antidetect", "search-api",
-  "爬虫",
+  "爬虫", "爬取", "抓取",
 ]
 weak = [
   "extraction", "osint", "cdp", "web-automation", "extract", "fetch", "puppeteer", "chromium", "browser-agent",
@@ -128,21 +132,22 @@ strong = [
 ]
 weak = [
   "claude-code", "code", "mcp-server", "codex", "cursor", "development", "security", "rust", "macos", "github",
-  "review",
+  "review", "插件", "代码", "编程",
 ]
 
 [aspects.ai_infra]
 strong = [
-  "vector-search", "vector-database", "ai-gateway", "api-pricing", "retrieval-augmented-generation", "llm-gateway",
-  "llm-inference", "llm-proxy", "api-gateway", "graphrag", "ai-infrastructure", "llm-router", "anthropic-api",
-  "api-proxy", "graph-database", "inference-engine", "tool-calling", "function-calling", "ai-sdk", "typescript-sdk",
-  "endpoint", "pricing", "reverse-engineered-api", "ai-api-gateway", "大模型",
+  "vector-search", "vector-database", "ai-gateway", "api-pricing", "retrieval-augmented-generation",
+  "llm-gateway", "llm-inference", "llm-proxy", "api-gateway", "graphrag", "ai-infrastructure", "llm-router",
+  "anthropic-api", "api-proxy", "graph-database", "inference-engine", "tool-calling", "function-calling",
+  "ai-sdk", "typescript-sdk", "endpoint", "pricing", "reverse-engineered-api", "ai-api-gateway", "大模型", "大语言模型",
+  "微调", "多模态",
 ]
 weak = [
   "openai", "gateway", "rag", "compatible", "multimodal", "proxy", "vector", "inference", "retrieval",
   "embeddings", "embedding", "semantic-search", "local-llm", "llama", "ollama", "fine-tuning", "finetuning",
   "apimart", "image-api", "knowledge-graph", "long-term-memory", "ai-memory", "vllm", "gguf", "quantization",
-  "openai-compatible", "llm-evaluation",
+  "openai-compatible", "llm-evaluation", "知识库", "推理", "向量",
 ]
 
 [aspects.webapp]
@@ -180,13 +185,13 @@ strong = [
   "obsidian", "second-brain", "note", "job-search", "task-management", "note-taking",
   "personal-knowledge-management", "pkm", "career", "pptx", "powerpoint", "ppt", "gmail", "obsidian-plugin",
   "spaced-repetition", "job-application", "personal-finance", "zettelkasten", "meeting-notes", "reminders",
-  "office-automation", "outlook", "resume-builder", "cover-letter", "飞书", "办公",
+  "office-automation", "outlook", "resume-builder", "cover-letter",
 ]
 weak = [
   "personal", "productivity", "markdown", "notes", "knowledge-base", "knowledge-management", "job", "wiki", "pdf",
   "email", "document", "vault", "resume", "project-management", "kanban", "n8n", "personal-assistant", "calendar",
   "documents", "office", "presentation", "slides", "product-management", "no-code", "low-code", "feishu", "crm",
-  "excel", "docx", "mail", "notion", "accounting", "meeting", "planner", "jira",
+  "excel", "docx", "mail", "notion", "accounting", "meeting", "planner", "jira", "飞书", "办公", "知识库", "笔记", "工作流",
 ]
 
 # --- Lớp "Dành cho ai" -------------------------------------------------------------------------
@@ -198,7 +203,7 @@ strong = [
 ]
 weak = [
   "code", "tools", "server", "mcp", "plugin", "github", "security", "openai", "anthropic", "llm", "rag",
-  "model-context-protocol", "claude-code", "codex", "cursor", "python", "self-hosted",
+  "model-context-protocol", "claude-code", "codex", "cursor", "python", "self-hosted", "插件", "代码", "开源", "框架",
 ]
 
 [audience.creator]
@@ -260,12 +265,12 @@ weak = ["games", "blender", "assets", "procedural-generation", "minecraft", "spr
 [audience.research]
 strong = [
   "paper", "papers", "diffusion-models", "academic", "scientific", "literature", "gan", "academic-writing",
-  "arxiv", "dataset", "datasets", "research-tools", "reinforcement-learning", "cvpr", "literature-review", "latex",
-  "neurips", "world-models", "world-model", "ai-research", "iclr", "bioinformatics", "academic-research",
+  "arxiv", "dataset", "datasets", "research-tools", "reinforcement-learning", "cvpr", "literature-review",
+  "latex", "neurips", "world-models", "world-model", "ai-research", "iclr", "bioinformatics", "academic-research",
   "reproducible-research", "research-automation", "generative-model", "zotero", "scientist", "survey",
   "autoresearch", "embodied-ai", "research-tool", "research-assistant", "scientific-writing", "eccv",
   "ai-scientist", "scholar", "icml", "iccv", "research-agent", "researcher", "scientific-computing", "pubmed",
-  "ai-for-science", "peer-review", "paper-writing", "thesis", "research-paper", "论文", "研究",
+  "ai-for-science", "peer-review", "paper-writing", "thesis", "research-paper", "论文", "研究", "数据集", "评测",
 ]
 weak = [
   "research", "benchmark", "pytorch", "deep-learning", "machine-learning", "evaluation", "science", "training",

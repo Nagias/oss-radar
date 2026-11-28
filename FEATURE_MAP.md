@@ -21,7 +21,7 @@ test ở đâu, đang nợ gì.
 | F-011 | Trending mọi cỡ: repo từ 1.000 star (và repo nhỏ tăng mạnh) tăng ≥ 200 star và ≥ 2% trong 7 ngày, xác minh bằng lịch sử star chính thức, ngân sách riêng | Chạy thật | `features/rising/` | Bước 7 "Xác minh trending" của lượt hằng ngày; tab Trending ở `/` (Khám phá); cột Trending ở `/rising/watch/`; lệnh `manage.py daily` | `features/rising/tests/test_trending.py`, `test_growth.py` | — |
 | F-012 | Trang Khám phá: 3 tab Trending / Đang lên / Toàn kho chung ô tìm (nhiều từ, cả chủ đề) và bộ lọc, chip gỡ từng ô; Góc nhìn đã lưu ở thanh bên | Chạy thật | `features/browse/` | Web `/` (`?tab=trending\|rising\|all`), `/views/`; thanh bên mục Góc nhìn; `/repos/`, `/rising/` cũ chuyển hướng 302 | `features/browse/tests/test_explore.py`, `test_saved_views.py`, `test_canonical.py`, `test_context_processor.py` | — |
 | F-004 | Repo Trung Quốc — phần tìm: 10 truy vấn theo dõi tiếng Trung chạy cùng lượt hằng ngày (phần đánh dấu và ô lọc: gói 3 của bộ luật) | Phần tìm: chạy thật | `features/rising/` | Trang `/rising/watch/` (dòng 17–26, sửa / tắt được); lượt hằng ngày | `features/rising/tests/test_watch_seed_china.py` | — |
-| F-013 | Phân loại bằng luật từ khoá, không cần AI — gói 1a: bộ từ khoá, hàm luật, lệnh đo so với nhãn AI (chưa ghi nhãn; ghi nhãn là gói 1b) | Gói 1a: đo được | `features/taxonomy/` | Lệnh `manage.py classify --compare-rules` (chỉ đọc) | `features/taxonomy/tests/test_rules.py`, `test_keywords.py`, `test_commands.py` | — |
+| F-013 | Phân loại bằng luật từ khoá, không cần AI: repo chưa có nhãn được luật gắn nhãn (ghi rõ nguồn luật / AI, không ghi đè AI), chạy cho cả kho trong lượt hằng ngày | Chạy thật | `features/taxonomy/` | Bước "Phân loại repo" của lượt hằng ngày; lệnh `manage.py classify --rules`, `--compare-rules` | `features/taxonomy/tests/test_rules.py`, `test_keywords.py`, `test_rule_labelling.py`, `features/rising/tests/test_classify_step.py` | — |
 
 ## Mô-đun lõi và cửa ra ngoài
 
@@ -35,11 +35,12 @@ test ở đâu, đang nợ gì.
 
 ## Chi tiết từng tính năng
 
-### F-013 — Phân loại bằng luật từ khoá (gói 1a)
+### F-013 — Phân loại bằng luật từ khoá
 - **Phục vụ vế nào của mục tiêu:** tìm đúng — repo mới vẫn có nhãn nhóm khi không có AI (tài khoản Gemini bị khoá
   2026-11-28); mỗi nhãn kèm lý do là danh sách từ khoá đã khớp (nguyên tắc 6).
-- **Người dùng làm gì → thấy gì:** gói 1a chưa đổi gì trên trang. Chạy `manage.py classify --compare-rules` để xem
-  bảng từng nhóm: AI gắn / luật gắn / trùng / bắt được / đúng, và số repo luật không xếp được.
+- **Người dùng làm gì → thấy gì:** không làm gì thêm — repo mới có nhãn nhóm sau lượt hằng ngày dù không có AI; di
+  chuột lên nhãn thấy lý do bắt đầu bằng "Luật:" kèm các từ khoá đã khớp. Repo luật không xếp được nằm ở ô lọc "Chưa
+  phân loại". `manage.py classify --rules` gắn nhãn ngay; `--compare-rules` in bảng luật so với nhãn AI.
 - **Luồng chạy:** `keywords.load_keywords()` đọc `keywords.toml` (từ mạnh 2 điểm, từ yếu 1 điểm, bảng suy "Dành cho
   ai" từ "Làm được gì") → `rules.classify_by_rules(repo, keywords, taxonomy)` (hàm thuần): khớp nguyên từ trên
   topic, tên repo, mô tả; chữ Hán khớp chuỗi con; một dấu hiệu chỉ tính điểm một lần; nhóm "Làm được gì" cần ≥ 2 điểm,
@@ -56,7 +57,15 @@ test ở đâu, đang nợ gì.
 - **Kiểm chứng tự động:** `test_rules.py` (khớp nguyên từ, chữ Hán, điểm, trần 3 / 2, `None`, suy "Dành cho ai"),
   `test_keywords.py` (file thật, 13 kiểu file hỏng, E002), `test_commands.py` (bảng so sánh, không ghi gì).
 - **Kiểm chứng tay:** `uv run python manage.py classify --compare-rules`.
-- **Còn lại:** gói 1b — ghi nhãn do luật gắn (cột nguồn, chạy cho cả kho trong lượt hằng ngày).
+- **Ghi nhãn (gói 1b):** `services.classify_catalog_by_rules()` chỉ xét repo chưa có dòng phân loại hoặc dòng do luật
+  gắn (`RepoClassification.source = "rule"`) mà `rules_version` cũ / repo vừa được quét lại. Dòng của AI không bao
+  giờ bị đụng; luật không xếp được thì không ghi gì; dòng của luật nay không còn khớp thì gỡ; dòng không đổi chỉ ghi
+  `checked_at`. Dòng của luật có `model = "luật"`, `prompt_version = 0` (nên `classify --reclassify` cho AI làm lại).
+  AI ghi lên dòng của luật thì dòng thành nguồn AI. Bước `CLASSIFY` của lượt hằng ngày (`_runner._classify`) gọi
+  luật cho cả kho trước chỗ kiểm `llm_configured()`; AI (nếu có) chỉ còn lo repo của lượt mà luật không xếp được.
+  Migration `taxonomy/0003_label_source`.
+- **Đo trên repo tiếng Trung (2026-11-28, bản sao CSDL):** 6.197 repo mới từ 10 truy vấn F-004 → luật xếp được 5.159
+  (83%), 1.038 chưa xếp được; 16 giây; chạy lần hai không ghi lại gì; nhãn AI của 40.138 repo không đổi.
 - **Nợ liên quan:** không có.
 
 ### F-004 — Repo Trung Quốc (phần tìm)
@@ -323,7 +332,6 @@ test ở đâu, đang nợ gì.
 |---|---|---|
 | F-003 | Làm giàu: số contributor, tổ chức đứng sau, xác minh tổ chức, quốc gia | tìm đúng |
 | F-004 (gói 3) | Đánh dấu repo Trung Quốc bằng luật: hai mức "Tiếng Trung" / "Trung Quốc", nhãn, ô lọc (location của chủ repo: để F-003) | tìm đúng |
-| F-013 (gói 1b) | Ghi nhãn do luật gắn: cột nguồn "luật" / "AI", chạy cho cả kho trong lượt hằng ngày | tìm đúng |
 | F-014 | Lọc kết quả kém: repo đã đóng, bỏ hoang, ít star không tăng, lạc đề — ẩn mặc định, có lý do (gói 2) | không rác |
 | F-015 | Điểm gợi ý và tab Gợi ý theo "Dành cho ai", tính bằng luật (gói 4) | tìm đúng |
 | F-008 | Nguồn khám phá phụ Exa, Tavily | tìm đủ |

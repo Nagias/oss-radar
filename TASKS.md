@@ -179,13 +179,18 @@
   - [x] Sổ sách: FEATURE_MAP (F-004 phần tìm, lộ trình F-013/F-014/F-015 thay F-007), QĐ-24
   - [x] Kiểm chứng: `poe check` (984 test); quét thật 10 truy vấn trên bản sao: 103 lượt gọi, 6.197 repo mới (86% mô tả
         chữ Hán); PR Nagias/oss-radar#14 gộp 2026-11-28; CSDL thật đã migrate (26 truy vấn)
-- [ ] Gói 1a `feat/f013-luat-phan-loai` — kế hoạch `docs/plans/2026-11-28-goi-1a-luat-phan-loai.md`
+- [x] Gói 1a `feat/f013-luat-phan-loai` — kế hoạch `docs/plans/2026-11-28-goi-1a-luat-phan-loai.md`
   - [x] Test đỏ trước; `keywords.toml` + `keywords.py` (E002), `rules.py`, `compare_rules_with_ai`, `--compare-rules`
   - [x] Chỉnh từ khoá theo số đo trên 39.830 nhãn AI: không xếp được 4,7%; Video 93 / 80, Ảnh 90 / 81, Game 82 / 83
         đạt; Agent 95 / 77, Công cụ lập trình 80 / 76 gần đạt; nhóm nhỏ đúng 70–82% nhưng bắt được 31–66%
   - [x] Đọc tay 50 repo ngẫu nhiên: 46 hợp lý, 4 lệch
-  - [ ] PR, CI xanh, gộp
-- [ ] Gói 1b — ghi nhãn do luật gắn, nguồn "luật" / "AI", chạy trong lượt hằng ngày cho cả kho (F-013)
+  - [x] PR Nagias/oss-radar#15, CI xanh, gộp 2026-11-28
+- [ ] Gói 1b `feat/f013-ghi-nhan-luat` — kế hoạch `docs/plans/2026-11-28-goi-1b-ghi-nhan-luat.md`
+  - [x] Test đỏ trước; cột `source` / `rules_version` (migration `taxonomy/0003`), `classify_catalog_by_rules`,
+        bước hằng ngày gọi luật cho cả kho trước chỗ kiểm khoá AI, lệnh `classify --rules`
+  - [x] Chạy thật trên bản sao (40.138 repo có nhãn AI + 6.197 repo tiếng Trung chưa nhãn): luật xếp được 5.159
+        (83%), 16 giây; lần hai không ghi lại gì; nhãn AI không đổi; đọc tay 30 repo → bổ sung từ khoá tiếng Trung
+  - [ ] PR, CI xanh, gộp; sao lưu → migrate CSDL thật
 - [ ] Gói 2 — Luật A: lọc kết quả kém (F-014)
 - [ ] Gói 3 — đánh dấu repo Trung Quốc (F-004)
 - [ ] Gói 4 — điểm gợi ý và tab Gợi ý (F-015)
