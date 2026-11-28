@@ -3,6 +3,7 @@
 uv run python manage.py classify                    # mọi repo chưa có nhãn (tối đa 1.000 lượt gọi)
 uv run python manage.py classify --budget 50        # chỉ tiêu tối đa 50 lượt gọi AI
 uv run python manage.py classify --reclassify       # gắn lại nhãn do prompt / bộ nhóm cũ
+uv run python manage.py classify --rules            # gắn nhãn bằng luật từ khoá (không cần AI)
 uv run python manage.py classify --compare-rules    # đo luật từ khoá so với nhãn AI (chỉ đọc)
 
 Lớp mỏng: kiểm tham số → `taxonomy.services.classify_catalog` → in tiến độ và tổng kết.
@@ -44,6 +45,11 @@ class Command(BaseCommand):
         )
 
         parser.add_argument(
+            "--rules",
+            action="store_true",
+            help="Gắn nhãn bằng luật từ khoá cho repo chưa có nhãn. Không gọi AI, không ghi đè AI.",
+        )
+        parser.add_argument(
             "--compare-rules",
             action="store_true",
             help="Chỉ đo: luật từ khoá khớp nhãn AI đang lưu tới đâu. Không gọi AI, không ghi gì.",
@@ -52,6 +58,9 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         if options["compare_rules"]:
             self._compare_rules()
+            return
+        if options["rules"]:
+            self._label_by_rules()
             return
         if not llm_configured():
             raise CommandError(
@@ -95,6 +104,14 @@ class Command(BaseCommand):
             f"Xong: {_n(run.classified_count)} repo có nhãn, {missing_text}"
             f" · {run.calls_used} lượt gọi AI · {_n(run.prompt_tokens)} token vào,"
             f" {_n(run.completion_tokens)} token ra · {(time.monotonic() - started) / 60:.1f} phút."
+        )
+
+    def _label_by_rules(self) -> None:
+        by_rules = services.classify_catalog_by_rules()
+        self.stdout.write(
+            f"Luật đã xét {_n(by_rules.examined)} repo: gắn nhãn {_n(by_rules.labelled)},"
+            f" gỡ nhãn không còn khớp {_n(by_rules.removed)},"
+            f" không xếp được {_n(by_rules.unplaced)}."
         )
 
     def _compare_rules(self) -> None:

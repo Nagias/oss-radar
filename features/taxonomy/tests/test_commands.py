@@ -185,3 +185,17 @@ def _row(text: str, code: str) -> list[str]:
         if cells and cells[0] == code:
             return cells[-5:]
     raise AssertionError(f"không thấy dòng của nhóm {code} trong:\n{text}")
+
+
+# --- Ghi nhãn bằng luật (gói 1b) ---------------------------------------------------------------
+
+
+def test_rules_flag_labels_without_ai_key() -> None:
+    _repo_with(1, topics=("comfyui",))
+    _repo_with(2, topics=("cooking",))
+
+    text = run_command("--rules")
+
+    assert "Luật đã xét 2 repo: gắn nhãn 1, gỡ nhãn không còn khớp 0, không xếp được 1." in text
+    assert RepoClassification.objects.get().source == RepoClassification.Source.RULE
+    assert ClassifyRun.objects.count() == 0
