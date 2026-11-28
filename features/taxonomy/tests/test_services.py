@@ -206,6 +206,18 @@ def test_label_counts_include_unclassified(fake_llm: FakeLlm) -> None:
     assert counts[services.UNCLASSIFIED] == 2
 
 
+def test_label_counts_within_a_set_of_repositories(fake_llm: FakeLlm) -> None:
+    labelled = make_repos(3)
+    classify_all()
+    unlabelled = make_repos(2, start=100)
+    chosen = Repository.objects.filter(pk__in=[labelled[0].pk, unlabelled[0].pk])
+
+    counts = services.label_counts(chosen)
+
+    assert counts["developer"] == 1
+    assert counts[services.UNCLASSIFIED] == 1
+
+
 def test_ai_calls_on_counts_by_day_and_origin(fake_llm: FakeLlm) -> None:
     make_repos(45)
     classify_all()

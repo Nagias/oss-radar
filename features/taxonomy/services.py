@@ -355,12 +355,22 @@ def classified_repository_ids() -> QuerySet[RepoClassification, int]:
     return RepoClassification.objects.values_list("repository_id", flat=True)
 
 
-def label_counts() -> dict[str, int]:
-    """Số repo theo từng mã nhóm (toàn kho), kèm số repo chưa phân loại ở khoá `UNCLASSIFIED`."""
+def label_counts(repositories: QuerySet[Repository] | None = None) -> dict[str, int]:
+    """Số repo theo từng mã nhóm, kèm số repo chưa phân loại ở khoá `UNCLASSIFIED`.
+
+    `repositories`: chỉ đếm trong tập repo này (danh sách đang xem ở trang Khám phá); bỏ trống = cả
+    kho. Nhóm không có repo nào thì không có khoá.
+    """
+    labels = RepoLabel.objects.all()
+    if repositories is not None:
+        labels = labels.filter(repository_id__in=repositories.values("pk"))
     counts: dict[str, int] = dict(
-        RepoLabel.objects.values_list("code").annotate(n=Count("repository_id", distinct=True))
+        labels.values_list("code").annotate(n=Count("repository_id", distinct=True))
     )
-    counts[UNCLASSIFIED] = Repository.objects.count() - RepoClassification.objects.count()
+    if repositories is None:
+        counts[UNCLASSIFIED] = Repository.objects.count() - RepoClassification.objects.count()
+    else:
+        counts[UNCLASSIFIED] = repositories.exclude(pk__in=classified_repository_ids()).count()
     return counts
 
 

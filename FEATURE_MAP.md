@@ -141,7 +141,8 @@ test ở đâu, đang nợ gì.
   (ẩn "Nghi cao" trên cả kho, lọc giấy phép cho phép dùng thương mại).
 - **Người dùng làm gì → thấy gì:**
   - Mở tab **Toàn kho** của trang Khám phá (`/?tab=all`, F-012; `/repos/` cũ chuyển hướng), tick nhóm "Dành cho
-    ai" / "Làm được gì" (mỗi nhóm có số repo).
+    ai" / "Làm được gì" (mỗi nhóm có số repo, đếm trong danh sách đang xem: theo tab và các ô lọc khác,
+    không tính các nhóm đang tick ở cùng ô).
   - Lọc thêm theo từ khoá, ngôn ngữ, star, ngày tạo, giấy phép thương mại, chỉ rising star, chưa phân loại.
   - Sắp theo star, fork, tăng 7 ngày, Chất lượng, mới tạo, mới đẩy code; 50 repo/trang.
   - Mỗi dòng có nhãn: bấm nhãn = lọc theo nhãn đó, di chuột = lý do AI xếp.
