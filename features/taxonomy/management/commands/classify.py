@@ -3,6 +3,7 @@
 uv run python manage.py classify                    # mọi repo chưa có nhãn (tối đa 1.000 lượt gọi)
 uv run python manage.py classify --budget 50        # chỉ tiêu tối đa 50 lượt gọi AI
 uv run python manage.py classify --reclassify       # gắn lại nhãn do prompt / bộ nhóm cũ
+uv run python manage.py classify --compare-rules    # đo luật từ khoá so với nhãn AI (chỉ đọc)
 
 Lớp mỏng: kiểm tham số → `taxonomy.services.classify_catalog` → in tiến độ và tổng kết.
 """
@@ -42,7 +43,16 @@ class Command(BaseCommand):
             help="Gắn lại cả nhãn do prompt / bộ nhóm cũ, và thử lại repo đang nghỉ vì AI bỏ sót.",
         )
 
+        parser.add_argument(
+            "--compare-rules",
+            action="store_true",
+            help="Chỉ đo: luật từ khoá khớp nhãn AI đang lưu tới đâu. Không gọi AI, không ghi gì.",
+        )
+
     def handle(self, *args: Any, **options: Any) -> None:
+        if options["compare_rules"]:
+            self._compare_rules()
+            return
         if not llm_configured():
             raise CommandError(
                 "Chưa có LLM_API_KEY trong .env — lấy khoá trong trang quản lý 9router rồi điền "
@@ -87,6 +97,23 @@ class Command(BaseCommand):
             f" {_n(run.completion_tokens)} token ra · {(time.monotonic() - started) / 60:.1f} phút."
         )
 
+    def _compare_rules(self) -> None:
+        report = services.compare_rules_with_ai()
+        share = _percent(report.unplaced / report.compared if report.compared else None)
+        self.stdout.write(
+            f"So với nhãn AI của {_n(report.compared)} repo; luật không xếp được"
+            f" {_n(report.unplaced)} repo ({share})."
+        )
+        self.stdout.write(
+            f"{'nhóm':<14}{'tên':<50}{'AI gắn':>9}{'luật gắn':>10}{'trùng':>8}"
+            f"{'bắt được':>10}{'đúng':>7}"
+        )
+        for group in report.groups:
+            self.stdout.write(
+                f"{group.code:<14}{group.name[:48]:<50}{group.ai:>9}{group.rule:>10}{group.both:>8}"
+                f"{_percent(group.recall):>10}{_percent(group.precision):>7}"
+            )
+
     def _progress(self, done: int, total: int) -> None:
         self.stdout.write(f"[{done}/{total}]")
         self.stdout.flush()
@@ -94,3 +121,7 @@ class Command(BaseCommand):
 
 def _n(value: int) -> str:
     return formats.number_format(value, force_grouping=True)
+
+
+def _percent(value: float | None) -> str:
+    return "—" if value is None else f"{value:.0%}"
