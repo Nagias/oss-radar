@@ -1,6 +1,8 @@
 # Lưu kho bằng LF cho mọi file văn bản; script PowerShell giữ CRLF để chạy ổn trên Windows PowerShell 5.1.
 * text=auto eol=lf
 *.ps1 text eol=crlf
+# File .bat xuống dòng kiểu LF thì cmd.exe có thể nhảy nhãn (goto) sai → giữ CRLF.
+*.bat text eol=crlf
 *.png binary
 *.jpg binary
 *.ico binary
