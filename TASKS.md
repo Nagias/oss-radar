@@ -168,3 +168,18 @@
       CLI Proxy trả 403 "service has been disabled in this account for violation of Terms of Service". Chờ chủ dự
       án có tài khoản / nguồn AI khác
 - [ ] PR Nagias/oss-radar#12, CI xanh, chủ dự án duyệt → squash-merge
+
+## Bộ luật thay AI (2026-11-28) — thiết kế `docs/designs/2026-11-28-f013-f015-bo-luat.md`
+
+- [x] Đo trên kho thật (40.134 repo): star, độ cũ, dấu hiệu Trung Quốc, luật từ khoá thô so với nhãn AI, số kết quả tìm
+      bằng tiếng Trung; agent độc lập rà bản nháp (10 lỗ hổng, đã đưa cách tránh vào thiết kế)
+- [x] Chủ dự án duyệt năm bộ luật A–E, ẩn mặc định kết quả kém, thứ tự sáu gói (2026-11-28)
+- [ ] Gói 0 `feat/f004-truy-van-tieng-trung` — kế hoạch `docs/plans/2026-11-28-goi-0-truy-van-tieng-trung.md`
+  - [x] Test đỏ trước; migration `rising/0006_seed_china_watch_queries` (10 truy vấn, từ 20 star, 50 lượt gọi)
+  - [x] Sổ sách: FEATURE_MAP (F-004 phần tìm, lộ trình F-013/F-014/F-015 thay F-007), QĐ-24
+  - [ ] Kiểm chứng: `poe check`; quét thật từng truy vấn trên bản sao CSDL; PR, CI xanh, gộp; migrate CSDL thật
+- [ ] Gói 1a — bộ từ khoá, hàm luật B và C, lệnh so sánh với nhãn AI (F-013)
+- [ ] Gói 1b — ghi nhãn do luật gắn, nguồn "luật" / "AI", chạy trong lượt hằng ngày cho cả kho (F-013)
+- [ ] Gói 2 — Luật A: lọc kết quả kém (F-014)
+- [ ] Gói 3 — đánh dấu repo Trung Quốc (F-004)
+- [ ] Gói 4 — điểm gợi ý và tab Gợi ý (F-015)

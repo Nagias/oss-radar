@@ -20,6 +20,7 @@ test ở đâu, đang nợ gì.
 | F-010 | Phân loại repo theo nhóm bằng AI (Gemini qua 9router) + trang Kho repo lọc và sắp toàn kho | Chạy thật | `features/taxonomy/`, `features/browse/` | Web `/?tab=all` (tab Toàn kho của Khám phá); nhãn ở mọi bảng repo; lệnh `manage.py classify` | `features/taxonomy/tests/`, `features/browse/tests/` | — |
 | F-011 | Trending mọi cỡ: repo từ 1.000 star (và repo nhỏ tăng mạnh) tăng ≥ 200 star và ≥ 2% trong 7 ngày, xác minh bằng lịch sử star chính thức, ngân sách riêng | Chạy thật | `features/rising/` | Bước 7 "Xác minh trending" của lượt hằng ngày; tab Trending ở `/` (Khám phá); cột Trending ở `/rising/watch/`; lệnh `manage.py daily` | `features/rising/tests/test_trending.py`, `test_growth.py` | — |
 | F-012 | Trang Khám phá: 3 tab Trending / Đang lên / Toàn kho chung ô tìm (nhiều từ, cả chủ đề) và bộ lọc, chip gỡ từng ô; Góc nhìn đã lưu ở thanh bên | Chạy thật | `features/browse/` | Web `/` (`?tab=trending\|rising\|all`), `/views/`; thanh bên mục Góc nhìn; `/repos/`, `/rising/` cũ chuyển hướng 302 | `features/browse/tests/test_explore.py`, `test_saved_views.py`, `test_canonical.py`, `test_context_processor.py` | — |
+| F-004 | Repo Trung Quốc — phần tìm: 10 truy vấn theo dõi tiếng Trung chạy cùng lượt hằng ngày (phần đánh dấu và ô lọc: gói 3 của bộ luật) | Phần tìm: chạy thật | `features/rising/` | Trang `/rising/watch/` (dòng 17–26, sửa / tắt được); lượt hằng ngày | `features/rising/tests/test_watch_seed_china.py` | — |
 
 ## Mô-đun lõi và cửa ra ngoài
 
@@ -32,6 +33,23 @@ test ở đâu, đang nợ gì.
 | `templates/base.html` + `static/` | Khung trang chung (thanh bên trái, phần đầu trang) và hệ thiết kế (QĐ-20): `static/css/app.css` token sáng/tối + thành phần (nút, ô nhập, chip, tab, bảng, nhãn, điểm nổi); `static/css/fonts.css` + `static/fonts/be-vietnam-pro/` phông đóng gói sẵn; `static/js/app.js` tăng cường dần (tự lọc, bỏ ô rỗng, phím `/`, hỏi lại). Test HTML đọc theo ý nghĩa qua `tests/html.py` | Mọi template của tính năng (`{% extends "base.html" %}`) | `tests/test_layout.py`, `tests/test_guards.py`, `tests/test_html_helper.py` |
 
 ## Chi tiết từng tính năng
+
+### F-004 — Repo Trung Quốc (phần tìm)
+- **Phục vụ vế nào của mục tiêu:** tìm đủ (mục tiêu gốc: "nghiên cứu nhiều hơn các repo đến từ Trung Quốc"; đo
+  2026-11-28: chỉ ~10% kho có dấu hiệu Trung Quốc vì cả 16 truy vấn đầu đều là topic tiếng Anh).
+- **Người dùng làm gì → thấy gì:** không làm gì thêm — lượt hằng ngày quét thêm 10 truy vấn: `智能体`, `大模型`, `提示词`,
+  `topic:deepseek`, `topic:qwen`, `短视频`, `数字人`, `抖音`, `小红书`, `飞书` (nhãn mảng "Trung Quốc · …"), mỗi truy vấn từ
+  20 star, mức quét 50 lượt gọi. Trang Theo dõi hiện chúng ở dòng 17–26, sửa / tắt như mọi truy vấn khác. Repo tìm
+  được vào chung kho, cũng được xét rising / trending.
+- **Luồng chạy:** migration dữ liệu `rising/0006_seed_china_watch_queries` (truy vấn đã có thì bỏ qua, vị trí nối sau
+  số lớn nhất) → bước 1 của lượt hằng ngày (`_runner._rescan`) quét như mọi `WatchQuery`.
+- **Thành phần:** chỉ dữ liệu, không đổi model hay code chạy.
+- **Phụ thuộc:** F-005 (lượt hằng ngày), F-002 (quét sâu).
+- **Kiểm chứng tự động:** `features/rising/tests/test_watch_seed_china.py`, `test_watch_seed.py`.
+- **Kiểm chứng tay:** `uv run python manage.py scan "智能体" --min-stars 20 --budget 50`; mở `/rising/watch/`.
+- **Còn lại (thiết kế `docs/designs/2026-11-28-f013-f015-bo-luat.md`):** gói 3 — hai mức "Tiếng Trung" / "Trung Quốc",
+  nhãn trên dòng, ô lọc "Chỉ repo Trung Quốc".
+- **Nợ liên quan:** không có.
 
 ### F-012 — Trang Khám phá và Góc nhìn đã lưu
 - **Phục vụ vế nào của mục tiêu:** tìm đúng (một ô tìm nhiều từ khớp cả chủ đề, lọc nhóm / ngôn ngữ / star / giấy
@@ -279,7 +297,9 @@ test ở đâu, đang nợ gì.
 | Mã dự kiến | Tính năng | Phục vụ |
 |---|---|---|
 | F-003 | Làm giàu: số contributor, tổ chức đứng sau, xác minh tổ chức, quốc gia | tìm đúng |
-| F-004 | Ưu tiên repo Trung Quốc: tín hiệu location, README, danh sách tổ chức | tìm đúng |
-| F-007 | Hồ sơ nhu cầu người dùng + AI chấm mức liên quan (Gemini qua 9router) | tìm đúng |
+| F-004 (gói 3) | Đánh dấu repo Trung Quốc bằng luật: hai mức "Tiếng Trung" / "Trung Quốc", nhãn, ô lọc (location của chủ repo: để F-003) | tìm đúng |
+| F-013 | Phân loại "Làm được gì" và "Dành cho ai" bằng luật từ khoá, không cần AI (gói 1a, 1b) | tìm đúng |
+| F-014 | Lọc kết quả kém: repo đã đóng, bỏ hoang, ít star không tăng, lạc đề — ẩn mặc định, có lý do (gói 2) | không rác |
+| F-015 | Điểm gợi ý và tab Gợi ý theo "Dành cho ai", tính bằng luật (gói 4) | tìm đúng |
 | F-008 | Nguồn khám phá phụ Exa, Tavily | tìm đủ |
 | F-009 | Thông báo rising star hằng ngày | rising star |
